@@ -22,6 +22,6 @@
             "activation_function": "tanh"
         }
     },
-    "n_output_features": 4999,
+    "n_output_features": 40,
     "n_hidden_layers": 5
 }
