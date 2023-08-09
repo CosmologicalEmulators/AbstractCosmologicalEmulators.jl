@@ -2,7 +2,6 @@ module AbstractCosmologicalEmulators
 
 using Base: @kwdef
 using SimpleChains
-#TODO: add the FluxEmulators
 export AbstractTrainedEmulators, SimpleChainsEmulator
 export maximin_input!, inv_maximin_output!, run_emulator, instantiate_NN
 

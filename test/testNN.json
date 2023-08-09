@@ -19,7 +19,7 @@
         },
         "layer_3": {
             "n_neurons": 64,
-            "activation_function": "tanh"
+            "activation_function": "relu"
         }
     },
     "n_output_features": 40,
