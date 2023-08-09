@@ -1,7 +1,7 @@
 name = "AbstractCosmologicalEmulators"
 uuid = "c83c1981-e5c4-4837-9eb8-c9b1572acfc6"
 authors = ["Marco Bonici <bonici.marco@gmail.com>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
