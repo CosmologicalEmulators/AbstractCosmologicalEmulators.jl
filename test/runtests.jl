@@ -40,5 +40,5 @@ emulator = SimpleChainsEmulator(Architecture = mlpd, Weights = weights)
     @test isapprox(run_emulator(input, emulator), run_emulator(stack_input, emulator)[:,1])
     @test instantiate_NN(NN_dict) == mlpd
     NN_dict["layers"]["layer_1"]["activation_function"]= "adremxud"
-    @test_throw ErrorException instantiate_NN(NN_dict)
+    @test_throws ErrorException instantiate_NN(NN_dict)
 end
