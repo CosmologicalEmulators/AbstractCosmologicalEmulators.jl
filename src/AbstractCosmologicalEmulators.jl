@@ -71,4 +71,4 @@ function instantiate_NN(input_dict::Dict)
     TurboDense(identity, input_dict["n_output_features"]))
 end
 
-end # module AbstractEmulator
+end # module AbstractCosmologicalEmulators
