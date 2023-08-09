@@ -1,5 +1,5 @@
 [deps]
-LoopVectorization = "bdcacae8-1622-11e9-2a5c-532679323890"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 Static = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
