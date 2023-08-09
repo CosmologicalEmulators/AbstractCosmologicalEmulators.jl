@@ -16,6 +16,17 @@ mlpd = SimpleChain(
   TurboDense(identity, 40)
 )
 
+NN_dict = Dict("n_input_features" => 6,
+               "n_output_features" => 40,
+               "n_hidden_layers" => 5,
+               "layers" => Dict("layer_1" => Dict("activation_function" => "tanh", "n_neurons" => 64),
+                                "layer_2" => Dict("activation_function" => "tanh", "n_neurons" => 64),
+                                "layer_3" => Dict("activation_function" => "tanh", "n_neurons" => 64),
+                                "layer_4" => Dict("activation_function" => "tanh", "n_neurons" => 64),
+                                "layer_5" => Dict("activation_function" => "tanh", "n_neurons" => 64)
+    )
+)
+
 weights = SimpleChains.init_params(mlpd)
 emulator = SimpleChainsEmulator(Architecture = mlpd, Weights = weights)
 
@@ -36,5 +47,5 @@ emulator = SimpleChainsEmulator(Architecture = mlpd, Weights = weights)
     input = randn(6)
     stack_input = hcat(input, input)
     @test any(run_emulator(input, emulator) .== run_emulator(stack_input, emulator)[:,1])
-
+    @test instantiate_NN(NN_dict) == mlpd
 end
