@@ -18,7 +18,7 @@ end
 
 function _get_layer_lux(activation_function, n_in::Int, n_out::Int)
     if activation_function == "tanh"
-        act_func = Lux.tanh
+        act_func = tanh
     elseif activation_function == "relu"
         act_func = Lux.relu
     else
