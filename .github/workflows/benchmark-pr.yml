@@ -19,7 +19,7 @@ jobs:
           julia-version: "1"
 
           # This is the single source of truth for benchmark dependencies.
-          extra-pkgs: "BenchmarkTools,JSON,SimpleChains"
+          extra-pkgs: "JSON,SimpleChains"
 
           # This correctly points to the script to be executed.
           script: "benchmark/benchmarks.jl"
