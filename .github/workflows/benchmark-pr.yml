@@ -13,18 +13,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # This is the corrected step using an environment variable
       - name: Run AirspeedVelocity Benchmark
         uses: MilesCranmer/AirspeedVelocity.jl@action-v1
-
-        # This 'env' block sets environment variables for this step only
-        env:
-          # This tells Julia to activate the environment in the ./benchmark directory
-          JULIA_PROJECT: benchmark
-
         with:
           julia-version: "1"
-          bench-on: "head"
 
-          # We are running from the root again, so the full path to the script is needed
+          # This is the key fix: It tells every Julia process spawned by the
+          # action to activate the environment in the 'benchmark' directory.
+          exeflags: "--project=benchmark"
+
+          # This is still needed to point to the script file.
+          # The path is relative to the repository root.
           script: "benchmark/benchmarks.jl"
