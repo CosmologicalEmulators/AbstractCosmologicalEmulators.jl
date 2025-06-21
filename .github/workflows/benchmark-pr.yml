@@ -1,6 +1,6 @@
 name: Benchmark Pull Request
 on:
-  pull-request:
+  pull_request:
     types: [opened, synchronize, reopened]
     branches: [main]
 
