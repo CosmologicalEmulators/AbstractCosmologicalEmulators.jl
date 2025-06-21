@@ -1,7 +1,7 @@
 name: Benchmark this PR
 on:
   pull_request: # no need for pull_request_target
-    branches: [develop]
+    branches: [main]
 # no permissions needed
 
 jobs:
@@ -10,5 +10,5 @@ jobs:
     steps:
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
-          julia-version: "1"
+          julia-version: "1.10"
           job-summary: "true"
