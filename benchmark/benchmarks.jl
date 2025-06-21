@@ -1,6 +1,5 @@
 using Pkg
 Pkg.activate(@__DIR__)
-# (instantiation is done once by the action, but harmless if repeated)
 Pkg.instantiate()
 
 using BenchmarkTools
