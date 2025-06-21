@@ -17,6 +17,5 @@ jobs:
         uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: "1"
-          exeflags: "--project=benchmark"
           bench-on: "head" # keep if you already had it
           script: "benchmark/benchmarks.jl"
