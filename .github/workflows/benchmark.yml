@@ -1,8 +1,12 @@
+# file: .github/workflows/benchmark.yml
+
 name: Benchmark this PR
 on:
-  pull_request: # no need for pull_request_target
-    branches: [main]
-# no permissions needed
+  pull_request_target:
+    branches: [main] # Or your default branch
+
+permissions:
+  pull-requests: write
 
 jobs:
   bench:
@@ -10,5 +14,6 @@ jobs:
     steps:
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
-          julia-version: "1.10"
-          job-summary: "true"
+          julia-version: "1"
+          # Add this line:
+          path: "."
