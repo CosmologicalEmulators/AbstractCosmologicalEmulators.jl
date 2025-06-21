@@ -1,25 +1,37 @@
 name: Benchmark on develop
 on:
+  pull_request_target:
+    branches:
+      - main
+      - develop
   push:
     branches:
+      - main
       - develop
 
+permissions:
+  pull-requests: write
 jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Check out the repository's code, which is now mandatory
-      # because the `push` trigger doesn't do it automatically.
+      # Step 1: Check out the repository's code. This is crucial!
+      # It fetches your repo, including the benchmark/ directory.
       - uses: actions/checkout@v4
+        # Add fetch-depth if you want to compare against previous commits
+        # with the 'rev' input (e.g., for Strategy 1: Compare Commit to Previous)
+        # fetch-depth: 0
 
-      # Step 2: Run the benchmark action with the script explicitly defined
+      # Step 2: Run the benchmark action.
+      # It will automatically find your package in the checked-out repository.
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: "1"
 
-          # This tells the action to use the local checkout of the package
-          path: "."
-
-          # This is the key fix: explicitly point to the benchmark script
-          # within the checked-out repository.
+          # This is the crucial input that tells AirspeedVelocity.jl
+          # where your benchmark definitions are.
           script: "benchmark/benchmarks.jl"
+
+          # Optional: If you want to compare the current commit against the previous one on 'develop'
+          # Uncomment and ensure you have fetch-depth: 0 above
+          # rev: ${{ github.event.before }},${{ github.sha }}
