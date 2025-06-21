@@ -3,9 +3,9 @@
 #Pkg.instantiate()
 
 using BenchmarkTools
-using JSON
 using SimpleChains
 using AbstractCosmologicalEmulators
+using JSON
 
 mlpd = SimpleChain(
   static(6),
