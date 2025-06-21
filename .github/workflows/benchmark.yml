@@ -1,25 +1,25 @@
 name: Benchmark on develop
 on:
-  # This section defines the trigger
   push:
     branches:
-      - develop # This makes the workflow run only for pushes to the 'develop' branch
-
-permissions:
-  pull-requests: write # This is still useful if you ever want to adapt the action
+      - develop
 
 jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-      # You MUST include actions/checkout@v4 so the action can find your repo
+      # Step 1: Check out the repository's code, which is now mandatory
+      # because the `push` trigger doesn't do it automatically.
       - uses: actions/checkout@v4
-        with:
-          # Fetch the history to allow comparison with previous commits
-          fetch-depth: 0
 
+      # Step 2: Run the benchmark action with the script explicitly defined
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: "1"
-          # Use the path to the local checkout of your package
+
+          # This tells the action to use the local checkout of the package
           path: "."
+
+          # This is the key fix: explicitly point to the benchmark script
+          # within the checked-out repository.
+          script: "benchmark/benchmarks.jl"
