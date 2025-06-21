@@ -18,8 +18,7 @@ jobs:
         with:
           julia-version: "1"
 
-          # This is the key fix: Provide a simple, comma-separated string
-          # with no internal quotes or brackets.
+          # This is the single source of truth for benchmark dependencies.
           extra-pkgs: "BenchmarkTools,JSON,SimpleChains"
 
           # This correctly points to the script to be executed.
