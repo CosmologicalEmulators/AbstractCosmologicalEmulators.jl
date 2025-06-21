@@ -1,11 +1,11 @@
-using Pkg
-Pkg.activate(@__DIR__)
-Pkg.instantiate()
+#using Pkg
+#Pkg.activate(@__DIR__)
+#Pkg.instantiate()
 
 using BenchmarkTools
-using AbstractCosmologicalEmulators
 using JSON
 using SimpleChains
+using AbstractCosmologicalEmulators
 
 mlpd = SimpleChain(
   static(6),
