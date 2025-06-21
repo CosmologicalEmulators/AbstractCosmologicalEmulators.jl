@@ -2,6 +2,7 @@ name: Benchmark Pull Request
 on:
   # This trigger runs in the context of the PR branch itself
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main] # This still means "run on PRs targeting main"
 
 permissions:
