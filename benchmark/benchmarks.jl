@@ -1,4 +1,7 @@
-# file: benchmark/benchmarks.jl
+using Pkg
+Pkg.activate(@__DIR__)
+# (instantiation is done once by the action, but harmless if repeated)
+Pkg.instantiate()
 
 using BenchmarkTools
 using AbstractCosmologicalEmulators
@@ -52,6 +55,6 @@ SUITE["running"]["lux"] = @benchmarkable run_emulator(input, lx_emu) setup = (
     input = randn(6)
 )
 
-SUITE["running"]["simlechains"] = @benchmarkable run_emulator(input, sc_emu) setup = (
+SUITE["running"]["simplechains"] = @benchmarkable run_emulator(input, sc_emu) setup = (
     input = randn(6)
 )

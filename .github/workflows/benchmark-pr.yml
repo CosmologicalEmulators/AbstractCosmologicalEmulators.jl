@@ -13,13 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run AirspeedVelocity Benchmark
+      - name: Run AirspeedVelocity benchmark
         uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: "1"
-
-          # This is the single source of truth for benchmark dependencies.
-          extra-pkgs: "JSON,SimpleChains"
-
-          # This correctly points to the script to be executed.
+          # run every revision with the benchmark environment
+          exeflags: "--project=benchmark"
+          # always use the PR’s copy of the suite
+          bench-on: "head"
           script: "benchmark/benchmarks.jl"
