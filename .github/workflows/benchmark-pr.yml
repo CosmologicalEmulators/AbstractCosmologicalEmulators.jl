@@ -1,20 +1,25 @@
 name: Benchmark Pull Request
 on:
-  # This runs when a PR is opened targeting your main branch
-  pull_request_target:
-    branches: [main] # Or your default branch
+  # This trigger runs in the context of the PR branch itself
+  pull_request:
+    branches: [main] # This still means "run on PRs targeting main"
 
 permissions:
-  # This permission is required for the action to post comments
+  # This permission is still needed to allow comment posting
   pull-requests: write
 
 jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-      # The AirspeedVelocity action handles checkout automatically for this trigger
+      # With `pull_request`, we MUST explicitly check out the code
+      # This checks out the code from your feature branch (e.g., develop)
+      - uses: actions/checkout@v4
+
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: "1"
-          # We still need this to tell the action where to find the script
+
+          # This is still necessary to tell the action where to find the script
+          # It will now correctly find it in the checked-out PR branch
           script: "benchmark/benchmarks.jl"
