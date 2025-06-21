@@ -18,10 +18,9 @@ jobs:
         with:
           julia-version: "1"
 
-          # This is the definitive fix. It tells the action to install these
-          # packages into its temporary environment for every benchmark run.
-          # The value must be a string representing a Julia vector.
-          extra-pkgs: '["BenchmarkTools", "JSON", "SimpleChains"]'
+          # This is the key fix: Provide a simple, comma-separated string
+          # with no internal quotes or brackets.
+          extra-pkgs: "BenchmarkTools,JSON,SimpleChains"
 
-          # This still correctly points to the script to be executed.
+          # This correctly points to the script to be executed.
           script: "benchmark/benchmarks.jl"
