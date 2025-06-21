@@ -14,7 +14,7 @@ mlpd = SimpleChain(
   TurboDense(tanh, 64),
   TurboDense(identity, 40)
 )
-NN_dict = JSON.parsefile(pwd()*"/testNN.json")
+NN_dict = JSON.parsefile(joinpath(@__DIR__, "testNN.json"))
 weights = SimpleChains.init_params(mlpd)
 input = randn(6)
 
