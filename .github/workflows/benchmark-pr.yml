@@ -19,4 +19,4 @@ jobs:
           julia-version: "1"
           bench-on: "head" # keep if you already had it
           script: "benchmark/benchmarks.jl"
-          script-deps: '["JSON", "SimpleChains"]'
+          extra-pkgs: '["JSON", "SimpleChains"]'
