@@ -24,6 +24,7 @@ jobs:
 
         with:
           julia-version: "1"
+          bench-on: "head"
 
           # We are running from the root again, so the full path to the script is needed
           script: "benchmark/benchmarks.jl"
