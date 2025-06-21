@@ -10,13 +10,16 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        julia-version: ["1.10", "1.11"]
     steps:
       - uses: actions/checkout@v4
 
       - name: Run AirspeedVelocity benchmark
         uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
-          julia-version: "1"
+          julia-version: ${{ matrix.julia-version }}
           bench-on: "head" # keep if you already had it
           script: "benchmark/benchmarks.jl"
           extra-pkgs: "JSON,SimpleChains"
