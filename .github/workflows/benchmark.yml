@@ -1,19 +1,25 @@
-# file: .github/workflows/benchmark.yml
-
-name: Benchmark this PR
+name: Benchmark on develop
 on:
-  pull_request_target:
-    branches: [main] # Or your default branch
+  # This section defines the trigger
+  push:
+    branches:
+      - develop # This makes the workflow run only for pushes to the 'develop' branch
 
 permissions:
-  pull-requests: write
+  pull-requests: write # This is still useful if you ever want to adapt the action
 
 jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
+      # You MUST include actions/checkout@v4 so the action can find your repo
+      - uses: actions/checkout@v4
+        with:
+          # Fetch the history to allow comparison with previous commits
+          fetch-depth: 0
+
       - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: "1"
-          # Add this line:
+          # Use the path to the local checkout of your package
           path: "."
