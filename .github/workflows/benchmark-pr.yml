@@ -1,27 +1,27 @@
 name: Benchmark Pull Request
 on:
-  # This trigger runs in the context of the PR branch itself
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main] # This still means "run on PRs targeting main"
+    branches: [main]
 
 permissions:
-  # This permission is still needed to allow comment posting
   pull-requests: write
 
 jobs:
   bench:
     runs-on: ubuntu-latest
     steps:
-      # With `pull_request`, we MUST explicitly check out the code
-      # This checks out the code from your feature branch (e.g., develop)
       - uses: actions/checkout@v4
 
-      - - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
-              with:
-                julia-version: "1"
-                working-directory: "./benchmark"
+      # This is the corrected step with proper YAML syntax
+      - name: Run AirspeedVelocity Benchmark # It's good practice to name steps
+        uses: MilesCranmer/AirspeedVelocity.jl@action-v1
+        # 'working-directory' is a property of the step, at the same level as 'uses'
+        working-directory: ./benchmark
 
-                # This is still necessary to tell the action where to find the script
-                # It will now correctly find it in the checked-out PR branch
-                script: "benchmark/benchmarks.jl"
+        # 'with' contains the inputs for the action
+        with:
+          julia-version: "1"
+
+          # IMPORTANT: The script path is now relative to the working directory
+          script: "benchmarks.jl"
