@@ -17,10 +17,11 @@ jobs:
       # This checks out the code from your feature branch (e.g., develop)
       - uses: actions/checkout@v4
 
-      - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
-        with:
-          julia-version: "1"
+      - - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
+              with:
+                julia-version: "1"
+                working-directory: "./benchmark"
 
-          # This is still necessary to tell the action where to find the script
-          # It will now correctly find it in the checked-out PR branch
-          script: "benchmark/benchmarks.jl"
+                # This is still necessary to tell the action where to find the script
+                # It will now correctly find it in the checked-out PR branch
+                script: "benchmark/benchmarks.jl"
