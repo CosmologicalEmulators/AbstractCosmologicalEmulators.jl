@@ -54,6 +54,10 @@ function validate_nn_dict_structure(nn_dict::Dict{String,Any})
 
     # Validate layer structure
     validate_layer_structure(nn_dict)
+    
+    # Numerical safety validation
+    validate_normalization_ranges(nn_dict)
+    validate_architecture_numerical_stability(nn_dict)
 
     return nothing
 end
@@ -193,4 +197,168 @@ function safe_dict_access(dict, keys...; context="")
             rethrow(e)
         end
     end
+end
+
+function validate_normalization_ranges(nn_dict::Dict{String,Any})
+    if haskey(nn_dict, "emulator_description")
+        desc = nn_dict["emulator_description"]
+        
+        range_keys = ["input_ranges", "minmax", "parameter_ranges", "normalization_ranges"]
+        minmax_data = nothing
+        
+        for key in range_keys
+            if haskey(desc, key)
+                minmax_data = desc[key]
+                break
+            end
+        end
+        
+        if minmax_data !== nothing
+            validate_minmax_data(minmax_data)
+        end
+    end
+    
+    return nothing
+end
+
+function validate_minmax_data(minmax_data)
+    ranges = convert_minmax_format(minmax_data)
+    
+    range_widths = @views ranges[:,2] - ranges[:,1]
+    degenerate_indices = findall(abs.(range_widths) .< 1e-15)
+    
+    if !isempty(degenerate_indices)
+        throw(ArgumentError(
+        "Degenerate normalization ranges detected at parameter indices: $degenerate_indices. " *
+        "Range widths: $(range_widths[degenerate_indices]). " *
+        "This will cause division by zero in maximin normalization. " *
+        "Please ensure min ≠ max for all parameters."
+        ))
+    end
+    
+    validate_cosmological_ranges(ranges)
+    
+    return nothing
+end
+
+function convert_minmax_format(minmax_data)
+    if isa(minmax_data, Matrix)
+        if size(minmax_data, 2) != 2
+            throw(ArgumentError("Matrix minmax data must have exactly 2 columns [min, max]"))
+        end
+        return minmax_data
+    elseif isa(minmax_data, Vector)
+        if length(minmax_data) == 0
+            throw(ArgumentError("Empty minmax data provided"))
+        end
+        
+        if isa(minmax_data[1], Vector) || isa(minmax_data[1], Array)
+            ranges = Matrix{Float64}(undef, length(minmax_data), 2)
+            for (i, range_pair) in enumerate(minmax_data)
+                if length(range_pair) != 2
+                    throw(ArgumentError("Each range must have exactly 2 elements [min, max]"))
+                end
+                ranges[i, 1] = Float64(range_pair[1])
+                ranges[i, 2] = Float64(range_pair[2])
+            end
+            return ranges
+        else
+            throw(ArgumentError("Vector minmax format not recognized. Expected Vector{Vector{Number}}"))
+        end
+    elseif isa(minmax_data, Dict)
+        if haskey(minmax_data, "min") && haskey(minmax_data, "max")
+            min_vals = minmax_data["min"]
+            max_vals = minmax_data["max"]
+            if length(min_vals) != length(max_vals)
+                throw(ArgumentError("min and max arrays must have same length"))
+            end
+            return hcat(Float64.(min_vals), Float64.(max_vals))
+        else
+            throw(ArgumentError("Dictionary minmax format must have 'min' and 'max' keys"))
+        end
+    else
+        throw(ArgumentError("Unsupported minmax data format: $(typeof(minmax_data))"))
+    end
+end
+
+function validate_cosmological_ranges(ranges::Matrix{Float64})
+    n_params = size(ranges, 1)
+    
+    for i in 1:n_params
+        min_val, max_val = ranges[i, 1], ranges[i, 2]
+        
+        if min_val >= max_val
+            throw(ArgumentError("Invalid range for parameter $i: min ($min_val) >= max ($max_val)"))
+        end
+    end
+    
+    return nothing
+end
+
+function validate_trained_weights(weights, nn_dict::Dict{String,Any})
+    finite_mask = isfinite.(weights)
+    if !all(finite_mask)
+        nan_count = count(isnan.(weights))
+        inf_count = count(isinf.(weights))
+        
+        throw(ArgumentError(
+        "Invalid trained weights detected: " *
+        "NaN values: $nan_count, Inf values: $inf_count, " *
+        "Total invalid: $(nan_count + inf_count) out of $(length(weights)). " *
+        "This indicates the emulator was not properly trained or the weights are corrupted."
+        ))
+    end
+    
+    max_weight = maximum(abs.(weights))
+    if max_weight > 1e6
+        @warn "Large weight magnitudes detected (max absolute value: $max_weight). " *
+              "This may indicate training instability, poor normalization, or gradient explosion."
+    end
+    
+    if all(abs.(weights) .< 1e-10)
+        @warn "All weights are very small (< 1e-10). " *
+              "This may indicate the emulator was not properly trained."
+    end
+    
+    return nothing
+end
+
+function validate_architecture_numerical_stability(nn_dict::Dict{String,Any})
+    n_input = nn_dict["n_input_features"]
+    n_output = nn_dict["n_output_features"] 
+    n_hidden = nn_dict["n_hidden_layers"]
+    
+    layer_sizes = [n_input]
+    for i in 1:n_hidden
+        layer_sizes = push!(layer_sizes, nn_dict["layers"]["layer_$i"]["n_neurons"])
+    end
+    push!(layer_sizes, n_output)
+    
+    for i in 2:length(layer_sizes)
+        ratio = layer_sizes[i] / layer_sizes[i-1]
+        
+        if ratio > 100
+            @warn "Large layer size expansion detected: Layer $(i-1) ($(layer_sizes[i-1])) → Layer $i ($(layer_sizes[i])) (ratio: $(round(ratio, digits=2))). " *
+                  "This may cause increased memory usage, potential overfitting, or training instability."
+        elseif ratio < 0.01
+            @warn "Severe layer size reduction detected: Layer $(i-1) ($(layer_sizes[i-1])) → Layer $i ($(layer_sizes[i])) (ratio: $(round(ratio, digits=4))). " *
+                  "This may cause information bottlenecks, underfitting, or loss of representational capacity."
+        end
+    end
+    
+    if n_hidden > 20
+        @warn "Very deep network detected ($n_hidden hidden layers). " *
+              "Consider using residual connections, batch normalization, or gradient clipping."
+    end
+    
+    for i in 1:n_hidden
+        activation = nn_dict["layers"]["layer_$i"]["activation_function"]
+        if activation == "tanh" && n_hidden > 10
+            @warn "Deep network ($n_hidden layers) using tanh activation may suffer from vanishing gradients. " *
+                  "Consider using ReLU or other activations for deep networks."
+            break
+        end
+    end
+    
+    return nothing
 end

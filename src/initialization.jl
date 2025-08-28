@@ -113,9 +113,12 @@ function _init_luxemulator(NN_dict::Dict{String,Any}, weight)
     Description= nn_descript)
 end
 
-function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{LuxEmulator}; validate::Bool=true)
+function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{LuxEmulator}; validate::Bool=true, validate_weights::Bool=validate)
     if validate
         validate_nn_dict_structure(NN_dict)
+    end
+    if validate_weights
+        validate_trained_weights(weight, NN_dict)
     end
     return _init_luxemulator(NN_dict, weight)
 end
@@ -127,9 +130,12 @@ function _init_simplechainsemulator(NN_dict::Dict{String,Any}, weight)
     Description= nn_descript)
 end
 
-function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{SimpleChainsEmulator}; validate::Bool=true)
+function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{SimpleChainsEmulator}; validate::Bool=true, validate_weights::Bool=validate)
     if validate
         validate_nn_dict_structure(NN_dict)
+    end
+    if validate_weights
+        validate_trained_weights(weight, NN_dict)
     end
     return _init_simplechainsemulator(NN_dict, weight)
 end
