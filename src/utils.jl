@@ -8,7 +8,7 @@ function inv_maximin(input, minmax)
     return result
 end
 
-function get_emulator_description(input_dict::Dict)
+function get_emulator_description(input_dict::AbstractDict{String})
     if haskey(input_dict, "parameters")
         println("The parameters the model has been trained are, in the following order: "*input_dict["parameters"]*".")
     else
