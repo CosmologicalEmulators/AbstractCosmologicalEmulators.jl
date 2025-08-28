@@ -4,8 +4,7 @@ function _get_layer_simplechains(input_dict::Dict{String,Any})
     elseif input_dict["activation_function"] == "relu"
         act_func = SimpleChains.relu
     else
-        error("Error in the Activation Function. You choose "*
-        string(input_dict["activation_function"])*" which we do not support.")
+        validate_activation_function(input_dict["activation_function"], "layer (SimpleChains)")
     end
     return TurboDense(act_func, Int(input_dict["n_neurons"]))
 end
@@ -25,8 +24,7 @@ function _get_layer_lux(activation_function, n_in::Int, n_out::Int)
     elseif activation_function == "relu"
         act_func = Lux.relu
     else
-        error("Error in the Activation Function. You choose "*
-        string(activation_function)*" which we do not support.")
+        validate_activation_function(activation_function, "layer (Lux)")
     end
     return Dense(n_in => n_out, act_func)
 end
@@ -115,7 +113,10 @@ function _init_luxemulator(NN_dict::Dict{String,Any}, weight)
     Description= nn_descript)
 end
 
-function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{LuxEmulator})
+function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{LuxEmulator}; validate::Bool=true)
+    if validate
+        validate_nn_dict_structure(NN_dict)
+    end
     return _init_luxemulator(NN_dict, weight)
 end
 
@@ -126,6 +127,9 @@ function _init_simplechainsemulator(NN_dict::Dict{String,Any}, weight)
     Description= nn_descript)
 end
 
-function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{SimpleChainsEmulator})
+function init_emulator(NN_dict::Dict{String,Any}, weight, ::Type{SimpleChainsEmulator}; validate::Bool=true)
+    if validate
+        validate_nn_dict_structure(NN_dict)
+    end
     return _init_simplechainsemulator(NN_dict, weight)
 end
