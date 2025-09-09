@@ -5,6 +5,51 @@ using Test
 using ForwardDiff
 using Zygote
 
+# Test that main package knows nothing about cosmology
+@testset "Main Package Independence" begin
+    # These should NOT be defined in the main package
+    @test !isdefined(AbstractCosmologicalEmulators, :w0waCDMCosmology)
+    @test !isdefined(AbstractCosmologicalEmulators, :hubble_parameter)
+    @test !isdefined(AbstractCosmologicalEmulators, :comoving_distance)
+end
+
+# Test extension if dependencies are available
+@testset "BackgroundCosmologyExt Extension" begin
+    try
+        using OrdinaryDiffEqTsit5
+        using Integrals
+        using DataInterpolations
+        using QuadGK
+        using FastGaussQuadrature
+        
+        # Get the extension
+        ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+        
+        if !isnothing(ext)
+            @info "Testing BackgroundCosmologyExt extension"
+            
+            # Import what we need from the extension and make them available globally
+            global w0waCDMCosmology = ext.w0waCDMCosmology
+            global hubble_parameter = ext.hubble_parameter
+            global comoving_distance = ext.comoving_distance
+            global luminosity_distance = ext.luminosity_distance
+            global angular_diameter_distance = ext.angular_diameter_distance
+            global growth_factor = ext.growth_factor
+            global growth_rate = ext.growth_rate
+            
+            include("test_background_cosmology.jl")
+        else
+            @info "Extension not loaded despite dependencies being available"
+        end
+    catch e
+        if isa(e, ArgumentError) && contains(string(e), "Package")
+            @info "BackgroundCosmologyExt dependencies not available, skipping extension tests"
+        else
+            rethrow(e)
+        end
+    end
+end
+
 m = 100
 n = 300
 InMinMax = hcat(zeros(m), ones(m))
