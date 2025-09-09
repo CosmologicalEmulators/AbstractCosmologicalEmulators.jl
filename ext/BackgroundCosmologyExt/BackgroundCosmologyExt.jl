@@ -5,7 +5,6 @@ using OrdinaryDiffEqTsit5
 using Integrals
 using DataInterpolations
 using LinearAlgebra
-using QuadGK
 using FastGaussQuadrature
 using SciMLSensitivity
 
@@ -34,12 +33,12 @@ function __init__()
     # Initialize F and dFdy interpolants for neutrino calculations
     min_y = _get_y(0, 0)
     max_y = _get_y(1, 10)
-    
+
     # Create F interpolant
     y_grid_F = vcat(LinRange(min_y, 100, 100), LinRange(100.1, max_y, 1000))
     F_grid = [_F(y) for y in y_grid_F]
     F_interpolant[] = AkimaInterpolation(F_grid, y_grid_F)
-    
+
     # Create dFdy interpolant
     y_grid_dF = vcat(LinRange(min_y, 10., 10000), LinRange(10.1, max_y, 10000))
     dFdy_grid = [_dFdy(y) for y in y_grid_dF]
