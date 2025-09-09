@@ -26,6 +26,10 @@ function _r_z(z, cosmo::w0waCDMCosmology)
     return _r_z(z, Ωcb(cosmo), cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
 end
 
+function _d̃A_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
+    return _r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa) / (1 + z)
+end
+
 function _d̃A_z(z, cosmo::w0waCDMCosmology)
     return _d̃A_z(z, Ωcb(cosmo), cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
 end
