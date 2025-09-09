@@ -6,7 +6,6 @@ using Integrals
 using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
-using SciMLSensitivity
 
 # Export everything from this extension module
 export w0waCDMCosmology
