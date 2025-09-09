@@ -1,43 +1,5 @@
 # Concrete cosmology types
 
-"""
-    w0waCDMCosmology(; ln10Aₛ, nₛ, h, ωb, ωc, mν=0., w0=-1., wa=0.)
-
-This struct contains the value of the cosmological parameters for w0waCDM cosmologies.
-
-## Keyword arguments
-
- - `ln10Aₛ` and `nₛ`: the amplitude and the tilt of the primordial power spectrum fluctuations
- - `h`: the value of the reduced Hubble parameter
- - `ωb` and `ωc`: the physical energy densities of baryons and cold dark matter
- - `mν`: the sum of the neutrino masses in eV (default: 0.0)
- - `w0` and `wa`: the Dark Energy equation of state parameters in the CPL parameterization (defaults: -1.0, 0.0)
-
-## Examples
-
-```julia
-# Create a standard ΛCDM cosmology
-cosmo = w0waCDMCosmology(
-    ln10Aₛ = 3.044,
-    nₛ = 0.9649,
-    h = 0.6736,
-    ωb = 0.02237,
-    ωc = 0.1200
-)
-
-# Create a w0waCDM cosmology with massive neutrinos
-cosmo = w0waCDMCosmology(
-    ln10Aₛ = 3.044,
-    nₛ = 0.9649,
-    h = 0.6736,
-    ωb = 0.02237,
-    ωc = 0.1200,
-    mν = 0.06,  # 60 meV neutrino mass
-    w0 = -0.9,
-    wa = 0.1
-)
-```
-"""
 Base.@kwdef mutable struct w0waCDMCosmology{T<:Real}
     ln10Aₛ::T
     nₛ::T
@@ -50,10 +12,10 @@ Base.@kwdef mutable struct w0waCDMCosmology{T<:Real}
 end
 
 # Convenience constructor with positional arguments (for backward compatibility)
-function w0waCDMCosmology(ln10Aₛ::Number, nₛ::Number, h::Number, ωb::Number, ωc::Number, 
+function w0waCDMCosmology(ln10Aₛ::Number, nₛ::Number, h::Number, ωb::Number, ωc::Number,
                          mν::Number=0., w0::Number=-1., wa::Number=0.)
     # Promote all arguments to a common type
-    T = promote_type(typeof(ln10Aₛ), typeof(nₛ), typeof(h), typeof(ωb), 
+    T = promote_type(typeof(ln10Aₛ), typeof(nₛ), typeof(h), typeof(ωb),
                      typeof(ωc), typeof(mν), typeof(w0), typeof(wa))
     return w0waCDMCosmology{T}(
         ln10Aₛ = convert(T, ln10Aₛ),
