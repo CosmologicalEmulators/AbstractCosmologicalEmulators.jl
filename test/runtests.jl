@@ -9,7 +9,6 @@ using DataInterpolations
 using LinearAlgebra
 using QuadGK
 using FastGaussQuadrature
-using SciMLSensitivity
 using AbstractCosmologicalEmulators
 
 # Test that main package knows nothing about cosmology
