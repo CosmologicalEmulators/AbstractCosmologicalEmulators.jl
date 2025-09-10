@@ -43,7 +43,7 @@ end
             global growth_factor = ext.growth_factor
             global growth_rate = ext.growth_rate
 
-            include("test_background_cosmology.jl")
+            include("test_background.jl")
         else
             @info "Extension not loaded despite dependencies being available"
         end
