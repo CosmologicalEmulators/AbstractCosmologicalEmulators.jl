@@ -62,7 +62,7 @@ if !isnothing(ext)
                 E_z_struct = ext.E_z(z, mycosmo)
                 E_z_direct = ext.E_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 
-                @test isapprox(E_z_struct, E_z_direct, rtol=1e-10)
+                @test E_z_struct == E_z_direct
             end
         end
         
@@ -79,7 +79,80 @@ if !isnothing(ext)
                 dL_z_struct = ext.dL_z(z, mycosmo)
                 dL_z_direct = ext.dL_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 
-                @test isapprox(dL_z_struct, dL_z_direct, rtol=1e-10)
+                @test dL_z_struct == dL_z_direct
+            end
+        end
+        
+        # Test all wrapper functions for perfect equivalence
+        @testset "All wrapper functions - structure vs direct" begin
+            # Test various wrapper functions at different redshifts
+            test_z_values = [0.5, 1.0, 2.0]
+            test_a_values = [1.0, 0.5, 0.25]  # a = 1/(1+z)
+            
+            Ωcb0_mycosmo = (mycosmo.ωb + mycosmo.ωc) / mycosmo.h^2
+            
+            # Test E_a wrapper
+            for a in test_a_values
+                E_a_struct = ext.E_a(a, mycosmo)
+                E_a_direct = ext.E_a(a, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test E_a_struct == E_a_direct
+            end
+            
+            # Test _Ωma wrapper  
+            for a in test_a_values
+                Ωma_struct = ext._Ωma(a, mycosmo)
+                Ωma_direct = ext._Ωma(a, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test Ωma_struct == Ωma_direct
+            end
+            
+            # Test r̃_z wrapper
+            for z in test_z_values
+                r̃_z_struct = ext.r̃_z(z, mycosmo)
+                r̃_z_direct = ext.r̃_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test r̃_z_struct == r̃_z_direct
+            end
+            
+            # Test r_z wrapper
+            for z in test_z_values
+                r_z_struct = ext.r_z(z, mycosmo)
+                r_z_direct = ext.r_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test r_z_struct == r_z_direct
+            end
+            
+            # Test d̃A_z wrapper
+            for z in test_z_values
+                d̃A_z_struct = ext.d̃A_z(z, mycosmo)
+                d̃A_z_direct = ext.d̃A_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test d̃A_z_struct == d̃A_z_direct
+            end
+            
+            # Test dA_z wrapper
+            for z in test_z_values
+                dA_z_struct = ext.dA_z(z, mycosmo)
+                dA_z_direct = ext.dA_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test dA_z_struct == dA_z_direct
+            end
+            
+            # Test D_z wrapper
+            for z in test_z_values
+                D_z_struct = ext.D_z(z, mycosmo)
+                D_z_direct = ext.D_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test D_z_struct == D_z_direct
+            end
+            
+            # Test f_z wrapper
+            for z in test_z_values
+                f_z_struct = ext.f_z(z, mycosmo)
+                f_z_direct = ext.f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test f_z_struct == f_z_direct
+            end
+            
+            # Test D_f_z wrapper (returns tuple)
+            for z in test_z_values
+                D_f_struct = ext.D_f_z(z, mycosmo)
+                D_f_direct = ext.D_f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                @test D_f_struct[1] == D_f_direct[1]  # D_z part
+                @test D_f_struct[2] == D_f_direct[2]  # f_z part
             end
         end
         
@@ -100,12 +173,12 @@ if !isnothing(ext)
                     # Test E_z
                     E_z_struct = ext.E_z(z, cosmo)
                     E_z_direct = ext.E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
-                    @test isapprox(E_z_struct, E_z_direct, rtol=1e-10)
+                    @test E_z_struct == E_z_direct
                     
                     # Test dL_z
                     dL_z_struct = ext.dL_z(z, cosmo)
                     dL_z_direct = ext.dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
-                    @test isapprox(dL_z_struct, dL_z_direct, rtol=1e-10)
+                    @test dL_z_struct == dL_z_direct
                 end
             end
         end
