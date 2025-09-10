@@ -21,7 +21,7 @@ Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [extensions]
-BackgroundCosmologyExt = ["OrdinaryDiffEqTsit5", "Integrals", "DataInterpolations", "QuadGK", "FastGaussQuadrature", "LinearAlgebra", "SciMLSensitivity"]
+BackgroundCosmologyExt = ["OrdinaryDiffEqTsit5", "Integrals", "DataInterpolations", "QuadGK", "FastGaussQuadrature", "LinearAlgebra"]
 
 [compat]
 Adapt = "3, 4"
@@ -32,7 +32,6 @@ ForwardDiff = "0.10.38"
 Integrals = "4, 5"
 Lux = "1"
 OrdinaryDiffEqTsit5 = "1"
-SciMLSensitivity = "7"
 SimpleChains = "0.4"
 Zygote = "0.7.10"
 julia = "1.10"
@@ -46,9 +45,10 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["DataInterpolations", "FastGaussQuadrature", "ForwardDiff", "Integrals", "JSON", "LinearAlgebra", "Lux", "OrdinaryDiffEqTsit5", "SimpleChains", "Test", "Zygote"]
+test = ["DataInterpolations", "FastGaussQuadrature", "ForwardDiff", "Integrals", "JSON", "LinearAlgebra", "Lux", "OrdinaryDiffEqTsit5", "QuadGK", "SimpleChains", "Test", "Zygote"]

@@ -1,10 +1,10 @@
 using Test
-using LinearAlgebra
 using OrdinaryDiffEqTsit5
 using Integrals
 using DataInterpolations
-using QuadGK
+using LinearAlgebra
 using FastGaussQuadrature
+using QuadGK
 
 # Get the extension
 ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
@@ -16,7 +16,7 @@ if !isnothing(ext)
     mν = 0.06
     w0 = -1.1
     wa = 0.2
-    
+
     # Create test cosmology struct
     mycosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=0.06, w0=-2.0, wa=1.0)
 
@@ -70,9 +70,9 @@ if !isnothing(ext)
         quadrature_rule = FastGaussQuadrature.gausslegendre
         order = 5
         a, b = 0.0, 2.0
-        
+
         x_transformed, w_transformed = ext._transformed_weights(quadrature_rule, order, a, b)
-        
+
         @test length(x_transformed) == order
         @test length(w_transformed) == order
         @test all(a .<= x_transformed .<= b)
@@ -93,7 +93,7 @@ if !isnothing(ext)
         # Test that the cosmology struct is properly defined
         @test isa(mycosmo, ext.w0waCDMCosmology)
         @test isa(mycosmo, ext.AbstractCosmology)
-        
+
         # Test field access
         @test mycosmo.ln10Aₛ == 3.0
         @test mycosmo.nₛ == 0.96
@@ -109,13 +109,13 @@ if !isnothing(ext)
         # Test with extreme parameter values
         @test isfinite(ext._E_z(0.0, 0.3, 0.7))
         @test isfinite(ext._E_z(10.0, 0.3, 0.7))
-        
+
         # Test with vector of redshifts
         z_array = [0.0, 0.5, 1.0, 2.0, 3.0]
         D_array = ext._D_z(z_array, Ωcb0, h)
         @test length(D_array) == length(z_array)
         @test all(isfinite.(D_array))
-        
+
         f_array = ext._f_z(z_array, Ωcb0, h)
         @test length(f_array) == length(z_array)
         @test all(isfinite.(f_array))
