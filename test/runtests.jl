@@ -7,7 +7,6 @@ using OrdinaryDiffEqTsit5
 using Integrals
 using DataInterpolations
 using LinearAlgebra
-using QuadGK
 using FastGaussQuadrature
 using AbstractCosmologicalEmulators
 
