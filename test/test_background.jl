@@ -26,26 +26,26 @@ if !isnothing(ext)
         @test isapprox(ext._ΩνE2(1.0, 1e-4, 1.0) * 3, ext._ΩνE2(1.0, 1e-4, ones(3)))
         @test isapprox(ext._dΩνE2da(1.0, 1e-4, 1.0) * 3, ext._dΩνE2da(1.0, 1e-4, ones(3)))
         @test isapprox(ext._ρDE_z(0.0, -1.0, 1.0), 1.0)
-        @test isapprox(ext._E_a(1.0, Ωcb0, h), 1.0)
-        @test isapprox(ext._E_a(1.0, mycosmo), 1.0)
-        @test isapprox(ext._E_z(0.0, Ωcb0, h), 1.0)
-        @test isapprox(ext._E_z(0.0, Ωcb0, h), ext._E_a(1.0, Ωcb0, h))
+        @test isapprox(ext.E_a(1.0, Ωcb0, h), 1.0)
+        @test isapprox(ext.E_a(1.0, mycosmo), 1.0)
+        @test isapprox(ext.E_z(0.0, Ωcb0, h), 1.0)
+        @test isapprox(ext.E_z(0.0, Ωcb0, h), ext.E_a(1.0, Ωcb0, h))
         @test isapprox(ext._Ωma(1.0, Ωcb0, h), Ωcb0)
         @test isapprox(ext._Ωma(1.0, mycosmo), (0.02237 + 0.1) / 0.636^2)
         @test isapprox(ext._r̃_z(0.0, mycosmo), 0.0)
-        @test isapprox(ext._r_z(0.0, mycosmo), 0.0)
-        @test isapprox(ext._r_z(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), ext._r_z_check(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), rtol=1e-6)
-        @test isapprox(ext._r_z(10.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 10161.232807937273, rtol=2e-4)
-        @test isapprox(ext._dA_z(0.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), 0.0, rtol=1e-6)
-        @test isapprox(ext._dA_z(0.0, mycosmo), 0.0)
-        @test ext._D_z(1.0, mycosmo) == ext._D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
-        @test ext._f_z(1.0, mycosmo) == ext._f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
+        @test isapprox(ext.r_z(0.0, mycosmo), 0.0)
+        @test isapprox(ext.r_z(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), ext._r_z_check(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), rtol=1e-6)
+        @test isapprox(ext.r_z(10.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 10161.232807937273, rtol=2e-4)
+        @test isapprox(ext.dA_z(0.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), 0.0, rtol=1e-6)
+        @test isapprox(ext.dA_z(0.0, mycosmo), 0.0)
+        @test ext.D_z(1.0, mycosmo) == ext.D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
+        @test ext.f_z(1.0, mycosmo) == ext.f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
     end
 
     @testset "CLASS comparison tests" begin
         # Comparison with CLASS results for specific cosmology
-        @test isapprox(ext._f_z(0.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 0.5336534168444999, rtol=2e-5)
-        @test isapprox((ext._D_z(1.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7) / ext._D_z(0.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7)), 0.5713231772620894, rtol=4e-5)
+        @test isapprox(ext.f_z(0.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 0.5336534168444999, rtol=2e-5)
+        @test isapprox((ext.D_z(1.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7) / ext.D_z(0.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7)), 0.5713231772620894, rtol=4e-5)
     end
 
     @testset "Missing coverage tests" begin
@@ -59,7 +59,7 @@ if !isnothing(ext)
         @test isapprox(ext._d̃A_z(0.0, Ωcb0, h), 0.0)
         @test isapprox(ext._d̃A_z(0.0, mycosmo), 0.0)
 
-        D_f = ext._D_f_z(1.0, mycosmo)
+        D_f = ext.D_f_z(1.0, mycosmo)
         @test length(D_f) == 2
         @test all(D_f[1] .> 0.0)
         @test all(D_f[2] .> 0.0)
@@ -107,18 +107,138 @@ if !isnothing(ext)
 
     @testset "Edge cases and numerical stability" begin
         # Test with extreme parameter values
-        @test isfinite(ext._E_z(0.0, 0.3, 0.7))
-        @test isfinite(ext._E_z(10.0, 0.3, 0.7))
+        @test isfinite(ext.E_z(0.0, 0.3, 0.7))
+        @test isfinite(ext.E_z(10.0, 0.3, 0.7))
 
         # Test with vector of redshifts
         z_array = [0.0, 0.5, 1.0, 2.0, 3.0]
-        D_array = ext._D_z(z_array, Ωcb0, h)
+        D_array = ext.D_z(z_array, Ωcb0, h)
         @test length(D_array) == length(z_array)
         @test all(isfinite.(D_array))
 
-        f_array = ext._f_z(z_array, Ωcb0, h)
+        f_array = ext.f_z(z_array, Ωcb0, h)
         @test length(f_array) == length(z_array)
         @test all(isfinite.(f_array))
+    end
+
+    @testset "Automatic differentiation tests" begin
+        # Import differentiation packages
+        using ForwardDiff
+        using Zygote
+        using FiniteDifferences
+
+        # Note: Some functions use in-place operations which are not compatible with Zygote
+        # but work fine with ForwardDiff. We test both where possible.
+
+        @testset "ForwardDiff compatibility" begin
+            # Test that all major functions work with ForwardDiff
+            z = 1.0
+            x = [0.3, 0.67, 0.06, -1.1, 0.2]  # [Ωcb0, h, mν, w0, wa]
+
+            # E_z function
+            function E_z_x(x)
+                Ωcb0, h, mν, w0, wa = x
+                ext.E_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+            end
+
+            E_grad = ForwardDiff.gradient(E_z_x, x)
+            @test all(isfinite.(E_grad))
+            @test length(E_grad) == 5
+
+            # Compare with finite differences
+            @test isapprox(
+                grad(central_fdm(5, 1), E_z_x, x)[1],
+                E_grad,
+                rtol=1e-4
+            )
+
+            # r_z function (comoving distance)
+            function r_z_x(x)
+                Ωcb0, h, mν, w0, wa = x
+                ext.r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+            end
+
+            r_grad = ForwardDiff.gradient(r_z_x, x)
+            @test all(isfinite.(r_grad))
+            @test length(r_grad) == 5
+
+            # dA_z function (angular diameter distance)
+            function dA_z_x(x)
+                Ωcb0, h, mν, w0, wa = x
+                ext.dA_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+            end
+
+            dA_grad = ForwardDiff.gradient(dA_z_x, x)
+            @test all(isfinite.(dA_grad))
+            @test length(dA_grad) == 5
+
+            # D_z function (growth factor)
+            function D_z_x(x)
+                Ωcb0, h, mν, w0, wa = x
+                ext.D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+            end
+
+            D_grad = ForwardDiff.gradient(D_z_x, x)
+            @test all(isfinite.(D_grad))
+            @test length(D_grad) == 5
+
+            # f_z function (growth rate)
+            function f_z_x(x)
+                Ωcb0, h, mν, w0, wa = x
+                ext.f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+            end
+
+            f_grad = ForwardDiff.gradient(f_z_x, x)
+            @test all(isfinite.(f_grad))
+            @test length(f_grad) == 5
+        end
+
+        @testset "Zygote compatibility (limited)" begin
+            # Test functions that work with Zygote (no in-place operations)
+            z = 1.0
+
+            # E_z function works with Zygote
+            function E_z_simple(Ωcb0, h)
+                ext.E_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
+            end
+
+            Ωcb0 = 0.3
+            h = 0.67
+
+            # Test that Zygote and ForwardDiff give same results for E_z
+            @test isapprox(
+                Zygote.gradient(E_z_simple, Ωcb0, h)[1],
+                ForwardDiff.derivative(Ω -> E_z_simple(Ω, h), Ωcb0),
+                rtol=1e-5
+            )
+
+            @test isapprox(
+                Zygote.gradient(E_z_simple, Ωcb0, h)[2],
+                ForwardDiff.derivative(h_val -> E_z_simple(Ωcb0, h_val), h),
+                rtol=1e-5
+            )
+        end
+
+        @testset "Multi-redshift differentiation" begin
+            # Test with multiple redshift values
+            z_array = [0.5, 1.0, 1.5, 2.0]
+            Ωcb0 = 0.3
+            h = 0.67
+
+            # Test ForwardDiff with vector output
+            function multi_D_z(x)
+                Ω, h_val = x
+                sum(ext.D_z(z_array, Ω, h_val; mν=0.0, w0=-1.0, wa=0.0))
+            end
+
+            grad_multi = ForwardDiff.gradient(multi_D_z, [Ωcb0, h])
+            @test all(isfinite.(grad_multi))
+            @test length(grad_multi) == 2
+
+            # Test that gradient changes with parameters
+            grad_multi2 = ForwardDiff.gradient(multi_D_z, [0.25, 0.72])
+            @test !isapprox(grad_multi, grad_multi2, rtol=1e-2)
+        end
     end
 else
     @warn "BackgroundCosmologyExt extension not loaded, skipping background cosmology tests"
