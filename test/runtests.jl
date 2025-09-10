@@ -27,7 +27,4 @@ using AbstractCosmologicalEmulators
     
     # Numerical safety validation tests
     include("test_numerical_safety.jl")
-    
-    # Coverage improvement tests
-    include("test_coverage_improvements.jl")
 end

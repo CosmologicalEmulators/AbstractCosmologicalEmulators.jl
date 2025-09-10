@@ -172,6 +172,34 @@ using AbstractCosmologicalEmulators
         err = try; AbstractCosmologicalEmulators.convert_minmax_format("invalid"); catch e; e; end
         @test isa(err, ArgumentError)
         @test contains(string(err), "Unsupported minmax data format")
+
+        # Additional tests for Invalid Vector Minmax Format (line 266 coverage)
+        @testset "Invalid vector formats" begin
+            # Test with vector of non-vectors (e.g., vector of numbers)
+            invalid_vector = [0.1, 0.2, 0.3, 0.4]  # Should be Vector{Vector}
+            err = try; AbstractCosmologicalEmulators.convert_minmax_format(invalid_vector); catch e; e; end
+            @test isa(err, ArgumentError)
+            @test contains(string(err), "Vector minmax format not recognized. Expected Vector{Vector{Number}}")
+            
+            # Test with vector of strings
+            invalid_vector = ["min", "max"]
+            err = try; AbstractCosmologicalEmulators.convert_minmax_format(invalid_vector); catch e; e; end
+            @test isa(err, ArgumentError)
+            @test contains(string(err), "Vector minmax format not recognized. Expected Vector{Vector{Number}}")
+            
+            # Test with vector of dictionaries
+            invalid_vector = [Dict("min" => 0.1, "max" => 0.9)]
+            err = try; AbstractCosmologicalEmulators.convert_minmax_format(invalid_vector); catch e; e; end
+            @test isa(err, ArgumentError)
+            @test contains(string(err), "Vector minmax format not recognized. Expected Vector{Vector{Number}}")
+            
+            # Test with mixed types in vector
+            invalid_vector = [[0.1, 0.9], "invalid", [0.3, 0.7]]
+            err = try; AbstractCosmologicalEmulators.convert_minmax_format(invalid_vector); catch e; e; end
+            @test isa(err, ArgumentError)
+            @test contains(string(err), "Vector minmax format not recognized") || 
+                  contains(string(err), "Each range must have exactly 2 elements")
+        end
     end
 
     @testset "Integration with init_emulator" begin
