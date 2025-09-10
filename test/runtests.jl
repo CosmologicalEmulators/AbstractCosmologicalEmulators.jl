@@ -8,6 +8,7 @@ using Integrals
 using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
+using QuadGK
 using AbstractCosmologicalEmulators
 
 # Test that main package knows nothing about cosmology
