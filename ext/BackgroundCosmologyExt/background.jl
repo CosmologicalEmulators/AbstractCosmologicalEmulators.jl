@@ -156,7 +156,7 @@ function dA_z(z, w0wacosmo::w0waCDMCosmology)
 end
 
 function dL_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
-    return r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa) / (1 + z)
+    return r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa) * (1 + z)
 end
 
 function dL_z(z, w0wacosmo::w0waCDMCosmology)
