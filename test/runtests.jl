@@ -94,6 +94,9 @@ test_suminv(A) = sum(abs2, inv_maximin(A, B))
     sc_emu.Description = Dict()
     @test_logs (:warn, "No emulator description found!") AbstractCosmologicalEmulators.get_emulator_description(sc_emu)
 
+    # Include comprehensive coverage improvement tests
+    include("test_coverage_improvements.jl")
+    
     # Type stability tests - ensure functions return concrete types instead of generators
     @testset "Type Stability" begin
         # Create fresh dictionary for type stability tests (since NN_dict gets modified above)
