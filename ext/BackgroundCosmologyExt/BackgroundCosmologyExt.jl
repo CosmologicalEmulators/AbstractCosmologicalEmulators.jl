@@ -2,7 +2,6 @@ module BackgroundCosmologyExt
 
 using AbstractCosmologicalEmulators
 using OrdinaryDiffEqTsit5
-using Integrals
 using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
@@ -33,6 +32,24 @@ function __init__()
     y_grid_dF = vcat(LinRange(min_y, 10., 10000), LinRange(10.1, max_y, 10000))
     dFdy_grid = [_dFdy(y) for y in y_grid_dF]
     dFdy_interpolant[] = AkimaInterpolation(dFdy_grid, y_grid_dF)
+
+    # Make functions available in parent module
+    @eval AbstractCosmologicalEmulators begin
+        const w0waCDMCosmology = $w0waCDMCosmology
+        const E_z = $E_z
+        const E_a = $E_a
+        const r_z = $r_z
+        const dA_z = $dA_z
+        const dL_z = $dL_z
+        const D_z = $D_z
+        const f_z = $f_z
+        const D_f_z = $D_f_z
+
+        export w0waCDMCosmology
+        export E_z, E_a
+        export r_z, dA_z, dL_z
+        export D_z, f_z, D_f_z
+    end
 end
 
 end # module BackgroundCosmologyExt

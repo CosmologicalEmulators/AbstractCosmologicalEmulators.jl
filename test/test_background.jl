@@ -4,12 +4,26 @@ using Integrals
 using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
-using QuadGK
 
 # Get the extension
 ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
 
 if !isnothing(ext)
+    # Helper check functions for testing accuracy
+    # These use high-precision integration for verification
+    function r̃_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
+        p = [Ωcb0, h, mν, w0, wa]
+        f(x, p) = 1 / ext.E_a(ext._a_z(x), p[1], p[2]; mν=p[3], w0=p[4], wa=p[5])
+        domain = (zero(eltype(z)), z) # (lb, ub)
+        prob = IntegralProblem(f, domain, p; reltol=1e-12)
+        sol = solve(prob, QuadGKJL())[1]
+        return sol
+    end
+
+    function r_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
+        c_0 = 2.99792458e5  # Speed of light in km/s
+        return c_0 * r̃_z_check(z, Ωcb0, h; mν=mν, w0=w0, wa=wa) / (100 * h)
+    end
     # Test parameters setup
     Ωcb0 = 0.3
     h = 0.67
@@ -32,9 +46,9 @@ if !isnothing(ext)
         @test isapprox(ext.E_z(0.0, Ωcb0, h), ext.E_a(1.0, Ωcb0, h))
         @test isapprox(ext._Ωma(1.0, Ωcb0, h), Ωcb0)
         @test isapprox(ext._Ωma(1.0, mycosmo), (0.02237 + 0.1) / 0.636^2)
-        @test isapprox(ext._r̃_z(0.0, mycosmo), 0.0)
+        @test isapprox(ext.r̃_z(0.0, mycosmo), 0.0)
         @test isapprox(ext.r_z(0.0, mycosmo), 0.0)
-        @test isapprox(ext.r_z(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), ext._r_z_check(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), rtol=1e-6)
+        @test isapprox(ext.r_z(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), r_z_check(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), rtol=1e-6)
         @test isapprox(ext.r_z(10.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 10161.232807937273, rtol=2e-4)
         @test isapprox(ext.dA_z(0.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), 0.0, rtol=1e-6)
         @test isapprox(ext.dA_z(0.0, mycosmo), 0.0)
@@ -56,8 +70,8 @@ if !isnothing(ext)
         @test isapprox(ext._a_z(1.0), 0.5)
         @test isapprox(ext._ρDE_a(1.0, -1.0, 0.0), 1.0)
         @test isapprox(ext._dρDEda(1.0, -1.0, 0.0), 0.0)
-        @test isapprox(ext._d̃A_z(0.0, Ωcb0, h), 0.0)
-        @test isapprox(ext._d̃A_z(0.0, mycosmo), 0.0)
+        @test isapprox(ext.d̃A_z(0.0, Ωcb0, h), 0.0)
+        @test isapprox(ext.d̃A_z(0.0, mycosmo), 0.0)
 
         D_f = ext.D_f_z(1.0, mycosmo)
         @test length(D_f) == 2

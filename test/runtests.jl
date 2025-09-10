@@ -12,10 +12,10 @@ using AbstractCosmologicalEmulators
 
 # Test that main package knows nothing about cosmology
 @testset "Main Package Independence" begin
-    # These should NOT be defined in the main package
-    @test !isdefined(AbstractCosmologicalEmulators, :w0waCDMCosmology)
-    @test !isdefined(AbstractCosmologicalEmulators, :hubble_parameter)
-    @test !isdefined(AbstractCosmologicalEmulators, :comoving_distance)
+    # After loading extension dependencies, these should be defined
+    @test isdefined(AbstractCosmologicalEmulators, :w0waCDMCosmology)
+    @test isdefined(AbstractCosmologicalEmulators, :E_z)
+    @test isdefined(AbstractCosmologicalEmulators, :D_z)
 end
 
 # Test extension if dependencies are available
