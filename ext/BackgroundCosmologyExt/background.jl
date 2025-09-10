@@ -207,16 +207,6 @@ function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
     return sol
 end
 
-function _growth_solver(w0wacosmo::w0waCDMCosmology)
-    Ωcb0 = (w0wacosmo.ωb + w0wacosmo.ωc) / w0wacosmo.h^2
-    return _growth_solver(Ωcb0, w0wacosmo.h; mν=w0wacosmo.mν, w0=w0wacosmo.w0, wa=w0wacosmo.wa)
-end
-
-function _growth_solver(z, w0wacosmo::w0waCDMCosmology)
-    Ωcb0 = (w0wacosmo.ωb + w0wacosmo.ωc) / w0wacosmo.h^2
-    return _growth_solver(z, Ωcb0, w0wacosmo.h; mν=w0wacosmo.mν, w0=w0wacosmo.w0, wa=w0wacosmo.wa)
-end
-
 function D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
     sol = _growth_solver(Ωcb0, h; mν=mν, w0=w0, wa=wa)
     return (sol(log(_a_z(z)))[1, :])[1, 1][1]
