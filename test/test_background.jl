@@ -11,18 +11,18 @@ ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
 if !isnothing(ext)
     # Helper check functions for testing accuracy
     # These use high-precision integration for verification
-    function r̃_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
-        p = [Ωcb0, h, mν, w0, wa]
-        f(x, p) = 1 / ext.E_a(ext._a_z(x), p[1], p[2]; mν=p[3], w0=p[4], wa=p[5])
+    function r̃_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+        p = [Ωcb0, h, mν, w0, wa, Ωk0]
+        f(x, p) = 1 / ext.E_a(ext._a_z(x), p[1], p[2]; mν=p[3], w0=p[4], wa=p[5], Ωk0=p[6])
         domain = (zero(eltype(z)), z) # (lb, ub)
         prob = IntegralProblem(f, domain, p; reltol=1e-12)
         sol = solve(prob, QuadGKJL())[1]
         return sol
     end
 
-    function r_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
+    function r_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
         c_0 = 2.99792458e5  # Speed of light in km/s
-        return c_0 * r̃_z_check(z, Ωcb0, h; mν=mν, w0=w0, wa=wa) / (100 * h)
+        return c_0 * r̃_z_check(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (100 * h)
     end
     # Test parameters setup
     Ωcb0 = 0.3
@@ -30,9 +30,10 @@ if !isnothing(ext)
     mν = 0.06
     w0 = -1.1
     wa = 0.2
+    Ωk0 = 0.2
 
     # Create test cosmology struct
-    mycosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=0.06, w0=-2.0, wa=1.0)
+    mycosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=0.06, w0=-2.0, wa=1.0, ωk=0.0)
 
     @testset "Background cosmology tests" begin
         @test isapprox(ext._get_y(0.0, 1.0), 0.0)
@@ -48,105 +49,105 @@ if !isnothing(ext)
         @test isapprox(ext._Ωma(1.0, mycosmo), (0.02237 + 0.1) / 0.636^2)
         @test isapprox(ext.r̃_z(0.0, mycosmo), 0.0)
         @test isapprox(ext.r_z(0.0, mycosmo), 0.0)
-        
+
         # Test that E_z with cosmology structure matches direct parameter version
         @testset "E_z cosmology structure vs direct parameters" begin
             # Test at various redshifts
             test_redshifts = [0.0, 0.5, 1.0, 2.0, 5.0, 10.0]
-            
+
             for z in test_redshifts
                 # Calculate Ωcb0 from cosmology structure
                 Ωcb0_cosmo = (mycosmo.ωb + mycosmo.ωc) / mycosmo.h^2
-                
+
                 # Compare E_z using cosmology structure vs direct parameters
                 E_z_struct = ext.E_z(z, mycosmo)
                 E_z_direct = ext.E_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
-                
+
                 @test E_z_struct == E_z_direct
             end
         end
-        
+
         # Test that dL_z with cosmology structure matches direct parameter version
         @testset "dL_z cosmology structure vs direct parameters" begin
             # Test at various redshifts (skip z=0 where dL_z = 0)
             test_redshifts = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
-            
+
             for z in test_redshifts
                 # Calculate Ωcb0 from cosmology structure
                 Ωcb0_cosmo = (mycosmo.ωb + mycosmo.ωc) / mycosmo.h^2
-                
+
                 # Compare dL_z using cosmology structure vs direct parameters
                 dL_z_struct = ext.dL_z(z, mycosmo)
                 dL_z_direct = ext.dL_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
-                
+
                 @test dL_z_struct == dL_z_direct
             end
         end
-        
+
         # Test all wrapper functions for perfect equivalence
         @testset "All wrapper functions - structure vs direct" begin
             # Test various wrapper functions at different redshifts
             test_z_values = [0.5, 1.0, 2.0]
             test_a_values = [1.0, 0.5, 0.25]  # a = 1/(1+z)
-            
+
             Ωcb0_mycosmo = (mycosmo.ωb + mycosmo.ωc) / mycosmo.h^2
-            
+
             # Test E_a wrapper
             for a in test_a_values
                 E_a_struct = ext.E_a(a, mycosmo)
                 E_a_direct = ext.E_a(a, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test E_a_struct == E_a_direct
             end
-            
-            # Test _Ωma wrapper  
+
+            # Test _Ωma wrapper
             for a in test_a_values
                 Ωma_struct = ext._Ωma(a, mycosmo)
                 Ωma_direct = ext._Ωma(a, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test Ωma_struct == Ωma_direct
             end
-            
+
             # Test r̃_z wrapper
             for z in test_z_values
                 r̃_z_struct = ext.r̃_z(z, mycosmo)
                 r̃_z_direct = ext.r̃_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test r̃_z_struct == r̃_z_direct
             end
-            
+
             # Test r_z wrapper
             for z in test_z_values
                 r_z_struct = ext.r_z(z, mycosmo)
                 r_z_direct = ext.r_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test r_z_struct == r_z_direct
             end
-            
+
             # Test d̃A_z wrapper
             for z in test_z_values
                 d̃A_z_struct = ext.d̃A_z(z, mycosmo)
                 d̃A_z_direct = ext.d̃A_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test d̃A_z_struct == d̃A_z_direct
             end
-            
+
             # Test dA_z wrapper
             for z in test_z_values
                 dA_z_struct = ext.dA_z(z, mycosmo)
                 dA_z_direct = ext.dA_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test dA_z_struct == dA_z_direct
             end
-            
+
             # Test D_z wrapper
             for z in test_z_values
                 D_z_struct = ext.D_z(z, mycosmo)
                 D_z_direct = ext.D_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test D_z_struct == D_z_direct
             end
-            
+
             # Test f_z wrapper
             for z in test_z_values
                 f_z_struct = ext.f_z(z, mycosmo)
                 f_z_direct = ext.f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test f_z_struct == f_z_direct
             end
-            
+
             # Test D_f_z wrapper (returns tuple)
             for z in test_z_values
                 D_f_struct = ext.D_f_z(z, mycosmo)
@@ -155,26 +156,26 @@ if !isnothing(ext)
                 @test D_f_struct[2] == D_f_direct[2]  # f_z part
             end
         end
-        
+
         # Additional test with different cosmology parameters to ensure robustness
         @testset "Multiple cosmologies - structure vs direct" begin
             # Create different test cosmologies
             cosmo1 = ext.w0waCDMCosmology(ln10Aₛ=3.044, nₛ=0.965, h=0.7, ωb=0.022, ωc=0.12, mν=0.0, w0=-1.0, wa=0.0)
             cosmo2 = ext.w0waCDMCosmology(ln10Aₛ=2.9, nₛ=0.97, h=0.65, ωb=0.024, ωc=0.11, mν=0.1, w0=-0.8, wa=-0.3)
             cosmo3 = ext.w0waCDMCosmology(ln10Aₛ=3.1, nₛ=0.955, h=0.75, ωb=0.021, ωc=0.13, mν=0.2, w0=-1.2, wa=0.5)
-            
+
             test_cosmologies = [cosmo1, cosmo2, cosmo3]
             test_redshifts = [0.5, 1.5, 3.0]
-            
+
             for cosmo in test_cosmologies
                 Ωcb0_test = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-                
+
                 for z in test_redshifts
                     # Test E_z
                     E_z_struct = ext.E_z(z, cosmo)
                     E_z_direct = ext.E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
                     @test E_z_struct == E_z_direct
-                    
+
                     # Test dL_z
                     dL_z_struct = ext.dL_z(z, cosmo)
                     dL_z_direct = ext.dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
@@ -238,7 +239,7 @@ if !isnothing(ext)
         mν_class2 = 0.2
         w0_class2 = -0.9
         wa_class2 = -0.7
-        
+
         # z = 0.0 values
         @testset "z = 0.0" begin
             @test isapprox(ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1.0, rtol=1e-6)
@@ -248,7 +249,7 @@ if !isnothing(ext)
             @test isapprox(ext.dL_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
             @test isapprox(ext.dA_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
         end
-        
+
         # z = 1.0 values
         @testset "z = 1.0" begin
             @test isapprox(ext.D_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.5608386428835493, rtol=4e-5)
@@ -258,7 +259,7 @@ if !isnothing(ext)
             @test isapprox(ext.dL_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 6955.1652778293255, rtol=1e-4)
             @test isapprox(ext.dA_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1738.7913194573318, rtol=1e-4)
         end
-        
+
         # z = 2.0 values
         @testset "z = 2.0" begin
             @test isapprox(ext.D_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.378970688908124, rtol=1e-4)
