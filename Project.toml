@@ -19,7 +19,7 @@ SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [extensions]
-BackgroundCosmologyExt = ["OrdinaryDiffEqTsit5", "DataInterpolations", "FastGaussQuadrature", "Integrals", "LinearAlgebra"]
+BackgroundCosmologyExt = ["ChainRulesCore", "DataInterpolations", "FastGaussQuadrature", "Integrals", "LinearAlgebra", "OrdinaryDiffEqTsit5"]
 
 [compat]
 Adapt = "3, 4"
@@ -38,6 +38,7 @@ Zygote = "0.7.10"
 julia = "1.10"
 
 [extras]
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 FiniteDifferences = "26cc04aa-876d-5657-8c51-4c34ba976000"
@@ -52,4 +53,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["DataInterpolations", "FastGaussQuadrature", "FiniteDifferences", "ForwardDiff", "Integrals", "JSON", "LinearAlgebra", "Lux", "OrdinaryDiffEqTsit5", "SimpleChains", "Test", "Zygote"]
+test = ["ChainRulesCore", "DataInterpolations", "FastGaussQuadrature", "FiniteDifferences", "ForwardDiff", "Integrals", "JSON", "LinearAlgebra", "Lux", "OrdinaryDiffEqTsit5", "SimpleChains", "Test", "Zygote"]
