@@ -1,6 +1,6 @@
 abstract type AbstractTrainedEmulators end
 
-@kwdef mutable struct SimpleChainsEmulator <: AbstractTrainedEmulators
+@kwdef struct SimpleChainsEmulator <: AbstractTrainedEmulators
     Architecture
     Weights
     Description::Dict = Dict()
@@ -10,7 +10,7 @@ function run_emulator(input, emulator::SimpleChainsEmulator)
     return emulator.Architecture(input, emulator.Weights)
 end
 
-@kwdef mutable struct LuxEmulator <: AbstractTrainedEmulators
+@kwdef struct LuxEmulator <: AbstractTrainedEmulators
     Model
     Parameters
     States
