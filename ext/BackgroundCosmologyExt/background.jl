@@ -264,6 +264,6 @@ end
 
 function D_f_z(z, cosmo::w0waCDMCosmology)::Tuple{Vector{Float64},Vector{Float64}}
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.Ωk0
+    Ωk0 = cosmo.ωk / cosmo.h^2
     return D_f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
