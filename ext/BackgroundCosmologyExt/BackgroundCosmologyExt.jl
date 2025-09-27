@@ -18,6 +18,7 @@ const dFdy_interpolant = Ref{AkimaInterpolation}()
 # Include utility functions and background cosmology functionality
 include("utils.jl")
 include("background.jl")
+include("rrules.jl")
 
 # Initialize interpolants when extension loads
 function __init__()
@@ -31,7 +32,7 @@ function __init__()
     F_interpolant[] = AkimaInterpolation(F_grid, y_grid_F)
 
     # Create dFdy interpolant
-    y_grid_dF = vcat(LinRange(min_y, 10., 10000), LinRange(10.1, max_y, 10000))
+    y_grid_dF = vcat(LinRange(min_y, 10.0, 10000), LinRange(10.1, max_y, 10000))
     dFdy_grid = [_dFdy(y) for y in y_grid_dF]
     dFdy_interpolant[] = AkimaInterpolation(dFdy_grid, y_grid_dF)
 

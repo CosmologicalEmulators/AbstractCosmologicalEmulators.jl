@@ -143,8 +143,40 @@ function r_z(z, cosmo::w0waCDMCosmology)
     return r_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
+function S_of_K(Ω::Real, r::Real)
+    if Ω == 0
+        return r
+    elseif Ω > 0
+        a = sqrt(Ω)
+        return @. sinh(a * r) / a
+    else
+        b = sqrt(-Ω)
+        return @. sin(b * r) / b
+    end
+end
+
+function d̃M_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+    return S_of_K(Ωk0, r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+end
+
+function d̃M_z(z, cosmo::w0waCDMCosmology)
+    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
+    Ωk0 = cosmo.ωk / cosmo.h^2
+    return d̃M_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+end
+
+function dM_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+    return c_0 * d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (100 * h)
+end
+
+function dM_z(z, cosmo::w0waCDMCosmology)
+    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
+    Ωk0 = cosmo.ωk / cosmo.h^2
+    return dM_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+end
+
 function d̃A_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (1 + z)
+    return d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (1 + z)
 end
 
 function d̃A_z(z, cosmo::w0waCDMCosmology)
@@ -154,7 +186,7 @@ function d̃A_z(z, cosmo::w0waCDMCosmology)
 end
 
 function dA_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (1 + z)
+    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (1 + z)
 end
 
 function dA_z(z, cosmo::w0waCDMCosmology)
@@ -164,7 +196,7 @@ function dA_z(z, cosmo::w0waCDMCosmology)
 end
 
 function dL_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) * (1 + z)
+    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) * (1 + z)
 end
 
 function dL_z(z, cosmo::w0waCDMCosmology)
