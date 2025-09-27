@@ -1,6 +1,5 @@
 module BackgroundCosmologyExt
 
-using AbstractCosmologicalEmulators
 using OrdinaryDiffEqTsit5
 using DataInterpolations
 using Integrals
