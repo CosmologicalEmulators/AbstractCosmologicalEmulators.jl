@@ -316,6 +316,9 @@ if !isnothing(ext)
     @testset "Missing coverage tests" begin
         test_cosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0)
 
+        # Test cosmology with positive curvature to hit S_of_K positive branch
+        positive_curve_cosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0, ωk=0.05)
+
         @test ext._F(0.5) > 0.0
         @test isapprox(ext._a_z(0.0), 1.0)
         @test isapprox(ext._a_z(1.0), 0.5)
@@ -328,6 +331,112 @@ if !isnothing(ext)
         @test length(D_f) == 2
         @test all(D_f[1] .> 0.0)
         @test all(D_f[2] .> 0.0)
+
+        # Test S_of_K function with all three cases
+        @testset "S_of_K function coverage" begin
+            r_test = 10.0  # Use smaller value to avoid sin oscillations
+
+            # Case 1: Ω = 0 (flat)
+            @test ext.S_of_K(0.0, r_test) == r_test
+
+            # Case 2: Ω > 0 (closed/positive curvature)
+            Ω_positive = 0.01
+            S_positive = ext.S_of_K(Ω_positive, r_test)
+            @test isfinite(S_positive)
+            @test S_positive > 0
+            # Check the sinh formula
+            a = sqrt(Ω_positive)
+            @test isapprox(S_positive, sinh(a * r_test) / a)
+
+            # Case 3: Ω < 0 (open/negative curvature)
+            Ω_negative = -0.01
+            S_negative = ext.S_of_K(Ω_negative, r_test)
+            @test isfinite(S_negative)
+            # For negative curvature, S_of_K can be negative depending on the value
+            # Just check the formula is correct
+            b = sqrt(-Ω_negative)
+            @test isapprox(S_negative, sin(b * r_test) / b)
+        end
+
+        # Test d̃M_z and dM_z functions (comoving transverse distance)
+        @testset "d̃M_z and dM_z coverage" begin
+            z_test = 1.5
+
+            # Test d̃M_z with cosmology struct
+            d̃M_struct = ext.d̃M_z(z_test, test_cosmo)
+            @test isfinite(d̃M_struct)
+            @test d̃M_struct > 0
+
+            # Test d̃M_z with positive curvature cosmology
+            d̃M_positive = ext.d̃M_z(z_test, positive_curve_cosmo)
+            @test isfinite(d̃M_positive)
+            @test d̃M_positive > 0
+
+            # Test dM_z (physical units) with direct parameters
+            dM_direct = ext.dM_z(z_test, 0.3, 0.67; mν=0.06, w0=-1.0, wa=0.0, Ωk0=0.01)
+            @test isfinite(dM_direct)
+            @test dM_direct > 0
+
+            # Test dM_z with cosmology struct
+            dM_struct = ext.dM_z(z_test, test_cosmo)
+            @test isfinite(dM_struct)
+            @test dM_struct > 0
+
+            # Test dM_z with positive curvature cosmology
+            dM_positive = ext.dM_z(z_test, positive_curve_cosmo)
+            @test isfinite(dM_positive)
+            @test dM_positive > 0
+
+            # Verify relationship between d̃M_z and dM_z
+            c_0 = 2.99792458e5  # Speed of light in km/s
+            @test isapprox(dM_struct, c_0 * d̃M_struct / (100 * test_cosmo.h))
+        end
+
+        # Test _ρDE_z function
+        @testset "_ρDE_z coverage" begin
+            # Test at various redshifts
+            for z in [0.0, 1.0, 2.0, 5.0]
+                ρDE = ext._ρDE_z(z, -1.0, 0.0)
+                @test isfinite(ρDE)
+                @test ρDE > 0
+
+                # For cosmological constant (w0=-1, wa=0), ρDE should be constant
+                @test isapprox(ρDE, 1.0)
+            end
+
+            # Test with evolving dark energy
+            ρDE_evolving = ext._ρDE_z(2.0, -0.9, 0.3)
+            @test isfinite(ρDE_evolving)
+            @test ρDE_evolving > 0
+        end
+
+        # Test vector neutrino masses with different array sizes
+        @testset "Vector neutrino mass coverage" begin
+            # Test with 3 equal masses (degenerate hierarchy)
+            mν_degenerate = [0.1, 0.1, 0.1]
+            Ωγ0_test = 2.469e-5 / 0.67^2
+
+            ΩνE2_degenerate = ext._ΩνE2(0.5, Ωγ0_test, mν_degenerate)
+            @test isfinite(ΩνE2_degenerate)
+            @test ΩνE2_degenerate > 0
+            @test isapprox(ΩνE2_degenerate, ext._ΩνE2(0.5, Ωγ0_test, 0.1) * 3, rtol=1e-10)
+
+            dΩνE2da_degenerate = ext._dΩνE2da(0.5, Ωγ0_test, mν_degenerate)
+            @test isfinite(dΩνE2da_degenerate)
+            @test isapprox(dΩνE2da_degenerate, ext._dΩνE2da(0.5, Ωγ0_test, 0.1) * 3, rtol=1e-10)
+
+            # Test with normal hierarchy approximation
+            mν_normal = [0.0, 0.008, 0.05]
+            ΩνE2_normal = ext._ΩνE2(0.5, Ωγ0_test, mν_normal)
+            @test isfinite(ΩνE2_normal)
+            @test ΩνE2_normal > 0
+
+            # Test with inverted hierarchy approximation
+            mν_inverted = [0.05, 0.05, 0.0]
+            ΩνE2_inverted = ext._ΩνE2(0.5, Ωγ0_test, mν_inverted)
+            @test isfinite(ΩνE2_inverted)
+            @test ΩνE2_inverted > 0
+        end
     end
 
     @testset "Utility functions tests" begin
