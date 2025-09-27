@@ -495,6 +495,124 @@ if !isnothing(ext)
         @test all(isfinite.(f_array))
     end
 
+    @testset "S_of_K rrule tests" begin
+        # Test the rrule for S_of_K function
+        # This tests all three branches (Ω = 0, Ω > 0, Ω < 0)
+        using ForwardDiff
+        using Zygote
+
+        # Array of r values for testing
+        r_array = [0.5, 1.0, 2.0, 3.0, 5.0]
+
+        @testset "Flat universe (Ω = 0)" begin
+            # Note: At exactly Ω = 0, ForwardDiff and Zygote give different results
+            # for ∂S/∂Ω because ForwardDiff uses finite differences while the rrule
+            # provides the analytical limit. We test near Ω = 0 instead.
+            Ω = 1e-10  # Very small but non-zero
+
+            # Function for ForwardDiff
+            function S_flat(params)
+                Ω_val, r_vals = params[1], params[2:end]
+                return ext.S_of_K(Ω_val, r_vals)
+            end
+
+            # Compute Jacobian with ForwardDiff
+            params = vcat([Ω], r_array)
+            J_forward = ForwardDiff.jacobian(S_flat, params)
+
+            # Compute gradients with Zygote for each output
+            J_zygote = zeros(length(r_array), length(params))
+            for i in 1:length(r_array)
+                grad = Zygote.gradient(p -> ext.S_of_K(p[1], p[2:end])[i], params)[1]
+                J_zygote[i, :] = grad
+            end
+
+            # Test agreement (with relaxed tolerance due to near-zero Ω)
+            @test isapprox(J_forward, J_zygote, rtol=1e-6)
+        end
+
+        @testset "Closed universe (Ω > 0)" begin
+            Ω = 0.01
+
+            # Function for ForwardDiff
+            function S_closed(params)
+                Ω_val, r_vals = params[1], params[2:end]
+                return ext.S_of_K(Ω_val, r_vals)
+            end
+
+            # Compute Jacobian with ForwardDiff
+            params = vcat([Ω], r_array)
+            J_forward = ForwardDiff.jacobian(S_closed, params)
+
+            # Compute gradients with Zygote for each output
+            J_zygote = zeros(length(r_array), length(params))
+            for i in 1:length(r_array)
+                grad = Zygote.gradient(p -> ext.S_of_K(p[1], p[2:end])[i], params)[1]
+                J_zygote[i, :] = grad
+            end
+
+            # Test agreement
+            @test isapprox(J_forward, J_zygote, rtol=1e-10)
+        end
+
+        @testset "Open universe (Ω < 0)" begin
+            Ω = -0.01
+
+            # Function for ForwardDiff
+            function S_open(params)
+                Ω_val, r_vals = params[1], params[2:end]
+                return ext.S_of_K(Ω_val, r_vals)
+            end
+
+            # Compute Jacobian with ForwardDiff
+            params = vcat([Ω], r_array)
+            J_forward = ForwardDiff.jacobian(S_open, params)
+
+            # Compute gradients with Zygote for each output
+            J_zygote = zeros(length(r_array), length(params))
+            for i in 1:length(r_array)
+                grad = Zygote.gradient(p -> ext.S_of_K(p[1], p[2:end])[i], params)[1]
+                J_zygote[i, :] = grad
+            end
+
+            # Test agreement
+            @test isapprox(J_forward, J_zygote, rtol=1e-10)
+        end
+
+        @testset "Derivative values check" begin
+            # Test specific derivative values for correctness
+
+            # For Ω = 0, the rrule provides the analytical limit:
+            # dS/dr = 1 and dS/dΩ = r^3/6
+            # Note: This tests the rrule directly via Zygote
+            Ω_flat = 0.0
+            r_test = 2.0
+
+            # Test with scalar r using Zygote (which uses our rrule)
+            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_flat, r_test)
+            @test isapprox(grad_r, 1.0, rtol=1e-10)  # dS/dr = 1 for flat
+            @test isapprox(grad_Ω, r_test^3/6, rtol=1e-10)  # dS/dΩ = r^3/6 for flat (analytical limit)
+
+            # For Ω > 0 (closed), test sinh formula derivatives
+            Ω_closed = 0.01
+            a = sqrt(Ω_closed)
+            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_closed, r_test)
+            expected_dSdr = cosh(a * r_test)
+            expected_dSdΩ = (r_test / (2 * Ω_closed)) * cosh(a * r_test) - (1 / (2 * a^3)) * sinh(a * r_test)
+            @test isapprox(grad_r, expected_dSdr, rtol=1e-10)
+            @test isapprox(grad_Ω, expected_dSdΩ, rtol=1e-10)
+
+            # For Ω < 0 (open), test sin formula derivatives
+            Ω_open = -0.01
+            b = sqrt(-Ω_open)
+            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_open, r_test)
+            expected_dSdr = cos(b * r_test)
+            expected_dSdΩ = (sin(b * r_test) / (2 * b^3)) - (r_test / (2 * (-Ω_open))) * cos(b * r_test)
+            @test isapprox(grad_r, expected_dSdr, rtol=1e-10)
+            @test isapprox(grad_Ω, expected_dSdΩ, rtol=1e-10)
+        end
+    end
+
     @testset "Automatic differentiation tests" begin
         # Import differentiation packages
         using ForwardDiff
