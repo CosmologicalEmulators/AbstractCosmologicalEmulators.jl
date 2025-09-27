@@ -143,7 +143,7 @@ function r_z(z, cosmo::w0waCDMCosmology)
     return r_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function S_of_K(Ω::Real, r::Real)
+function S_of_K(Ω::Number, r)
     if Ω == 0
         return r
     elseif Ω > 0
