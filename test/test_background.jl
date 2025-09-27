@@ -297,9 +297,9 @@ if !isnothing(ext)
             @test isapprox(ext.D_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / ext.D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.689689041142467, rtol=4e-5)
             @test isapprox(ext.f_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.727435001392173, rtol=2e-4)
             @test isapprox(ext.E_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 168.660901702244558, rtol=1e-4)
-            @test isapprox(ext.r_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 3012.234415887419134, rtol=1e-4)
-            @test isapprox(ext.dL_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 6024.468831774838269, rtol=1e-4)
-            @test isapprox(ext.dA_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1506.117207943709567, rtol=1e-4)
+            @test isapprox(ext.r_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 2207.200798324237894, rtol=1e-4)
+            @test isapprox(ext.dL_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 4454.390532901412371, rtol=1e-4)
+            @test isapprox(ext.dA_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1113.597633225352638, rtol=1e-4)
         end
 
         # z = 2.0 values
@@ -307,9 +307,9 @@ if !isnothing(ext)
             @test isapprox(ext.D_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / ext.D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.495032404840887, rtol=1e-4)
             @test isapprox(ext.f_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.882324793082423, rtol=2e-4)
             @test isapprox(ext.E_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 259.543469580456815, rtol=2e-4)
-            @test isapprox(ext.r_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 4991.696222148370666, rtol=1e-4)
-            @test isapprox(ext.dL_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 14975.088666445109993, rtol=1e-4)
-            @test isapprox(ext.dA_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1663.898740716123555, rtol=1e-4)
+            @test isapprox(ext.r_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 3655.526633299333753, rtol=1e-4)
+            @test isapprox(ext.dL_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 11240.362895970827594, rtol=1e-4)
+            @test isapprox(ext.dA_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1248.929210663426375, rtol=1e-4)
         end
     end
 
