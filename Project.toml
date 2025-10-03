@@ -7,16 +7,16 @@ version = "0.7.0"
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
-DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
-FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
-Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
-OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 
 [weakdeps]
+DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
+FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
+Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 
 [extensions]
 BackgroundCosmologyExt = ["DataInterpolations", "FastGaussQuadrature", "Integrals", "LinearAlgebra", "OrdinaryDiffEqTsit5"]
