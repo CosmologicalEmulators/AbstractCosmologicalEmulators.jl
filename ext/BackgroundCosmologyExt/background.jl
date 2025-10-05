@@ -40,10 +40,7 @@ end
 
 function _ΩνE2(a, Ωγ0, mν::AbstractVector; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
     Γν = (4 / 11)^(1 / 3) * (Neff / 3)^(1 / 4)
-    sum_interpolant = 0.0
-    for mymν in mν
-        sum_interpolant += F_interpolant[](_get_y(mymν, a))
-    end
+    sum_interpolant = sum(mymν -> F_interpolant[](_get_y(mymν, a)), mν)
     return 15 / π^4 * Γν^4 * Ωγ0 / a^4 * sum_interpolant
 end
 
