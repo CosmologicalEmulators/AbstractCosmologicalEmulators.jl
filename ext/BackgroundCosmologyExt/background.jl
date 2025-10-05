@@ -251,7 +251,7 @@ end
 
 function D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
-    return (sol(log(_a_z(z)))[1, :])[1, 1][1]
+    return sol(log(_a_z(z)))[1]
 end
 
 function D_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
@@ -275,9 +275,9 @@ end
 
 function f_z(z, Ωcb0, h; mν=0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
-    D = sol[1, 1:end][1]
-    D_prime = sol[2, 1:end][1]
-    return (1/D*D_prime)[1]
+    D = sol[1, 1]
+    D_prime = sol[2, 1]
+    return D_prime / D
 end
 
 function f_z(z, cosmo::w0waCDMCosmology)
