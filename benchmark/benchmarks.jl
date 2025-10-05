@@ -168,12 +168,134 @@ if !isnothing(ext)
     SUITE["background"]["E_z_vector"] = @benchmarkable [ext.E_z(zi, $test_cosmo) for zi in z_array] setup = (
         z_array = collect(0.0:0.1:3.0)
     )
-    
+
     SUITE["background"]["dL_z_vector"] = @benchmarkable [ext.dL_z(zi, $test_cosmo) for zi in z_array] setup = (
         z_array = collect(0.1:0.1:3.0)
     )
-    
+
+    # --- Vectorization Performance Benchmarks ---
+    # Compare three approaches: scalar loop, manual comprehension, and automated vectorization
+    SUITE["vectorization"] = BenchmarkGroup(["performance", "comparison"])
+
+    # Test array for vectorization benchmarks
+    const z_bench_array = collect(0.1:0.1:2.0)  # 20 points
+
+    # E_z vectorization comparison
+    SUITE["vectorization"]["E_z_scalar_loop"] = @benchmarkable begin
+        result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result[i] = ext.E_z($z_bench_array[i], $test_cosmo)
+        end
+    end
+
+    SUITE["vectorization"]["E_z_comprehension"] = @benchmarkable [ext.E_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["E_z_vectorized"] = @benchmarkable ext.E_z($z_bench_array, $test_cosmo)
+
+    # r_z vectorization comparison
+    SUITE["vectorization"]["r_z_scalar_loop"] = @benchmarkable begin
+        result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result[i] = ext.r_z($z_bench_array[i], $test_cosmo)
+        end
+    end
+
+    SUITE["vectorization"]["r_z_comprehension"] = @benchmarkable [ext.r_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["r_z_vectorized"] = @benchmarkable ext.r_z($z_bench_array, $test_cosmo)
+
+    # dM_z vectorization comparison
+    SUITE["vectorization"]["dM_z_scalar_loop"] = @benchmarkable begin
+        result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result[i] = ext.dM_z($z_bench_array[i], $test_cosmo)
+        end
+    end
+
+    SUITE["vectorization"]["dM_z_comprehension"] = @benchmarkable [ext.dM_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["dM_z_vectorized"] = @benchmarkable ext.dM_z($z_bench_array, $test_cosmo)
+
+    # dA_z vectorization comparison
+    SUITE["vectorization"]["dA_z_scalar_loop"] = @benchmarkable begin
+        result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result[i] = ext.dA_z($z_bench_array[i], $test_cosmo)
+        end
+    end
+
+    SUITE["vectorization"]["dA_z_comprehension"] = @benchmarkable [ext.dA_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["dA_z_vectorized"] = @benchmarkable ext.dA_z($z_bench_array, $test_cosmo)
+
+    # dL_z vectorization comparison
+    SUITE["vectorization"]["dL_z_scalar_loop"] = @benchmarkable begin
+        result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result[i] = ext.dL_z($z_bench_array[i], $test_cosmo)
+        end
+    end
+
+    SUITE["vectorization"]["dL_z_comprehension"] = @benchmarkable [ext.dL_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["dL_z_vectorized"] = @benchmarkable ext.dL_z($z_bench_array, $test_cosmo)
+
+    # D_z vectorization comparison
+    SUITE["vectorization"]["D_z_scalar_loop"] = @benchmarkable begin
+        result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result[i] = ext.D_z($z_bench_array[i], $test_cosmo)
+        end
+    end
+
+    SUITE["vectorization"]["D_z_comprehension"] = @benchmarkable [ext.D_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["D_z_vectorized"] = @benchmarkable ext.D_z($z_bench_array, $test_cosmo)
+
+    # f_z vectorization comparison
+    SUITE["vectorization"]["f_z_scalar_loop"] = @benchmarkable begin
+        result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result[i] = ext.f_z($z_bench_array[i], $test_cosmo)
+        end
+    end
+
+    SUITE["vectorization"]["f_z_comprehension"] = @benchmarkable [ext.f_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["f_z_vectorized"] = @benchmarkable ext.f_z($z_bench_array, $test_cosmo)
+
+    # D_f_z vectorization comparison (special case - returns tuples)
+    SUITE["vectorization"]["D_f_z_scalar_loop"] = @benchmarkable begin
+        D_result = similar($z_bench_array)
+        f_result = similar($z_bench_array)
+        for i in eachindex($z_bench_array)
+            result = ext.D_f_z($z_bench_array[i], $test_cosmo)
+            D_result[i] = result[1]
+            f_result[i] = result[2]
+        end
+    end
+
+    SUITE["vectorization"]["D_f_z_comprehension"] = @benchmarkable [ext.D_f_z(z, $test_cosmo) for z in $z_bench_array]
+
+    SUITE["vectorization"]["D_f_z_vectorized"] = @benchmarkable ext.D_f_z($z_bench_array, $test_cosmo)
+
+    # S_of_K vectorization comparison (curvature function)
+    const r_bench_array = collect(100.0:100.0:2000.0)  # 20 distance values
+    const Ωk_bench = 0.01
+
+    SUITE["vectorization"]["S_of_K_scalar_loop"] = @benchmarkable begin
+        result = similar($r_bench_array)
+        for i in eachindex($r_bench_array)
+            result[i] = ext.S_of_K($Ωk_bench, $r_bench_array[i])
+        end
+    end
+
+    SUITE["vectorization"]["S_of_K_comprehension"] = @benchmarkable [ext.S_of_K($Ωk_bench, r) for r in $r_bench_array]
+
+    SUITE["vectorization"]["S_of_K_vectorized"] = @benchmarkable ext.S_of_K($Ωk_bench, $r_bench_array)
+
     println("Background cosmology benchmarks added successfully")
+    println("Vectorization performance benchmarks added successfully")
 else
     println("Warning: BackgroundCosmologyExt not loaded, skipping background benchmarks")
 end
