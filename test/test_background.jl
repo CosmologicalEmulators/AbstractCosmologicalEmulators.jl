@@ -792,6 +792,182 @@ if !isnothing(ext)
             @test !isapprox(grad_multi, grad_multi2, rtol=1e-2)
         end
     end
+
+    @testset "Vectorization tests" begin
+        # Create test cosmology
+        vec_cosmo = ext.w0waCDMCosmology(
+            ln10Aₛ=3.0, nₛ=0.96, h=0.67,
+            ωb=0.02237, ωc=0.12, ωk=0.01,
+            mν=0.06, w0=-1.0, wa=0.0
+        )
+
+        # Test arrays
+        z_array = [0.0, 0.5, 1.0, 2.0, 5.0]
+        a_array = ext._a_z.(z_array)
+
+        Ωcb0_vec = (vec_cosmo.ωb + vec_cosmo.ωc) / vec_cosmo.h^2
+        Ωk0_vec = vec_cosmo.ωk / vec_cosmo.h^2
+
+        @testset "E_z vectorization" begin
+            # Manual list comprehension
+            E_z_manual = [ext.E_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            E_z_vectorized = ext.E_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(E_z_manual, E_z_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            E_z_manual_cosmo = [ext.E_z(z, vec_cosmo) for z in z_array]
+            E_z_vectorized_cosmo = ext.E_z(z_array, vec_cosmo)
+
+            @test all(isapprox.(E_z_manual_cosmo, E_z_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "E_a vectorization" begin
+            # Manual list comprehension
+            E_a_manual = [ext.E_a(a, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for a in a_array]
+
+            # Vectorized call
+            E_a_vectorized = ext.E_a(a_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(E_a_manual, E_a_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            E_a_manual_cosmo = [ext.E_a(a, vec_cosmo) for a in a_array]
+            E_a_vectorized_cosmo = ext.E_a(a_array, vec_cosmo)
+
+            @test all(isapprox.(E_a_manual_cosmo, E_a_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "r_z vectorization" begin
+            # Manual list comprehension
+            r_z_manual = [ext.r_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            r_z_vectorized = ext.r_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(r_z_manual, r_z_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            r_z_manual_cosmo = [ext.r_z(z, vec_cosmo) for z in z_array]
+            r_z_vectorized_cosmo = ext.r_z(z_array, vec_cosmo)
+
+            @test all(isapprox.(r_z_manual_cosmo, r_z_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "dM_z vectorization" begin
+            # Manual list comprehension
+            dM_z_manual = [ext.dM_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            dM_z_vectorized = ext.dM_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(dM_z_manual, dM_z_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            dM_z_manual_cosmo = [ext.dM_z(z, vec_cosmo) for z in z_array]
+            dM_z_vectorized_cosmo = ext.dM_z(z_array, vec_cosmo)
+
+            @test all(isapprox.(dM_z_manual_cosmo, dM_z_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "dA_z vectorization" begin
+            # Manual list comprehension
+            dA_z_manual = [ext.dA_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            dA_z_vectorized = ext.dA_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(dA_z_manual, dA_z_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            dA_z_manual_cosmo = [ext.dA_z(z, vec_cosmo) for z in z_array]
+            dA_z_vectorized_cosmo = ext.dA_z(z_array, vec_cosmo)
+
+            @test all(isapprox.(dA_z_manual_cosmo, dA_z_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "dL_z vectorization" begin
+            # Manual list comprehension
+            dL_z_manual = [ext.dL_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            dL_z_vectorized = ext.dL_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(dL_z_manual, dL_z_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            dL_z_manual_cosmo = [ext.dL_z(z, vec_cosmo) for z in z_array]
+            dL_z_vectorized_cosmo = ext.dL_z(z_array, vec_cosmo)
+
+            @test all(isapprox.(dL_z_manual_cosmo, dL_z_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "D_z vectorization" begin
+            # Manual list comprehension
+            D_z_manual = [ext.D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            D_z_vectorized = ext.D_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(D_z_manual, D_z_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            D_z_manual_cosmo = [ext.D_z(z, vec_cosmo) for z in z_array]
+            D_z_vectorized_cosmo = ext.D_z(z_array, vec_cosmo)
+
+            @test all(isapprox.(D_z_manual_cosmo, D_z_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "f_z vectorization" begin
+            # Manual list comprehension
+            f_z_manual = [ext.f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            f_z_vectorized = ext.f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(f_z_manual, f_z_vectorized, rtol=1e-12))
+
+            # Test with cosmology struct
+            f_z_manual_cosmo = [ext.f_z(z, vec_cosmo) for z in z_array]
+            f_z_vectorized_cosmo = ext.f_z(z_array, vec_cosmo)
+
+            @test all(isapprox.(f_z_manual_cosmo, f_z_vectorized_cosmo, rtol=1e-12))
+        end
+
+        @testset "D_f_z vectorization" begin
+            # Manual list comprehension
+            D_f_z_manual = [ext.D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+
+            # Vectorized call
+            D_f_z_vectorized = ext.D_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test length(D_f_z_manual) == length(D_f_z_vectorized)
+            @test all([isapprox(D_f_z_manual[i][1], D_f_z_vectorized[i][1], rtol=1e-12) for i in eachindex(D_f_z_manual)])
+            @test all([isapprox(D_f_z_manual[i][2], D_f_z_vectorized[i][2], rtol=1e-12) for i in eachindex(D_f_z_manual)])
+
+            # Test with cosmology struct
+            D_f_z_manual_cosmo = [ext.D_f_z(z, vec_cosmo) for z in z_array]
+            D_f_z_vectorized_cosmo = ext.D_f_z(z_array, vec_cosmo)
+
+            @test length(D_f_z_manual_cosmo) == length(D_f_z_vectorized_cosmo)
+            @test all([isapprox(D_f_z_manual_cosmo[i][1], D_f_z_vectorized_cosmo[i][1], rtol=1e-12) for i in eachindex(D_f_z_manual_cosmo)])
+            @test all([isapprox(D_f_z_manual_cosmo[i][2], D_f_z_vectorized_cosmo[i][2], rtol=1e-12) for i in eachindex(D_f_z_manual_cosmo)])
+        end
+
+        @testset "S_of_K vectorization" begin
+            Ω_values = [0.0, 0.1, -0.1]
+            r_values = [100.0, 200.0, 300.0]
+
+            # Test vectorization over r with scalar Ω
+            for Ω in Ω_values
+                S_manual = [ext.S_of_K(Ω, r) for r in r_values]
+                S_vectorized = ext.S_of_K(Ω, r_values)
+                @test all(isapprox.(S_manual, S_vectorized, rtol=1e-12))
+            end
+        end
+    end
 else
     @warn "BackgroundCosmologyExt extension not loaded, skipping background cosmology tests"
 end

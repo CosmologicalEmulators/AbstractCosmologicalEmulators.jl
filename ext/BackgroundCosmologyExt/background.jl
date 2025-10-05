@@ -2,11 +2,11 @@ abstract type AbstractCosmology end
 
 
 @kwdef mutable struct w0waCDMCosmology <: AbstractCosmology
-    ln10Aₛ::Number
-    nₛ::Number
-    h::Number
-    ωb::Number
-    ωc::Number
+    ln10Aₛ::Number = 3.0
+    nₛ::Number = 0.96
+    h::Number = 0.67
+    ωb::Number = 0.022
+    ωc::Number = 0.12
     ωk::Number = 0.0
     mν::Number = 0.0
     w0::Number = -1.0
@@ -121,10 +121,14 @@ function _Ωma(a, cosmo::w0waCDMCosmology)
     return _Ωma(a, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function r̃_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function r̃_z(z::Number, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     z_array, weigths_array = _transformed_weights(FastGaussQuadrature.gausslegendre, 9, 0, z)
     integrand_array = 1.0 ./ E_a(_a_z(z_array), Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     return dot(weigths_array, integrand_array)
+end
+
+function r̃_z(z::AbstractArray, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+    return [r̃_z(zi, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) for zi in z]
 end
 
 function r̃_z(z, cosmo::w0waCDMCosmology)
@@ -176,7 +180,7 @@ function dM_z(z, cosmo::w0waCDMCosmology)
 end
 
 function d̃A_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (1 + z)
+    return d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) ./ (1 .+ z)
 end
 
 function d̃A_z(z, cosmo::w0waCDMCosmology)
@@ -186,7 +190,7 @@ function d̃A_z(z, cosmo::w0waCDMCosmology)
 end
 
 function dA_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (1 + z)
+    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) ./ (1 .+ z)
 end
 
 function dA_z(z, cosmo::w0waCDMCosmology)
@@ -196,7 +200,7 @@ function dA_z(z, cosmo::w0waCDMCosmology)
 end
 
 function dL_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) * (1 + z)
+    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) .* (1 .+ z)
 end
 
 function dL_z(z, cosmo::w0waCDMCosmology)

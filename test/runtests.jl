@@ -15,16 +15,16 @@ using AbstractCosmologicalEmulators
 @testset "AbstractEmulators test" begin
     # Extension tests
     include("test_extensions.jl")
-    
+
     # Core functionality tests
     include("test_core_functionality.jl")
-    
+
     # Type stability tests
     include("test_type_stability.jl")
-    
+
     # Input validation tests
     include("test_input_validation.jl")
-    
+
     # Numerical safety validation tests
     include("test_numerical_safety.jl")
 end
