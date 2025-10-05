@@ -290,7 +290,15 @@ function f_z(z, cosmo::w0waCDMCosmology)
     return f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function D_f_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function D_f_z(z::Number, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+    D = sol[1, 1]
+    D_prime = sol[2, 1]
+    f = D_prime / D
+    return D, f
+end
+
+function D_f_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     D = sol[1, 1:end]
     D_prime = sol[2, 1:end]
@@ -298,7 +306,7 @@ function D_f_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     return reverse(D), reverse(f)
 end
 
-function D_f_z(z, cosmo::w0waCDMCosmology)::Tuple{Vector{Float64},Vector{Float64}}
+function D_f_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return D_f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)

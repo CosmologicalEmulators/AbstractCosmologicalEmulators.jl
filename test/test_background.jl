@@ -937,23 +937,42 @@ if !isnothing(ext)
         end
 
         @testset "D_f_z vectorization" begin
-            # Manual list comprehension
-            D_f_z_manual = [ext.D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            # D_f_z return structure:
+            # For scalar z: returns (D, f) - tuple of two scalars
+            # For array z: returns ([D1, D2, ...], [f1, f2, ...]) - tuple of two vectors
 
-            # Vectorized call
-            D_f_z_vectorized = ext.D_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            # Manual approach: call for each z individually and collect results
+            D_manual = []
+            f_manual = []
+            for z in z_array
+                D_val, f_val = ext.D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+                push!(D_manual, D_val)
+                push!(f_manual, f_val)
+            end
 
-            @test length(D_f_z_manual) == length(D_f_z_vectorized)
-            @test all([isapprox(D_f_z_manual[i][1], D_f_z_vectorized[i][1], rtol=1e-12) for i in eachindex(D_f_z_manual)])
-            @test all([isapprox(D_f_z_manual[i][2], D_f_z_vectorized[i][2], rtol=1e-12) for i in eachindex(D_f_z_manual)])
+            # Vectorized call - returns one tuple with two vectors
+            D_vectorized, f_vectorized = ext.D_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test length(D_manual) == length(D_vectorized)
+            @test length(f_manual) == length(f_vectorized)
+            @test all(isapprox.(D_manual, D_vectorized, rtol=1e-12))
+            @test all(isapprox.(f_manual, f_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            D_f_z_manual_cosmo = [ext.D_f_z(z, vec_cosmo) for z in z_array]
-            D_f_z_vectorized_cosmo = ext.D_f_z(z_array, vec_cosmo)
+            D_manual_cosmo = []
+            f_manual_cosmo = []
+            for z in z_array
+                D_val, f_val = ext.D_f_z(z, vec_cosmo)
+                push!(D_manual_cosmo, D_val)
+                push!(f_manual_cosmo, f_val)
+            end
 
-            @test length(D_f_z_manual_cosmo) == length(D_f_z_vectorized_cosmo)
-            @test all([isapprox(D_f_z_manual_cosmo[i][1], D_f_z_vectorized_cosmo[i][1], rtol=1e-12) for i in eachindex(D_f_z_manual_cosmo)])
-            @test all([isapprox(D_f_z_manual_cosmo[i][2], D_f_z_vectorized_cosmo[i][2], rtol=1e-12) for i in eachindex(D_f_z_manual_cosmo)])
+            D_vectorized_cosmo, f_vectorized_cosmo = ext.D_f_z(z_array, vec_cosmo)
+
+            @test length(D_manual_cosmo) == length(D_vectorized_cosmo)
+            @test length(f_manual_cosmo) == length(f_vectorized_cosmo)
+            @test all(isapprox.(D_manual_cosmo, D_vectorized_cosmo, rtol=1e-12))
+            @test all(isapprox.(f_manual_cosmo, f_vectorized_cosmo, rtol=1e-12))
         end
 
         @testset "S_of_K vectorization" begin
