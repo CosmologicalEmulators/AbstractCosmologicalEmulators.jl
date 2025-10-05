@@ -42,16 +42,19 @@ function __init__()
         const E_z = $E_z
         const E_a = $E_a
         const r_z = $r_z
+        const dM_z = $dM_z
         const dA_z = $dA_z
         const dL_z = $dL_z
         const D_z = $D_z
         const f_z = $f_z
         const D_f_z = $D_f_z
+        const S_of_K = $S_of_K
 
         export w0waCDMCosmology
         export E_z, E_a
-        export r_z, dA_z, dL_z
+        export r_z, dM_z, dA_z, dL_z
         export D_z, f_z, D_f_z
+        export S_of_K
     end
 end
 
