@@ -61,6 +61,38 @@ using AbstractCosmologicalEmulators
         err = try; validate_nn_dict_structure(invalid_dict); catch e; e; end
         @test isa(err, ArgumentError)
         @test contains(string(err), "n_hidden_layers must be an integer")
+
+        # Test n_hidden_layers range warnings
+        # Note: We can't test with 0 or values > number of actual layers because validation would fail first
+        # We need to adjust the valid_dict to have the right number of layers
+
+        # Test warning for n_hidden_layers = 0
+        warn_dict = deepcopy(valid_dict)
+        warn_dict["n_hidden_layers"] = 0
+        # This will throw because validate_layer_structure won't find any layers, so skip
+
+        # Test warning for n_hidden_layers = 60 with 5 actual layers
+        warn_dict = deepcopy(valid_dict)
+        warn_dict["n_hidden_layers"] = 60  # More than 50 should warn
+        # But this will fail layer structure validation first
+
+        # To properly test the warning, we need a dict with valid layers but out-of-range n_hidden
+        # Actually, the range check happens BEFORE layer structure validation
+        # Let's create a minimal test dict that will only trigger the warning
+        minimal_warn_dict = Dict{String,Any}(
+            "n_input_features" => 6,
+            "n_output_features" => 40,
+            "n_hidden_layers" => 60,  # Out of range
+            "layers" => Dict{String,Any}()
+        )
+        # Add 60 layers to avoid layer structure error
+        for i in 1:60
+            minimal_warn_dict["layers"]["layer_$i"] = Dict{String,Any}(
+                "n_neurons" => 64,
+                "activation_function" => "tanh"
+            )
+        end
+        @test_logs (:warn, r"n_hidden_layers should be between 1 and 50, got 60") match_mode=:any validate_nn_dict_structure(minimal_warn_dict)
     end
 
     # Test activation function validation

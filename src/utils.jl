@@ -93,10 +93,10 @@ function validate_parameter_ranges(nn_dict::Dict{String,Any})
         throw(ArgumentError("n_hidden_layers must be an integer, got $(typeof(n_hidden))"))
     end
     if n_hidden < 1 || n_hidden > 50
-        throw(ArgumentError("""
-        n_hidden_layers must be between 1 and 50, got $n_hidden.
+        @warn """
+        n_hidden_layers should be between 1 and 50, got $n_hidden.
         Most emulators use 3-10 hidden layers.
-        """))
+        """
     end
 
     return nothing
