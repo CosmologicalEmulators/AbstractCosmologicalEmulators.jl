@@ -10,6 +10,7 @@ using Integrals
 using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
+using FiniteDifferences
 using AbstractCosmologicalEmulators
 
 @testset "AbstractEmulators test" begin

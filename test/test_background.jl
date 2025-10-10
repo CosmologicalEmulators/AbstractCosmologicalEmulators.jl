@@ -4,6 +4,9 @@ using Integrals
 using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
+using ForwardDiff
+using FiniteDifferences
+using Zygote
 
 # Get the extension
 ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
@@ -18,6 +21,21 @@ if !isnothing(ext)
         prob = IntegralProblem(f, domain, p; reltol=1e-12)
         sol = solve(prob, QuadGKJL())[1]
         return sol
+    end
+
+    function D_z_x(z, x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        sum(ext.D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+    end
+
+    function f_z_x(z, x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        sum(ext.f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+    end
+
+    function r_z_x(z, x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        sum(ext.r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function r_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
@@ -164,22 +182,24 @@ if !isnothing(ext)
             cosmo2 = ext.w0waCDMCosmology(ln10Aₛ=2.9, nₛ=0.97, h=0.65, ωb=0.024, ωc=0.11, mν=0.1, w0=-0.8, wa=-0.3)
             cosmo3 = ext.w0waCDMCosmology(ln10Aₛ=3.1, nₛ=0.955, h=0.75, ωb=0.021, ωc=0.13, mν=0.2, w0=-1.2, wa=0.5)
             cosmo4 = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=1.0, ωk=0.1)
+            cosmo4 = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=-1.0, ωk=-0.1)
 
-            test_cosmologies = [cosmo1, cosmo2, cosmo3]
+            test_cosmologies = [cosmo1, cosmo2, cosmo3, cosmo4]
             test_redshifts = [0.5, 1.5, 3.0]
 
             for cosmo in test_cosmologies
                 Ωcb0_test = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
+                Ωk0_test = cosmo.ωk / cosmo.h^2
 
                 for z in test_redshifts
                     # Test E_z
                     E_z_struct = ext.E_z(z, cosmo)
-                    E_z_direct = ext.E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
+                    E_z_direct = ext.E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0 = Ωk0_test)
                     @test E_z_struct == E_z_direct
 
                     # Test dL_z
                     dL_z_struct = ext.dL_z(z, cosmo)
-                    dL_z_direct = ext.dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa)
+                    dL_z_direct = ext.dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0 = Ωk0_test)
                     @test dL_z_struct == dL_z_direct
                 end
             end
@@ -190,6 +210,17 @@ if !isnothing(ext)
         @test isapprox(ext.dA_z(0.0, mycosmo), 0.0)
         @test ext.D_z(1.0, mycosmo) == ext.D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
         @test ext.f_z(1.0, mycosmo) == ext.f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
+    end
+
+    @testset "Gradient tests" begin
+        z = Array(LinRange(0.0, 10.0, 100))
+        x = [0.3, 0.67, 0.06, -1., 0., 0.2]
+        @test isapprox(Zygote.gradient(x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-3)
+        @test isapprox(Zygote.gradient(x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-4)
+        @test isapprox(Zygote.gradient(x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-4)
     end
 
     @testset "CLASS comparison tests" begin
