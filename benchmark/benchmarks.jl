@@ -9,6 +9,7 @@ using JSON
 
 # Load extension dependencies for Background cosmology benchmarks
 using OrdinaryDiffEqTsit5
+using SciMLSensitivity
 using Integrals
 using DataInterpolations
 using LinearAlgebra
