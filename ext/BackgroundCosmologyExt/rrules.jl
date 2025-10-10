@@ -47,3 +47,5 @@ function ChainRulesCore.rrule(::typeof(S_of_K), Ω, r)
     end
     return y, pullback
 end
+
+@non_differentiable FastGaussQuadrature.gausslegendre(x::Int)

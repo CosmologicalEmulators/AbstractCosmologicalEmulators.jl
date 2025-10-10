@@ -13,6 +13,8 @@ using Integrals
 using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
+using ForwardDiff
+using Zygote
 
 mlpd = SimpleChain(
   static(6),
@@ -296,6 +298,114 @@ if !isnothing(ext)
 
     println("Background cosmology benchmarks added successfully")
     println("Vectorization performance benchmarks added successfully")
+
+    # --- Gradient Benchmarks ---
+    # Helper functions for gradient computation (inspired by test functions)
+    function D_z_x(z, x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        sum(ext.D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+    end
+
+    function f_z_x(z, x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        sum(ext.f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+    end
+
+    function r_z_x(z, x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        sum(ext.r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+    end
+
+    # Create benchmark groups for gradients
+    SUITE["gradients"] = BenchmarkGroup(["autodiff", "forward", "backward"])
+
+    # Test parameters
+    const z_grad_array = Array(LinRange(0.0, 10.0, 100))
+    const x_grad_params = [0.3, 0.67, 0.06, -1.0, 0.0, 0.2]  # [Ωcb0, h, mν, w0, wa, Ωk0]
+
+    # --- Forward computation benchmarks ---
+    SUITE["gradients"]["forward_D_z"] = @benchmarkable D_z_x($z_grad_array, $x_grad_params)
+    SUITE["gradients"]["forward_f_z"] = @benchmarkable f_z_x($z_grad_array, $x_grad_params)
+    SUITE["gradients"]["forward_r_z"] = @benchmarkable r_z_x($z_grad_array, $x_grad_params)
+
+    # --- Backward computation (gradients) benchmarks ---
+    # ForwardDiff gradients
+    SUITE["gradients"]["forwarddiff_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_grad_params)
+    SUITE["gradients"]["forwarddiff_f_z"] = @benchmarkable ForwardDiff.gradient(x -> f_z_x($z_grad_array, x), $x_grad_params)
+    SUITE["gradients"]["forwarddiff_r_z"] = @benchmarkable ForwardDiff.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
+
+    # Zygote gradients
+    SUITE["gradients"]["zygote_D_z"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_grad_array, x), $x_grad_params)
+    SUITE["gradients"]["zygote_f_z"] = @benchmarkable Zygote.gradient(x -> f_z_x($z_grad_array, x), $x_grad_params)
+    SUITE["gradients"]["zygote_r_z"] = @benchmarkable Zygote.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
+
+    # --- Different redshift array sizes benchmarks ---
+    SUITE["gradients"]["scaling"] = BenchmarkGroup(["array_size"])
+
+    # Small array (10 points)
+    const z_small = Array(LinRange(0.0, 10.0, 10))
+    SUITE["gradients"]["scaling"]["forward_D_z_small"] = @benchmarkable D_z_x($z_small, $x_grad_params)
+    SUITE["gradients"]["scaling"]["forwarddiff_D_z_small"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_small, x), $x_grad_params)
+    SUITE["gradients"]["scaling"]["zygote_D_z_small"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_small, x), $x_grad_params)
+
+    # Medium array (100 points - already done above)
+
+    # Large array (500 points)
+    const z_large = Array(LinRange(0.0, 10.0, 500))
+    SUITE["gradients"]["scaling"]["forward_D_z_large"] = @benchmarkable D_z_x($z_large, $x_grad_params)
+    SUITE["gradients"]["scaling"]["forwarddiff_D_z_large"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_large, x), $x_grad_params)
+    SUITE["gradients"]["scaling"]["zygote_D_z_large"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_large, x), $x_grad_params)
+
+    # --- Single redshift benchmarks for comparison ---
+    const z_single = 1.0
+
+    function D_z_single(x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        ext.D_z(z_single, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+    end
+
+    function f_z_single(x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        ext.f_z(z_single, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+    end
+
+    function r_z_single(x)
+        Ωcb0, h, mν, w0, wa, Ωk0 = x
+        ext.r_z(z_single, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+    end
+
+    SUITE["gradients"]["single_z"] = BenchmarkGroup(["scalar"])
+
+    # Forward computation for single z
+    SUITE["gradients"]["single_z"]["forward_D_z"] = @benchmarkable D_z_single($x_grad_params)
+    SUITE["gradients"]["single_z"]["forward_f_z"] = @benchmarkable f_z_single($x_grad_params)
+    SUITE["gradients"]["single_z"]["forward_r_z"] = @benchmarkable r_z_single($x_grad_params)
+
+    # Gradient computation for single z
+    SUITE["gradients"]["single_z"]["forwarddiff_D_z"] = @benchmarkable ForwardDiff.gradient(D_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["forwarddiff_f_z"] = @benchmarkable ForwardDiff.gradient(f_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["forwarddiff_r_z"] = @benchmarkable ForwardDiff.gradient(r_z_single, $x_grad_params)
+
+    SUITE["gradients"]["single_z"]["zygote_D_z"] = @benchmarkable Zygote.gradient(D_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["zygote_f_z"] = @benchmarkable Zygote.gradient(f_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["zygote_r_z"] = @benchmarkable Zygote.gradient(r_z_single, $x_grad_params)
+
+    # --- Comparison with different parameter variations ---
+    SUITE["gradients"]["parameter_sensitivity"] = BenchmarkGroup(["params"])
+
+    # Standard ΛCDM (w0=-1, wa=0, Ωk0=0)
+    const x_lcdm = [0.3, 0.67, 0.06, -1.0, 0.0, 0.0]
+    SUITE["gradients"]["parameter_sensitivity"]["lcdm_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_lcdm)
+
+    # w0waCDM (varying dark energy)
+    const x_w0wa = [0.3, 0.67, 0.06, -0.8, 0.3, 0.0]
+    SUITE["gradients"]["parameter_sensitivity"]["w0wa_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_w0wa)
+
+    # Curved universe
+    const x_curved = [0.3, 0.67, 0.06, -1.0, 0.0, 0.1]
+    SUITE["gradients"]["parameter_sensitivity"]["curved_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_curved)
+
+    println("Gradient computation benchmarks added successfully")
 else
     println("Warning: BackgroundCosmologyExt not loaded, skipping background benchmarks")
 end

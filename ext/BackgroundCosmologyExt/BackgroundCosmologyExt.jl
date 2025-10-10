@@ -7,6 +7,7 @@ using Integrals
 using LinearAlgebra
 using FastGaussQuadrature
 using ChainRulesCore
+using SciMLSensitivity
 
 # Constants
 const c_0 = 2.99792458e5  # Speed of light in km/s
