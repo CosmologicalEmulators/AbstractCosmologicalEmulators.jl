@@ -1,7 +1,3 @@
-#using Pkg
-#Pkg.activate(@__DIR__)
-#Pkg.instantiate()
-
 using BenchmarkTools
 using SimpleChains
 using AbstractCosmologicalEmulators
@@ -387,9 +383,9 @@ if !isnothing(ext)
     SUITE["gradients"]["single_z"]["forwarddiff_f_z"] = @benchmarkable ForwardDiff.gradient(f_z_single, $x_grad_params)
     SUITE["gradients"]["single_z"]["forwarddiff_r_z"] = @benchmarkable ForwardDiff.gradient(r_z_single, $x_grad_params)
 
-    #SUITE["gradients"]["single_z"]["zygote_D_z"] = @benchmarkable Zygote.gradient(D_z_single, $x_grad_params)
-    #SUITE["gradients"]["single_z"]["zygote_f_z"] = @benchmarkable Zygote.gradient(f_z_single, $x_grad_params)
-    #SUITE["gradients"]["single_z"]["zygote_r_z"] = @benchmarkable Zygote.gradient(r_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["zygote_D_z"] = @benchmarkable Zygote.gradient(D_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["zygote_f_z"] = @benchmarkable Zygote.gradient(f_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["zygote_r_z"] = @benchmarkable Zygote.gradient(r_z_single, $x_grad_params)
 
     # --- Comparison with different parameter variations ---
     SUITE["gradients"]["parameter_sensitivity"] = BenchmarkGroup(["params"])
