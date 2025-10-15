@@ -338,7 +338,7 @@ if !isnothing(ext)
     # Zygote gradients
     SUITE["gradients"]["zygote_D_z"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_grad_array, x), $x_grad_params)
     SUITE["gradients"]["zygote_f_z"] = @benchmarkable Zygote.gradient(x -> f_z_x($z_grad_array, x), $x_grad_params)
-    #SUITE["gradients"]["zygote_r_z"] = @benchmarkable Zygote.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
+    SUITE["gradients"]["zygote_r_z"] = @benchmarkable Zygote.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
 
     # --- Different redshift array sizes benchmarks ---
     SUITE["gradients"]["scaling"] = BenchmarkGroup(["array_size"])
