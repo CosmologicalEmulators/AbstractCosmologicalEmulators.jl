@@ -194,12 +194,12 @@ if !isnothing(ext)
                 for z in test_redshifts
                     # Test E_z
                     E_z_struct = ext.E_z(z, cosmo)
-                    E_z_direct = ext.E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0 = Ωk0_test)
+                    E_z_direct = ext.E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
                     @test E_z_struct == E_z_direct
 
                     # Test dL_z
                     dL_z_struct = ext.dL_z(z, cosmo)
-                    dL_z_direct = ext.dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0 = Ωk0_test)
+                    dL_z_direct = ext.dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
                     @test dL_z_struct == dL_z_direct
                 end
             end
@@ -214,14 +214,22 @@ if !isnothing(ext)
 
     @testset "Gradient tests" begin
         z = Array(LinRange(0.0, 10.0, 100))
-        x = [0.3, 0.67, 0.06, -1., 0., 0.2]
+        x = [0.3, 0.67, 0.06, -1.0, 0.0, 0.2]
         @test isapprox(Zygote.gradient(x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-5)
         @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-3)
         @test isapprox(Zygote.gradient(x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-5)
         @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-4)
         @test isapprox(Zygote.gradient(x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-5)
         @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-4)
+        z = 1.0
+        @test isapprox(Zygote.gradient(x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-3)
+        @test isapprox(Zygote.gradient(x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-3)
+        @test isapprox(Zygote.gradient(x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-4)
     end
+
 
     @testset "CLASS comparison tests" begin
         # Comparison with CLASS results for specific cosmology
@@ -622,7 +630,7 @@ if !isnothing(ext)
             # Test with scalar r using Zygote (which uses our rrule)
             grad_Ω, grad_r = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_flat, r_test)
             @test isapprox(grad_r, 1.0, rtol=1e-10)  # dS/dr = 1 for flat
-            @test isapprox(grad_Ω, r_test^3/6, rtol=1e-10)  # dS/dΩ = r^3/6 for flat (analytical limit)
+            @test isapprox(grad_Ω, r_test^3 / 6, rtol=1e-10)  # dS/dΩ = r^3/6 for flat (analytical limit)
 
             # For Ω > 0 (closed), test sinh formula derivatives
             Ω_closed = 0.01
@@ -694,7 +702,7 @@ if !isnothing(ext)
             @test all(isapprox.(grad_r_array, 1.0, rtol=1e-12))
 
             # For Ω = 0: dS/dΩ = r³/6, so sum over array gives Σ(rᵢ³/6)
-            expected_grad_Ω = sum(r_array.^3) / 6.0
+            expected_grad_Ω = sum(r_array .^ 3) / 6.0
             @test isapprox(grad_Ω_array, expected_grad_Ω, rtol=1e-12)
 
             # Compare with ForwardDiff on the vectorized version
