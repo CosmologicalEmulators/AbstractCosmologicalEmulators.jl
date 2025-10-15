@@ -221,20 +221,6 @@ function _growth!(du, u, p, loga)
             1.5 * _Ωma(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) * D
 end
 
-function _growth_solver(Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    amin = 1 / 139
-    u₀ = [amin, amin]
-
-    logaspan = (log(amin), log(1.01))#to ensure we cover the relevant range
-
-    p = [Ωcb0, mν, h, w0, wa, Ωk0]
-
-    prob = ODEProblem(_growth!, u₀, logaspan, p)
-
-    sol = solve(prob, Tsit5(), reltol=1e-5; verbose=false)
-    return sol
-end
-
 function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     amin = 1 / 139
     loga = vcat(log.(_a_z.(z)))
@@ -251,8 +237,8 @@ function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
 end
 
 function D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    sol = _growth_solver(Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
-    return sol(log(_a_z(z)))[1]
+    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+    return sol[1, 1]
 end
 
 function D_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
