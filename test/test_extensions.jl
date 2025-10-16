@@ -3,10 +3,11 @@ using AbstractCosmologicalEmulators
 
 # Test that main package knows nothing about cosmology
 @testset "Main Package Independence" begin
-    # After loading extension dependencies, these should be defined
-    @test isdefined(AbstractCosmologicalEmulators, :w0waCDMCosmology)
+    # Functions should be defined as stubs in main module
     @test isdefined(AbstractCosmologicalEmulators, :E_z)
     @test isdefined(AbstractCosmologicalEmulators, :D_z)
+    # The abstract type should be defined
+    @test isdefined(AbstractCosmologicalEmulators, :AbstractCosmology)
 end
 
 # Test extension if dependencies are available
@@ -16,6 +17,8 @@ end
 
     if !isnothing(ext)
         @info "Testing BackgroundCosmologyExt extension"
+        # Test that w0waCDMCosmology is exported from the extension
+        @test isdefined(ext, :w0waCDMCosmology)
         include("test_background.jl")
     else
         @warn "BackgroundCosmologyExt extension not loaded. Make sure all dependencies are available."

@@ -37,7 +37,7 @@ end
 
 const SUPPORTED_ACTIVATIONS = ["tanh", "relu"]
 
-function validate_nn_dict_structure(nn_dict::Dict{String,Any})
+function validate_nn_dict_structure(nn_dict::AbstractDict{String,Any})
     # Check required top-level keys
     required_keys = ["n_input_features", "n_output_features", "n_hidden_layers", "layers"]
     for key in required_keys
@@ -62,7 +62,7 @@ function validate_nn_dict_structure(nn_dict::Dict{String,Any})
     return nothing
 end
 
-function validate_parameter_ranges(nn_dict::Dict{String,Any})
+function validate_parameter_ranges(nn_dict::AbstractDict{String,Any})
     # Validate n_input_features
     n_input = nn_dict["n_input_features"]
     if !isa(n_input, Integer)
@@ -102,11 +102,11 @@ function validate_parameter_ranges(nn_dict::Dict{String,Any})
     return nothing
 end
 
-function validate_layer_structure(nn_dict::Dict{String,Any})
+function validate_layer_structure(nn_dict::AbstractDict{String,Any})
     n_hidden_layers = nn_dict["n_hidden_layers"]
     layers_dict = nn_dict["layers"]
 
-    if !isa(layers_dict, Dict)
+    if !isa(layers_dict, AbstractDict)
         throw(ArgumentError("'layers' must be a dictionary, got $(typeof(layers_dict))"))
     end
 
@@ -127,7 +127,7 @@ function validate_layer_structure(nn_dict::Dict{String,Any})
 end
 
 function validate_single_layer(layer_dict, layer_name::String)
-    if !isa(layer_dict, Dict)
+    if !isa(layer_dict, AbstractDict)
         throw(ArgumentError("Configuration for $layer_name must be a dictionary, got $(typeof(layer_dict))"))
     end
 
@@ -199,7 +199,7 @@ function safe_dict_access(dict, keys...; context="")
     end
 end
 
-function validate_normalization_ranges(nn_dict::Dict{String,Any})
+function validate_normalization_ranges(nn_dict::AbstractDict{String,Any})
     if haskey(nn_dict, "emulator_description")
         desc = nn_dict["emulator_description"]
         
@@ -295,7 +295,7 @@ function validate_cosmological_ranges(ranges::Matrix{Float64})
     return nothing
 end
 
-function validate_trained_weights(weights, nn_dict::Dict{String,Any})
+function validate_trained_weights(weights, nn_dict::AbstractDict{String,Any})
     finite_mask = isfinite.(weights)
     if !all(finite_mask)
         nan_count = count(isnan.(weights))
@@ -323,7 +323,7 @@ function validate_trained_weights(weights, nn_dict::Dict{String,Any})
     return nothing
 end
 
-function validate_architecture_numerical_stability(nn_dict::Dict{String,Any})
+function validate_architecture_numerical_stability(nn_dict::AbstractDict{String,Any})
     n_input = nn_dict["n_input_features"]
     n_output = nn_dict["n_output_features"] 
     n_hidden = nn_dict["n_hidden_layers"]
