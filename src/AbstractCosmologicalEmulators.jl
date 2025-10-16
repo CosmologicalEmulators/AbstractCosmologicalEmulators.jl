@@ -15,4 +15,29 @@ include("initialization.jl")
 include("utils.jl")
 include("chainrules.jl")
 
+# Stub functions that will be implemented by BackgroundCosmologyExt extension
+# These are defined here to be overloaded by the extension without eval
+function E_z end
+function E_a end
+function r_z end
+function dM_z end
+function dA_z end
+function dL_z end
+function D_z end
+function f_z end
+function D_f_z end
+function S_of_K end
+
+# Abstract type for cosmology - the extension will define concrete types
+abstract type AbstractCosmology end
+
+# Export the functions and abstract type
+export AbstractCosmology
+export E_z, E_a
+export r_z, dM_z, dA_z, dL_z
+export D_z, f_z, D_f_z
+export S_of_K
+
+# Note: w0waCDMCosmology will be exported by the extension when it loads
+
 end # module AbstractCosmologicalEmulators

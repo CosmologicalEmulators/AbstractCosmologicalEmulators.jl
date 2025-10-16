@@ -1,7 +1,7 @@
 name = "AbstractCosmologicalEmulators"
 uuid = "c83c1981-e5c4-4837-9eb8-c9b1572acfc6"
 authors = ["Marco Bonici <bonici.marco@gmail.com>"]
-version = "0.7.1"
+version = "0.7.2"
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -28,7 +28,7 @@ DataInterpolations = "6, 8"
 FastGaussQuadrature = "1"
 ForwardDiff = "0.10.38"
 Integrals = "4.7.0"
-JSON = "0.21.4"
+JSON = "0.6, 1"
 LinearAlgebra = "1.10.0"
 Lux = "1"
 OrdinaryDiffEqTsit5 = "1"
