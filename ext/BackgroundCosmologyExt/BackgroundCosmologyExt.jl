@@ -40,7 +40,6 @@ function __init__()
     dFdy_grid = [_dFdy(y) for y in y_grid_dF]
     dFdy_interpolant[] = AkimaInterpolation(dFdy_grid, y_grid_dF)
 
-    # No need for @eval anymore - functions are extended through imports
 end
 
 end # module BackgroundCosmologyExt
