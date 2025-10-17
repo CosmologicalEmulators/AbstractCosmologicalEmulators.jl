@@ -9,8 +9,15 @@ using FastGaussQuadrature
 using ChainRulesCore
 using SciMLSensitivity
 
-# Import the stub functions from the parent module to extend them
-import AbstractCosmologicalEmulators: E_z, E_a, r_z, dM_z, dA_z, dL_z, D_z, f_z, D_f_z, S_of_K
+# Define abstract type for cosmology
+abstract type AbstractCosmology end
+
+# Export all cosmology functionality
+export AbstractCosmology, w0waCDMCosmology
+export E_z, E_a
+export r_z, dM_z, dA_z, dL_z
+export D_z, f_z, D_f_z
+export S_of_K
 
 # Constants
 const c_0 = 2.99792458e5  # Speed of light in km/s

@@ -1,9 +1,4 @@
-# Use AbstractCosmology from the parent module
-using AbstractCosmologicalEmulators: AbstractCosmology
-
-# Export w0waCDMCosmology so it's available when the extension loads
-export w0waCDMCosmology
-
+# Define w0waCDMCosmology type
 @kwdef mutable struct w0waCDMCosmology <: AbstractCosmology
     ln10Aₛ::Number = 3.0
     nₛ::Number = 0.96
@@ -79,25 +74,25 @@ function _dρDEda(a, w0, wa)
     return 3 * (-(1 + w0 + wa) / a + wa) * _ρDE_a(a, w0, wa)
 end
 
-function AbstractCosmologicalEmulators.E_a(a, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function E_a(a, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     Ωγ0 = 2.469e-5 / h^2
     Ων0 = _ΩνE2(1.0, Ωγ0, mν)
     ΩΛ0 = 1.0 - (Ωγ0 + Ωcb0 + Ων0 + Ωk0)
     return @. sqrt(Ωγ0 * a^-4 + Ωcb0 * a^-3 + Ωk0 * a^-2 + ΩΛ0 * _ρDE_a(a, w0, wa) + _ΩνE2(a, Ωγ0, mν))
 end
 
-function AbstractCosmologicalEmulators.E_a(a, cosmo::w0waCDMCosmology)
+function E_a(a, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return E_a(a, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.E_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function E_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     a = _a_z(z)
     return E_a(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.E_z(z, cosmo::w0waCDMCosmology)
+function E_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return E_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
@@ -137,17 +132,17 @@ function r̃_z(z, cosmo::w0waCDMCosmology)
     return r̃_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.r_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function r_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     return c_0 * r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (100 * h)
 end
 
-function AbstractCosmologicalEmulators.r_z(z, cosmo::w0waCDMCosmology)
+function r_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return r_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.S_of_K(Ω::Number, r)
+function S_of_K(Ω::Number, r)
     if Ω == 0
         return r
     elseif Ω > 0
@@ -169,11 +164,11 @@ function d̃M_z(z, cosmo::w0waCDMCosmology)
     return d̃M_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.dM_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function dM_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     return c_0 * d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (100 * h)
 end
 
-function AbstractCosmologicalEmulators.dM_z(z, cosmo::w0waCDMCosmology)
+function dM_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return dM_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
@@ -189,21 +184,21 @@ function d̃A_z(z, cosmo::w0waCDMCosmology)
     return d̃A_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.dA_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function dA_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) ./ (1 .+ z)
 end
 
-function AbstractCosmologicalEmulators.dA_z(z, cosmo::w0waCDMCosmology)
+function dA_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return dA_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.dL_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function dL_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) .* (1 .+ z)
 end
 
-function AbstractCosmologicalEmulators.dL_z(z, cosmo::w0waCDMCosmology)
+function dL_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return dL_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
@@ -239,23 +234,23 @@ function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     return sol
 end
 
-function AbstractCosmologicalEmulators.D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     return sol[1, 1]
 end
 
-function AbstractCosmologicalEmulators.D_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function D_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     return reverse(sol[1, 1:end])
 end
 
-function AbstractCosmologicalEmulators.D_z(z, cosmo::w0waCDMCosmology)
+function D_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return D_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.f_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function f_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     D = sol[1, 1:end]
     D_prime = sol[2, 1:end]#if wanna have normalized_version, 1:end
@@ -263,20 +258,20 @@ function AbstractCosmologicalEmulators.f_z(z::AbstractVector, Ωcb0, h; mν=0.0,
     return reverse(result)
 end
 
-function AbstractCosmologicalEmulators.f_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function f_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     D = sol[1, 1]
     D_prime = sol[2, 1]
     return D_prime / D
 end
 
-function AbstractCosmologicalEmulators.f_z(z, cosmo::w0waCDMCosmology)
+function f_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function AbstractCosmologicalEmulators.D_f_z(z::Number, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function D_f_z(z::Number, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     D = sol[1, 1]
     D_prime = sol[2, 1]
@@ -284,7 +279,7 @@ function AbstractCosmologicalEmulators.D_f_z(z::Number, Ωcb0, h; mν=0.0, w0=-1
     return D, f
 end
 
-function AbstractCosmologicalEmulators.D_f_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+function D_f_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     D = sol[1, 1:end]
     D_prime = sol[2, 1:end]
@@ -292,7 +287,7 @@ function AbstractCosmologicalEmulators.D_f_z(z::AbstractVector, Ωcb0, h; mν=0.
     return reverse(D), reverse(f)
 end
 
-function AbstractCosmologicalEmulators.D_f_z(z, cosmo::w0waCDMCosmology)
+function D_f_z(z, cosmo::w0waCDMCosmology)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
     return D_f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
