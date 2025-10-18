@@ -26,8 +26,8 @@ NN_dict = JSON.parsefile(joinpath(@__DIR__, "testNN.json"))
 weights = SimpleChains.init_params(mlpd)
 input = randn(6)
 
-const lx_emu = init_emulator(NN_dict::Dict, weights, AbstractCosmologicalEmulators.LuxEmulator)
-const sc_emu = init_emulator(NN_dict::Dict, weights, AbstractCosmologicalEmulators.SimpleChainsEmulator)
+const lx_emu = init_emulator(NN_dict, weights, AbstractCosmologicalEmulators.LuxEmulator)
+const sc_emu = init_emulator(NN_dict, weights, AbstractCosmologicalEmulators.SimpleChainsEmulator)
 
 # Every benchmark file must define a BenchmarkGroup named SUITE.
 const SUITE = BenchmarkGroup()
