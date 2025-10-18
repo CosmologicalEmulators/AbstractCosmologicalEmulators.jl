@@ -8,15 +8,17 @@ using ForwardDiff
 using FiniteDifferences
 using Zygote
 
-# Get the extension
-ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+# Note: The extension and imports are already set up in test_extensions.jl
+# which includes this file. We have access to:
+# AbstractCosmology, w0waCDMCosmology, E_z, E_a, r_z, D_z, f_z, dM_z, dA_z, dL_z, S_of_K
+# and ext for accessing internal functions
 
 if !isnothing(ext)
     # Helper check functions for testing accuracy
     # These use high-precision integration for verification
     function r̃_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
         p = [Ωcb0, h, mν, w0, wa, Ωk0]
-        f(x, p) = 1 / ext.E_a(ext._a_z(x), p[1], p[2]; mν=p[3], w0=p[4], wa=p[5], Ωk0=p[6])
+        f(x, p) = 1 / E_a(ext._a_z(x), p[1], p[2]; mν=p[3], w0=p[4], wa=p[5], Ωk0=p[6])
         domain = (zero(eltype(z)), z) # (lb, ub)
         prob = IntegralProblem(f, domain, p; reltol=1e-12)
         sol = solve(prob, QuadGKJL())[1]
@@ -25,17 +27,17 @@ if !isnothing(ext)
 
     function D_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function f_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function r_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function r_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
@@ -51,7 +53,7 @@ if !isnothing(ext)
     Ωk0 = 0.2
 
     # Create test cosmology struct
-    mycosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=0.06, w0=-2.0, wa=1.0, ωk=0.0)
+    mycosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=0.06, w0=-2.0, wa=1.0, ωk=0.0)
 
     @testset "Background cosmology tests" begin
         @test isapprox(ext._get_y(0.0, 1.0), 0.0)
@@ -59,14 +61,14 @@ if !isnothing(ext)
         @test isapprox(ext._ΩνE2(1.0, 1e-4, 1.0) * 3, ext._ΩνE2(1.0, 1e-4, ones(3)))
         @test isapprox(ext._dΩνE2da(1.0, 1e-4, 1.0) * 3, ext._dΩνE2da(1.0, 1e-4, ones(3)))
         @test isapprox(ext._ρDE_z(0.0, -1.0, 1.0), 1.0)
-        @test isapprox(ext.E_a(1.0, Ωcb0, h), 1.0)
-        @test isapprox(ext.E_a(1.0, mycosmo), 1.0)
-        @test isapprox(ext.E_z(0.0, Ωcb0, h), 1.0)
-        @test isapprox(ext.E_z(0.0, Ωcb0, h), ext.E_a(1.0, Ωcb0, h))
+        @test isapprox(E_a(1.0, Ωcb0, h), 1.0)
+        @test isapprox(E_a(1.0, mycosmo), 1.0)
+        @test isapprox(E_z(0.0, Ωcb0, h), 1.0)
+        @test isapprox(E_z(0.0, Ωcb0, h), E_a(1.0, Ωcb0, h))
         @test isapprox(ext._Ωma(1.0, Ωcb0, h), Ωcb0)
         @test isapprox(ext._Ωma(1.0, mycosmo), (0.02237 + 0.1) / 0.636^2)
         @test isapprox(ext.r̃_z(0.0, mycosmo), 0.0)
-        @test isapprox(ext.r_z(0.0, mycosmo), 0.0)
+        @test isapprox(r_z(0.0, mycosmo), 0.0)
 
         # Test that E_z with cosmology structure matches direct parameter version
         @testset "E_z cosmology structure vs direct parameters" begin
@@ -78,8 +80,8 @@ if !isnothing(ext)
                 Ωcb0_cosmo = (mycosmo.ωb + mycosmo.ωc) / mycosmo.h^2
 
                 # Compare E_z using cosmology structure vs direct parameters
-                E_z_struct = ext.E_z(z, mycosmo)
-                E_z_direct = ext.E_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                E_z_struct = E_z(z, mycosmo)
+                E_z_direct = E_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
 
                 @test E_z_struct == E_z_direct
             end
@@ -95,8 +97,8 @@ if !isnothing(ext)
                 Ωcb0_cosmo = (mycosmo.ωb + mycosmo.ωc) / mycosmo.h^2
 
                 # Compare dL_z using cosmology structure vs direct parameters
-                dL_z_struct = ext.dL_z(z, mycosmo)
-                dL_z_direct = ext.dL_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                dL_z_struct = dL_z(z, mycosmo)
+                dL_z_direct = dL_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
 
                 @test dL_z_struct == dL_z_direct
             end
@@ -133,8 +135,8 @@ if !isnothing(ext)
 
             # Test r_z wrapper
             for z in test_z_values
-                r_z_struct = ext.r_z(z, mycosmo)
-                r_z_direct = ext.r_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                r_z_struct = r_z(z, mycosmo)
+                r_z_direct = r_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test r_z_struct == r_z_direct
             end
 
@@ -147,29 +149,29 @@ if !isnothing(ext)
 
             # Test dA_z wrapper
             for z in test_z_values
-                dA_z_struct = ext.dA_z(z, mycosmo)
-                dA_z_direct = ext.dA_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                dA_z_struct = dA_z(z, mycosmo)
+                dA_z_direct = dA_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test dA_z_struct == dA_z_direct
             end
 
             # Test D_z wrapper
             for z in test_z_values
-                D_z_struct = ext.D_z(z, mycosmo)
-                D_z_direct = ext.D_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                D_z_struct = D_z(z, mycosmo)
+                D_z_direct = D_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test D_z_struct == D_z_direct
             end
 
             # Test f_z wrapper
             for z in test_z_values
-                f_z_struct = ext.f_z(z, mycosmo)
-                f_z_direct = ext.f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                f_z_struct = f_z(z, mycosmo)
+                f_z_direct = f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test f_z_struct == f_z_direct
             end
 
             # Test D_f_z wrapper (returns tuple)
             for z in test_z_values
-                D_f_struct = ext.D_f_z(z, mycosmo)
-                D_f_direct = ext.D_f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                D_f_struct = D_f_z(z, mycosmo)
+                D_f_direct = D_f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test D_f_struct[1] == D_f_direct[1]  # D_z part
                 @test D_f_struct[2] == D_f_direct[2]  # f_z part
             end
@@ -178,11 +180,11 @@ if !isnothing(ext)
         # Additional test with different cosmology parameters to ensure robustness
         @testset "Multiple cosmologies - structure vs direct" begin
             # Create different test cosmologies
-            cosmo1 = ext.w0waCDMCosmology(ln10Aₛ=3.044, nₛ=0.965, h=0.7, ωb=0.022, ωc=0.12, mν=0.0, w0=-1.0, wa=0.0)
-            cosmo2 = ext.w0waCDMCosmology(ln10Aₛ=2.9, nₛ=0.97, h=0.65, ωb=0.024, ωc=0.11, mν=0.1, w0=-0.8, wa=-0.3)
-            cosmo3 = ext.w0waCDMCosmology(ln10Aₛ=3.1, nₛ=0.955, h=0.75, ωb=0.021, ωc=0.13, mν=0.2, w0=-1.2, wa=0.5)
-            cosmo4 = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=1.0, ωk=0.1)
-            cosmo4 = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=-1.0, ωk=-0.1)
+            cosmo1 = w0waCDMCosmology(ln10Aₛ=3.044, nₛ=0.965, h=0.7, ωb=0.022, ωc=0.12, mν=0.0, w0=-1.0, wa=0.0)
+            cosmo2 = w0waCDMCosmology(ln10Aₛ=2.9, nₛ=0.97, h=0.65, ωb=0.024, ωc=0.11, mν=0.1, w0=-0.8, wa=-0.3)
+            cosmo3 = w0waCDMCosmology(ln10Aₛ=3.1, nₛ=0.955, h=0.75, ωb=0.021, ωc=0.13, mν=0.2, w0=-1.2, wa=0.5)
+            cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=1.0, ωk=0.1)
+            cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=-1.0, ωk=-0.1)
 
             test_cosmologies = [cosmo1, cosmo2, cosmo3, cosmo4]
             test_redshifts = [0.5, 1.5, 3.0]
@@ -193,23 +195,23 @@ if !isnothing(ext)
 
                 for z in test_redshifts
                     # Test E_z
-                    E_z_struct = ext.E_z(z, cosmo)
-                    E_z_direct = ext.E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
+                    E_z_struct = E_z(z, cosmo)
+                    E_z_direct = E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
                     @test E_z_struct == E_z_direct
 
                     # Test dL_z
-                    dL_z_struct = ext.dL_z(z, cosmo)
-                    dL_z_direct = ext.dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
+                    dL_z_struct = dL_z(z, cosmo)
+                    dL_z_direct = dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
                     @test dL_z_struct == dL_z_direct
                 end
             end
         end
-        @test isapprox(ext.r_z(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), r_z_check(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), rtol=1e-6)
-        @test isapprox(ext.r_z(10.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 10161.232807937273, rtol=2e-4)
-        @test isapprox(ext.dA_z(0.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), 0.0, rtol=1e-6)
-        @test isapprox(ext.dA_z(0.0, mycosmo), 0.0)
-        @test ext.D_z(1.0, mycosmo) == ext.D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
-        @test ext.f_z(1.0, mycosmo) == ext.f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
+        @test isapprox(r_z(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), r_z_check(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), rtol=1e-6)
+        @test isapprox(r_z(10.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 10161.232807937273, rtol=2e-4)
+        @test isapprox(dA_z(0.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), 0.0, rtol=1e-6)
+        @test isapprox(dA_z(0.0, mycosmo), 0.0)
+        @test D_z(1.0, mycosmo) == D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
+        @test f_z(1.0, mycosmo) == f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
     end
 
     @testset "Gradient tests" begin
@@ -242,32 +244,32 @@ if !isnothing(ext)
 
         # z = 0.0 values
         @testset "z = 0.0" begin
-            @test isapprox(ext.D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / ext.D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1.0, rtol=1e-6)
-            @test isapprox(ext.f_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.5336534234376753, rtol=2e-5)
-            @test isapprox(ext.E_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 67.00000032897867, rtol=1e-6)
-            @test isapprox(ext.r_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
-            @test isapprox(ext.dL_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
-            @test isapprox(ext.dA_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
+            @test isapprox(D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1.0, rtol=1e-6)
+            @test isapprox(f_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.5336534234376753, rtol=2e-5)
+            @test isapprox(E_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 67.00000032897867, rtol=1e-6)
+            @test isapprox(r_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
+            @test isapprox(dL_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
+            @test isapprox(dA_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
         end
 
         # z = 1.0 values
         @testset "z = 1.0" begin
-            @test isapprox(ext.D_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / ext.D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.5713231567487467, rtol=4e-5)
-            @test isapprox(ext.f_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.951063970660909, rtol=2e-4)
-            @test isapprox(ext.E_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 110.69104662880478, rtol=1e-4)
-            @test isapprox(ext.r_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 3796.313631546915, rtol=1e-4)
-            @test isapprox(ext.dL_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 7592.627263093831, rtol=1e-4)
-            @test isapprox(ext.dA_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1898.1568157734582, rtol=1e-4)
+            @test isapprox(D_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.5713231567487467, rtol=4e-5)
+            @test isapprox(f_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.951063970660909, rtol=2e-4)
+            @test isapprox(E_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 110.69104662880478, rtol=1e-4)
+            @test isapprox(r_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 3796.313631546915, rtol=1e-4)
+            @test isapprox(dL_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 7592.627263093831, rtol=1e-4)
+            @test isapprox(dA_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1898.1568157734582, rtol=1e-4)
         end
 
         # z = 2.0 values
         @testset "z = 2.0" begin
-            @test isapprox(ext.D_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / ext.D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.38596027450669235, rtol=1e-4)
-            @test isapprox(ext.f_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.9763011446824891, rtol=2e-4)
-            @test isapprox(ext.E_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 198.43712939715508, rtol=2e-4)
-            @test isapprox(ext.r_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 5815.253842752389, rtol=1e-4)
-            @test isapprox(ext.dL_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 17445.761528257153, rtol=1e-4)
-            @test isapprox(ext.dA_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1938.4179475841324, rtol=1e-4)
+            @test isapprox(D_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.38596027450669235, rtol=1e-4)
+            @test isapprox(f_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.9763011446824891, rtol=2e-4)
+            @test isapprox(E_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 198.43712939715508, rtol=2e-4)
+            @test isapprox(r_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 5815.253842752389, rtol=1e-4)
+            @test isapprox(dL_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 17445.761528257153, rtol=1e-4)
+            @test isapprox(dA_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1938.4179475841324, rtol=1e-4)
         end
     end
 
@@ -282,32 +284,32 @@ if !isnothing(ext)
 
         # z = 0.0 values
         @testset "z = 0.0" begin
-            @test isapprox(ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1.0, rtol=1e-6)
-            @test isapprox(ext.f_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.682532170290542, rtol=2e-5)
-            @test isapprox(ext.E_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 60.00000540313085, rtol=1e-6)
-            @test isapprox(ext.r_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
-            @test isapprox(ext.dL_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
-            @test isapprox(ext.dA_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
+            @test isapprox(D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1.0, rtol=1e-6)
+            @test isapprox(f_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.682532170290542, rtol=2e-5)
+            @test isapprox(E_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 60.00000540313085, rtol=1e-6)
+            @test isapprox(r_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
+            @test isapprox(dL_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
+            @test isapprox(dA_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
         end
 
         # z = 1.0 values
         @testset "z = 1.0" begin
-            @test isapprox(ext.D_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.5608386428835493, rtol=4e-5)
-            @test isapprox(ext.f_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.9428198389771597, rtol=2e-4)
-            @test isapprox(ext.E_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 126.63651334029939, rtol=1e-4)
-            @test isapprox(ext.r_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 3477.5826389146628, rtol=1e-4)
-            @test isapprox(ext.dL_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 6955.1652778293255, rtol=1e-4)
-            @test isapprox(ext.dA_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1738.7913194573318, rtol=1e-4)
+            @test isapprox(D_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.5608386428835493, rtol=4e-5)
+            @test isapprox(f_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.9428198389771597, rtol=2e-4)
+            @test isapprox(E_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 126.63651334029939, rtol=1e-4)
+            @test isapprox(r_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 3477.5826389146628, rtol=1e-4)
+            @test isapprox(dL_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 6955.1652778293255, rtol=1e-4)
+            @test isapprox(dA_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1738.7913194573318, rtol=1e-4)
         end
 
         # z = 2.0 values
         @testset "z = 2.0" begin
-            @test isapprox(ext.D_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / ext.D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.378970688908124, rtol=1e-4)
-            @test isapprox(ext.f_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.981855910972107, rtol=2e-4)
-            @test isapprox(ext.E_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 224.06947149941828, rtol=2e-4)
-            @test isapprox(ext.r_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 5254.860436794502, rtol=1e-4)
-            @test isapprox(ext.dL_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 15764.581310383495, rtol=1e-4)
-            @test isapprox(ext.dA_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1751.6201455981693, rtol=1e-4)
+            @test isapprox(D_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.378970688908124, rtol=1e-4)
+            @test isapprox(f_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.981855910972107, rtol=2e-4)
+            @test isapprox(E_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 224.06947149941828, rtol=2e-4)
+            @test isapprox(r_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 5254.860436794502, rtol=1e-4)
+            @test isapprox(dL_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 15764.581310383495, rtol=1e-4)
+            @test isapprox(dA_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1751.6201455981693, rtol=1e-4)
         end
     end
 
@@ -323,40 +325,40 @@ if !isnothing(ext)
 
         # z = 0.0 values
         @testset "z = 0.0" begin
-            @test isapprox(ext.D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / ext.D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1.0, rtol=1e-6)
-            @test isapprox(ext.f_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.398474183923441, rtol=2e-4)
-            @test isapprox(ext.E_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 100.0, rtol=1e-6)
-            @test isapprox(ext.r_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
-            @test isapprox(ext.dL_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
-            @test isapprox(ext.dA_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
+            @test isapprox(D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1.0, rtol=1e-6)
+            @test isapprox(f_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.398474183923441, rtol=2e-4)
+            @test isapprox(E_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 100.0, rtol=1e-6)
+            @test isapprox(r_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
+            @test isapprox(dL_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
+            @test isapprox(dA_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
         end
 
         # z = 1.0 values
         @testset "z = 1.0" begin
-            @test isapprox(ext.D_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / ext.D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.689689041142467, rtol=4e-5)
-            @test isapprox(ext.f_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.727435001392173, rtol=2e-4)
-            @test isapprox(ext.E_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 168.660901702244558, rtol=1e-4)
-            @test isapprox(ext.r_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 2207.200798324237894, rtol=1e-4)
-            @test isapprox(ext.dL_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 4454.390532901412371, rtol=1e-4)
-            @test isapprox(ext.dA_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1113.597633225352638, rtol=1e-4)
+            @test isapprox(D_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.689689041142467, rtol=4e-5)
+            @test isapprox(f_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.727435001392173, rtol=2e-4)
+            @test isapprox(E_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 168.660901702244558, rtol=1e-4)
+            @test isapprox(r_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 2207.200798324237894, rtol=1e-4)
+            @test isapprox(dL_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 4454.390532901412371, rtol=1e-4)
+            @test isapprox(dA_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1113.597633225352638, rtol=1e-4)
         end
 
         # z = 2.0 values
         @testset "z = 2.0" begin
-            @test isapprox(ext.D_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / ext.D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.495032404840887, rtol=1e-4)
-            @test isapprox(ext.f_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.882324793082423, rtol=2e-4)
-            @test isapprox(ext.E_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 259.543469580456815, rtol=2e-4)
-            @test isapprox(ext.r_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 3655.526633299333753, rtol=1e-4)
-            @test isapprox(ext.dL_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 11240.362895970827594, rtol=1e-4)
-            @test isapprox(ext.dA_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1248.929210663426375, rtol=1e-4)
+            @test isapprox(D_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.495032404840887, rtol=1e-4)
+            @test isapprox(f_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.882324793082423, rtol=2e-4)
+            @test isapprox(E_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 259.543469580456815, rtol=2e-4)
+            @test isapprox(r_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 3655.526633299333753, rtol=1e-4)
+            @test isapprox(dL_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 11240.362895970827594, rtol=1e-4)
+            @test isapprox(dA_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1248.929210663426375, rtol=1e-4)
         end
     end
 
     @testset "Missing coverage tests" begin
-        test_cosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0)
+        test_cosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0)
 
         # Test cosmology with positive curvature to hit S_of_K positive branch
-        positive_curve_cosmo = ext.w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0, ωk=0.05)
+        positive_curve_cosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0, ωk=0.05)
 
         @test ext._F(0.5) > 0.0
         @test isapprox(ext._a_z(0.0), 1.0)
@@ -366,7 +368,7 @@ if !isnothing(ext)
         @test isapprox(ext.d̃A_z(0.0, Ωcb0, h), 0.0)
         @test isapprox(ext.d̃A_z(0.0, mycosmo), 0.0)
 
-        D_f = ext.D_f_z(1.0, mycosmo)
+        D_f = D_f_z(1.0, mycosmo)
         @test length(D_f) == 2
         @test all(D_f[1] .> 0.0)
         @test all(D_f[2] .> 0.0)
@@ -376,11 +378,11 @@ if !isnothing(ext)
             r_test = 10.0  # Use smaller value to avoid sin oscillations
 
             # Case 1: Ω = 0 (flat)
-            @test ext.S_of_K(0.0, r_test) == r_test
+            @test S_of_K(0.0, r_test) == r_test
 
             # Case 2: Ω > 0 (closed/positive curvature)
             Ω_positive = 0.01
-            S_positive = ext.S_of_K(Ω_positive, r_test)
+            S_positive = S_of_K(Ω_positive, r_test)
             @test isfinite(S_positive)
             @test S_positive > 0
             # Check the sinh formula
@@ -389,7 +391,7 @@ if !isnothing(ext)
 
             # Case 3: Ω < 0 (open/negative curvature)
             Ω_negative = -0.01
-            S_negative = ext.S_of_K(Ω_negative, r_test)
+            S_negative = S_of_K(Ω_negative, r_test)
             @test isfinite(S_negative)
             # For negative curvature, S_of_K can be negative depending on the value
             # Just check the formula is correct
@@ -412,17 +414,17 @@ if !isnothing(ext)
             @test d̃M_positive > 0
 
             # Test dM_z (physical units) with direct parameters
-            dM_direct = ext.dM_z(z_test, 0.3, 0.67; mν=0.06, w0=-1.0, wa=0.0, Ωk0=0.01)
+            dM_direct = dM_z(z_test, 0.3, 0.67; mν=0.06, w0=-1.0, wa=0.0, Ωk0=0.01)
             @test isfinite(dM_direct)
             @test dM_direct > 0
 
             # Test dM_z with cosmology struct
-            dM_struct = ext.dM_z(z_test, test_cosmo)
+            dM_struct = dM_z(z_test, test_cosmo)
             @test isfinite(dM_struct)
             @test dM_struct > 0
 
             # Test dM_z with positive curvature cosmology
-            dM_positive = ext.dM_z(z_test, positive_curve_cosmo)
+            dM_positive = dM_z(z_test, positive_curve_cosmo)
             @test isfinite(dM_positive)
             @test dM_positive > 0
 
@@ -504,8 +506,8 @@ if !isnothing(ext)
 
     @testset "Type stability tests" begin
         # Test that the cosmology struct is properly defined
-        @test isa(mycosmo, ext.w0waCDMCosmology)
-        @test isa(mycosmo, ext.AbstractCosmology)
+        @test isa(mycosmo, w0waCDMCosmology)
+        @test isa(mycosmo, AbstractCosmology)
 
         # Test field access
         @test mycosmo.ln10Aₛ == 3.0
@@ -520,16 +522,16 @@ if !isnothing(ext)
 
     @testset "Edge cases and numerical stability" begin
         # Test with extreme parameter values
-        @test isfinite(ext.E_z(0.0, 0.3, 0.7))
-        @test isfinite(ext.E_z(10.0, 0.3, 0.7))
+        @test isfinite(E_z(0.0, 0.3, 0.7))
+        @test isfinite(E_z(10.0, 0.3, 0.7))
 
         # Test with vector of redshifts
         z_array = [0.0, 0.5, 1.0, 2.0, 3.0]
-        D_array = ext.D_z(z_array, Ωcb0, h)
+        D_array = D_z(z_array, Ωcb0, h)
         @test length(D_array) == length(z_array)
         @test all(isfinite.(D_array))
 
-        f_array = ext.f_z(z_array, Ωcb0, h)
+        f_array = f_z(z_array, Ωcb0, h)
         @test length(f_array) == length(z_array)
         @test all(isfinite.(f_array))
     end
@@ -552,7 +554,7 @@ if !isnothing(ext)
             # Function for ForwardDiff
             function S_flat(params)
                 Ω_val, r_vals = params[1], params[2:end]
-                return ext.S_of_K(Ω_val, r_vals)
+                return S_of_K(Ω_val, r_vals)
             end
 
             # Compute Jacobian with ForwardDiff
@@ -562,7 +564,7 @@ if !isnothing(ext)
             # Compute gradients with Zygote for each output
             J_zygote = zeros(length(r_array), length(params))
             for i in 1:length(r_array)
-                grad = Zygote.gradient(p -> ext.S_of_K(p[1], p[2:end])[i], params)[1]
+                grad = Zygote.gradient(p -> S_of_K(p[1], p[2:end])[i], params)[1]
                 J_zygote[i, :] = grad
             end
 
@@ -576,7 +578,7 @@ if !isnothing(ext)
             # Function for ForwardDiff
             function S_closed(params)
                 Ω_val, r_vals = params[1], params[2:end]
-                return ext.S_of_K(Ω_val, r_vals)
+                return S_of_K(Ω_val, r_vals)
             end
 
             # Compute Jacobian with ForwardDiff
@@ -586,7 +588,7 @@ if !isnothing(ext)
             # Compute gradients with Zygote for each output
             J_zygote = zeros(length(r_array), length(params))
             for i in 1:length(r_array)
-                grad = Zygote.gradient(p -> ext.S_of_K(p[1], p[2:end])[i], params)[1]
+                grad = Zygote.gradient(p -> S_of_K(p[1], p[2:end])[i], params)[1]
                 J_zygote[i, :] = grad
             end
 
@@ -600,7 +602,7 @@ if !isnothing(ext)
             # Function for ForwardDiff
             function S_open(params)
                 Ω_val, r_vals = params[1], params[2:end]
-                return ext.S_of_K(Ω_val, r_vals)
+                return S_of_K(Ω_val, r_vals)
             end
 
             # Compute Jacobian with ForwardDiff
@@ -610,7 +612,7 @@ if !isnothing(ext)
             # Compute gradients with Zygote for each output
             J_zygote = zeros(length(r_array), length(params))
             for i in 1:length(r_array)
-                grad = Zygote.gradient(p -> ext.S_of_K(p[1], p[2:end])[i], params)[1]
+                grad = Zygote.gradient(p -> S_of_K(p[1], p[2:end])[i], params)[1]
                 J_zygote[i, :] = grad
             end
 
@@ -628,14 +630,14 @@ if !isnothing(ext)
             r_test = 2.0
 
             # Test with scalar r using Zygote (which uses our rrule)
-            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_flat, r_test)
+            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> S_of_K(Ω, r), Ω_flat, r_test)
             @test isapprox(grad_r, 1.0, rtol=1e-10)  # dS/dr = 1 for flat
             @test isapprox(grad_Ω, r_test^3 / 6, rtol=1e-10)  # dS/dΩ = r^3/6 for flat (analytical limit)
 
             # For Ω > 0 (closed), test sinh formula derivatives
             Ω_closed = 0.01
             a = sqrt(Ω_closed)
-            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_closed, r_test)
+            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> S_of_K(Ω, r), Ω_closed, r_test)
             expected_dSdr = cosh(a * r_test)
             expected_dSdΩ = (r_test / (2 * Ω_closed)) * cosh(a * r_test) - (1 / (2 * a^3)) * sinh(a * r_test)
             @test isapprox(grad_r, expected_dSdr, rtol=1e-10)
@@ -644,7 +646,7 @@ if !isnothing(ext)
             # For Ω < 0 (open), test sin formula derivatives
             Ω_open = -0.01
             b = sqrt(-Ω_open)
-            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_open, r_test)
+            grad_Ω, grad_r = Zygote.gradient((Ω, r) -> S_of_K(Ω, r), Ω_open, r_test)
             expected_dSdr = cos(b * r_test)
             expected_dSdΩ = (sin(b * r_test) / (2 * b^3)) - (r_test / (2 * (-Ω_open))) * cos(b * r_test)
             @test isapprox(grad_r, expected_dSdr, rtol=1e-10)
@@ -667,7 +669,7 @@ if !isnothing(ext)
             r_test = 2.5
 
             # Test with Zygote (uses our custom rrule which provides analytical limit)
-            grad_Ω_zygote, grad_r_zygote = Zygote.gradient((Ω, r) -> ext.S_of_K(Ω, r), Ω_exact_zero, r_test)
+            grad_Ω_zygote, grad_r_zygote = Zygote.gradient((Ω, r) -> S_of_K(Ω, r), Ω_exact_zero, r_test)
 
             # Zygote uses rrule which provides analytical limit at Ω = 0:
             # dS/dr = 1 (since S = r when Ω = 0)
@@ -680,12 +682,12 @@ if !isnothing(ext)
 
             # Test with ForwardDiff (follows the conditional branch)
             # For Ω = 0, dS/dr = 1 (both methods agree)
-            grad_r_forward = ForwardDiff.derivative(r -> ext.S_of_K(Ω_exact_zero, r), r_test)
+            grad_r_forward = ForwardDiff.derivative(r -> S_of_K(Ω_exact_zero, r), r_test)
             @test isapprox(grad_r_forward, expected_dSdr, rtol=1e-12)
 
             # For dS/dΩ at Ω = 0, ForwardDiff gives 0 because the branch "if Ω == 0"
             # returns r, which has no Ω dependence. This is the discrete derivative.
-            grad_Ω_forward = ForwardDiff.derivative(Ω -> ext.S_of_K(Ω, r_test), Ω_exact_zero)
+            grad_Ω_forward = ForwardDiff.derivative(Ω -> S_of_K(Ω, r_test), Ω_exact_zero)
             @test isapprox(grad_Ω_forward, 0.0, atol=1e-15)  # ForwardDiff gives 0 at the branch point
 
             # Test agreement on dS/dr but NOT on dS/dΩ (they differ at Ω=0)
@@ -696,7 +698,7 @@ if !isnothing(ext)
             r_array = [0.5, 1.0, 2.0, 3.0]
 
             # Zygote gradients
-            grad_Ω_array, grad_r_array = Zygote.gradient((Ω, r) -> sum(ext.S_of_K(Ω, r)), Ω_exact_zero, r_array)
+            grad_Ω_array, grad_r_array = Zygote.gradient((Ω, r) -> sum(S_of_K(Ω, r)), Ω_exact_zero, r_array)
 
             # For Ω = 0: dS/dr = 1 for all r, so gradient should be ones
             @test all(isapprox.(grad_r_array, 1.0, rtol=1e-12))
@@ -706,7 +708,7 @@ if !isnothing(ext)
             @test isapprox(grad_Ω_array, expected_grad_Ω, rtol=1e-12)
 
             # Compare with ForwardDiff on the vectorized version
-            J_forward = ForwardDiff.jacobian(r -> ext.S_of_K(Ω_exact_zero, r), r_array)
+            J_forward = ForwardDiff.jacobian(r -> S_of_K(Ω_exact_zero, r), r_array)
             # Jacobian should be identity matrix (dSᵢ/drⱼ = δᵢⱼ for Ω=0)
             @test isapprox(J_forward, I(length(r_array)), rtol=1e-12)
         end
@@ -729,7 +731,7 @@ if !isnothing(ext)
             # E_z function
             function E_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                ext.E_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                E_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
             end
 
             E_grad = ForwardDiff.gradient(E_z_x, x)
@@ -746,7 +748,7 @@ if !isnothing(ext)
             # r_z function (comoving distance)
             function r_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                ext.r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
             end
 
             r_grad = ForwardDiff.gradient(r_z_x, x)
@@ -756,7 +758,7 @@ if !isnothing(ext)
             # dA_z function (angular diameter distance)
             function dA_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                ext.dA_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                dA_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
             end
 
             dA_grad = ForwardDiff.gradient(dA_z_x, x)
@@ -766,7 +768,7 @@ if !isnothing(ext)
             # D_z function (growth factor)
             function D_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                ext.D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
             end
 
             D_grad = ForwardDiff.gradient(D_z_x, x)
@@ -776,7 +778,7 @@ if !isnothing(ext)
             # f_z function (growth rate)
             function f_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                ext.f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
             end
 
             f_grad = ForwardDiff.gradient(f_z_x, x)
@@ -790,7 +792,7 @@ if !isnothing(ext)
 
             # E_z function works with Zygote
             function E_z_simple(Ωcb0, h)
-                ext.E_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
+                E_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
             end
 
             Ωcb0 = 0.3
@@ -819,7 +821,7 @@ if !isnothing(ext)
             # Test ForwardDiff with vector output
             function multi_D_z(x)
                 Ω, h_val = x
-                sum(ext.D_z(z_array, Ω, h_val; mν=0.0, w0=-1.0, wa=0.0))
+                sum(D_z(z_array, Ω, h_val; mν=0.0, w0=-1.0, wa=0.0))
             end
 
             grad_multi = ForwardDiff.gradient(multi_D_z, [Ωcb0, h])
@@ -834,7 +836,7 @@ if !isnothing(ext)
 
     @testset "Vectorization tests" begin
         # Create test cosmology
-        vec_cosmo = ext.w0waCDMCosmology(
+        vec_cosmo = w0waCDMCosmology(
             ln10Aₛ=3.0, nₛ=0.96, h=0.67,
             ωb=0.02237, ωc=0.12, ωk=0.01,
             mν=0.06, w0=-1.0, wa=0.0
@@ -849,16 +851,16 @@ if !isnothing(ext)
 
         @testset "E_z vectorization" begin
             # Manual list comprehension
-            E_z_manual = [ext.E_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            E_z_manual = [E_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            E_z_vectorized = ext.E_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            E_z_vectorized = E_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(E_z_manual, E_z_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            E_z_manual_cosmo = [ext.E_z(z, vec_cosmo) for z in z_array]
-            E_z_vectorized_cosmo = ext.E_z(z_array, vec_cosmo)
+            E_z_manual_cosmo = [E_z(z, vec_cosmo) for z in z_array]
+            E_z_vectorized_cosmo = E_z(z_array, vec_cosmo)
 
             @test all(isapprox.(E_z_manual_cosmo, E_z_vectorized_cosmo, rtol=1e-12))
         end
@@ -881,96 +883,96 @@ if !isnothing(ext)
 
         @testset "r_z vectorization" begin
             # Manual list comprehension
-            r_z_manual = [ext.r_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            r_z_manual = [r_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            r_z_vectorized = ext.r_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            r_z_vectorized = r_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(r_z_manual, r_z_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            r_z_manual_cosmo = [ext.r_z(z, vec_cosmo) for z in z_array]
-            r_z_vectorized_cosmo = ext.r_z(z_array, vec_cosmo)
+            r_z_manual_cosmo = [r_z(z, vec_cosmo) for z in z_array]
+            r_z_vectorized_cosmo = r_z(z_array, vec_cosmo)
 
             @test all(isapprox.(r_z_manual_cosmo, r_z_vectorized_cosmo, rtol=1e-12))
         end
 
         @testset "dM_z vectorization" begin
             # Manual list comprehension
-            dM_z_manual = [ext.dM_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            dM_z_manual = [dM_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            dM_z_vectorized = ext.dM_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            dM_z_vectorized = dM_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(dM_z_manual, dM_z_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            dM_z_manual_cosmo = [ext.dM_z(z, vec_cosmo) for z in z_array]
-            dM_z_vectorized_cosmo = ext.dM_z(z_array, vec_cosmo)
+            dM_z_manual_cosmo = [dM_z(z, vec_cosmo) for z in z_array]
+            dM_z_vectorized_cosmo = dM_z(z_array, vec_cosmo)
 
             @test all(isapprox.(dM_z_manual_cosmo, dM_z_vectorized_cosmo, rtol=1e-12))
         end
 
         @testset "dA_z vectorization" begin
             # Manual list comprehension
-            dA_z_manual = [ext.dA_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            dA_z_manual = [dA_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            dA_z_vectorized = ext.dA_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            dA_z_vectorized = dA_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(dA_z_manual, dA_z_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            dA_z_manual_cosmo = [ext.dA_z(z, vec_cosmo) for z in z_array]
-            dA_z_vectorized_cosmo = ext.dA_z(z_array, vec_cosmo)
+            dA_z_manual_cosmo = [dA_z(z, vec_cosmo) for z in z_array]
+            dA_z_vectorized_cosmo = dA_z(z_array, vec_cosmo)
 
             @test all(isapprox.(dA_z_manual_cosmo, dA_z_vectorized_cosmo, rtol=1e-12))
         end
 
         @testset "dL_z vectorization" begin
             # Manual list comprehension
-            dL_z_manual = [ext.dL_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            dL_z_manual = [dL_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            dL_z_vectorized = ext.dL_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            dL_z_vectorized = dL_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(dL_z_manual, dL_z_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            dL_z_manual_cosmo = [ext.dL_z(z, vec_cosmo) for z in z_array]
-            dL_z_vectorized_cosmo = ext.dL_z(z_array, vec_cosmo)
+            dL_z_manual_cosmo = [dL_z(z, vec_cosmo) for z in z_array]
+            dL_z_vectorized_cosmo = dL_z(z_array, vec_cosmo)
 
             @test all(isapprox.(dL_z_manual_cosmo, dL_z_vectorized_cosmo, rtol=1e-12))
         end
 
         @testset "D_z vectorization" begin
             # Manual list comprehension
-            D_z_manual = [ext.D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            D_z_manual = [D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            D_z_vectorized = ext.D_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            D_z_vectorized = D_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(D_z_manual, D_z_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            D_z_manual_cosmo = [ext.D_z(z, vec_cosmo) for z in z_array]
-            D_z_vectorized_cosmo = ext.D_z(z_array, vec_cosmo)
+            D_z_manual_cosmo = [D_z(z, vec_cosmo) for z in z_array]
+            D_z_vectorized_cosmo = D_z(z_array, vec_cosmo)
 
             @test all(isapprox.(D_z_manual_cosmo, D_z_vectorized_cosmo, rtol=1e-12))
         end
 
         @testset "f_z vectorization" begin
             # Manual list comprehension
-            f_z_manual = [ext.f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            f_z_manual = [f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            f_z_vectorized = ext.f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            f_z_vectorized = f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(f_z_manual, f_z_vectorized, rtol=1e-12))
 
             # Test with cosmology struct
-            f_z_manual_cosmo = [ext.f_z(z, vec_cosmo) for z in z_array]
-            f_z_vectorized_cosmo = ext.f_z(z_array, vec_cosmo)
+            f_z_manual_cosmo = [f_z(z, vec_cosmo) for z in z_array]
+            f_z_vectorized_cosmo = f_z(z_array, vec_cosmo)
 
             @test all(isapprox.(f_z_manual_cosmo, f_z_vectorized_cosmo, rtol=1e-12))
         end
@@ -984,13 +986,13 @@ if !isnothing(ext)
             D_manual = []
             f_manual = []
             for z in z_array
-                D_val, f_val = ext.D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+                D_val, f_val = D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
                 push!(D_manual, D_val)
                 push!(f_manual, f_val)
             end
 
             # Vectorized call - returns one tuple with two vectors
-            D_vectorized, f_vectorized = ext.D_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            D_vectorized, f_vectorized = D_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test length(D_manual) == length(D_vectorized)
             @test length(f_manual) == length(f_vectorized)
@@ -1001,12 +1003,12 @@ if !isnothing(ext)
             D_manual_cosmo = []
             f_manual_cosmo = []
             for z in z_array
-                D_val, f_val = ext.D_f_z(z, vec_cosmo)
+                D_val, f_val = D_f_z(z, vec_cosmo)
                 push!(D_manual_cosmo, D_val)
                 push!(f_manual_cosmo, f_val)
             end
 
-            D_vectorized_cosmo, f_vectorized_cosmo = ext.D_f_z(z_array, vec_cosmo)
+            D_vectorized_cosmo, f_vectorized_cosmo = D_f_z(z_array, vec_cosmo)
 
             @test length(D_manual_cosmo) == length(D_vectorized_cosmo)
             @test length(f_manual_cosmo) == length(f_vectorized_cosmo)
@@ -1020,8 +1022,8 @@ if !isnothing(ext)
 
             # Test vectorization over r with scalar Ω
             for Ω in Ω_values
-                S_manual = [ext.S_of_K(Ω, r) for r in r_values]
-                S_vectorized = ext.S_of_K(Ω, r_values)
+                S_manual = [S_of_K(Ω, r) for r in r_values]
+                S_vectorized = S_of_K(Ω, r_values)
                 @test all(isapprox.(S_manual, S_vectorized, rtol=1e-12))
             end
         end
