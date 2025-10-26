@@ -832,6 +832,117 @@ if !isnothing(ext)
             grad_multi2 = ForwardDiff.gradient(multi_D_z, [0.25, 0.72])
             @test !isapprox(grad_multi, grad_multi2, rtol=1e-2)
         end
+
+        @testset "AD with w0waCDMCosmology struct" begin
+            # Test differentiation using the cosmology struct
+            # z is FIXED (not differentiated), only cosmological parameters are differentiated
+            z_fixed = 1.0
+
+            # Parameter vector for struct-based approach: [ln10As, ns, h, ωb, ωc, mν, w0, wa]
+            # Note: z is NOT included in this vector
+            cosmo_params_struct = [3.044, 0.9649, 0.6736, 0.02237, 0.12, 0.06, -1.0, 0.0]
+
+            # Function that creates cosmology from params and evaluates D_z
+            function D_z_with_struct(params)
+                ln10As, ns, h, ωb, ωc, mν, w0, wa = params
+                cosmo = w0waCDMCosmology(
+                    ln10Aₛ = ln10As, nₛ = ns, h = h,
+                    ωb = ωb, ωc = ωc, mν = mν,
+                    w0 = w0, wa = wa
+                )
+                return D_z(z_fixed, cosmo)
+            end
+
+            # Function using direct parameters (existing approach from earlier tests)
+            function D_z_direct_params(params)
+                ln10As, ns, h, ωb, ωc, mν, w0, wa = params
+                Ωcb0 = (ωb + ωc) / h^2
+                return D_z(z_fixed, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+            end
+
+            @testset "ForwardDiff with cosmology struct" begin
+                grad_fd_struct = ForwardDiff.gradient(D_z_with_struct, cosmo_params_struct)
+                @test all(isfinite.(grad_fd_struct))
+                @test length(grad_fd_struct) == 8
+            end
+
+            @testset "Zygote with cosmology struct" begin
+                grad_zy_struct = Zygote.gradient(D_z_with_struct, cosmo_params_struct)[1]
+                @test all(isfinite.(grad_zy_struct))
+                @test length(grad_zy_struct) == 8
+            end
+
+            @testset "FiniteDifferences with cosmology struct" begin
+                grad_finite_struct = grad(central_fdm(5, 1), D_z_with_struct, cosmo_params_struct)[1]
+                @test all(isfinite.(grad_finite_struct))
+                @test length(grad_finite_struct) == 8
+            end
+
+            @testset "Compare struct vs direct parameters" begin
+                # Compute gradients with both approaches
+                grad_fd_struct = ForwardDiff.gradient(D_z_with_struct, cosmo_params_struct)
+                grad_fd_direct = ForwardDiff.gradient(D_z_direct_params, cosmo_params_struct)
+
+                grad_zy_struct = Zygote.gradient(D_z_with_struct, cosmo_params_struct)[1]
+                grad_zy_direct = Zygote.gradient(D_z_direct_params, cosmo_params_struct)[1]
+
+                grad_finite_struct = grad(central_fdm(5, 1), D_z_with_struct, cosmo_params_struct)[1]
+                grad_finite_direct = grad(central_fdm(5, 1), D_z_direct_params, cosmo_params_struct)[1]
+
+                # The struct and direct approaches should give identical results
+                @test isapprox(grad_fd_struct, grad_fd_direct, rtol=1e-10)
+                @test isapprox(grad_zy_struct, grad_zy_direct, rtol=1e-10)
+                @test isapprox(grad_finite_struct, grad_finite_direct, rtol=1e-10)
+            end
+
+            @testset "Consistency between AD methods (struct version)" begin
+                grad_fd = ForwardDiff.gradient(D_z_with_struct, cosmo_params_struct)
+                grad_zy = Zygote.gradient(D_z_with_struct, cosmo_params_struct)[1]
+                grad_finite = grad(central_fdm(5, 1), D_z_with_struct, cosmo_params_struct)[1]
+
+                # All three AD methods should agree
+                @test isapprox(grad_fd, grad_finite, rtol=1e-3)
+                @test isapprox(grad_zy, grad_finite, rtol=1e-3)
+                @test isapprox(grad_fd, grad_zy, rtol=1e-4)
+            end
+
+            @testset "Consistency between AD methods (direct version)" begin
+                grad_fd = ForwardDiff.gradient(D_z_direct_params, cosmo_params_struct)
+                grad_zy = Zygote.gradient(D_z_direct_params, cosmo_params_struct)[1]
+                grad_finite = grad(central_fdm(5, 1), D_z_direct_params, cosmo_params_struct)[1]
+
+                # All three AD methods should agree
+                @test isapprox(grad_fd, grad_finite, rtol=1e-3)
+                @test isapprox(grad_zy, grad_finite, rtol=1e-3)
+                @test isapprox(grad_fd, grad_zy, rtol=1e-4)
+            end
+
+            # Similar tests for f_z
+            function f_z_with_struct(params)
+                ln10As, ns, h, ωb, ωc, mν, w0, wa = params
+                cosmo = w0waCDMCosmology(
+                    ln10Aₛ = ln10As, nₛ = ns, h = h,
+                    ωb = ωb, ωc = ωc, mν = mν,
+                    w0 = w0, wa = wa
+                )
+                return f_z(z_fixed, cosmo)
+            end
+
+            function f_z_direct_params(params)
+                ln10As, ns, h, ωb, ωc, mν, w0, wa = params
+                Ωcb0 = (ωb + ωc) / h^2
+                return f_z(z_fixed, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+            end
+
+            @testset "f_z: struct vs direct parameters" begin
+                grad_fd_struct = ForwardDiff.gradient(f_z_with_struct, cosmo_params_struct)
+                grad_fd_direct = ForwardDiff.gradient(f_z_direct_params, cosmo_params_struct)
+
+                @test all(isfinite.(grad_fd_struct))
+                @test length(grad_fd_struct) == 8
+                @test isapprox(grad_fd_struct, grad_fd_direct, rtol=1e-10)
+            end
+        end
     end
 
     @testset "Vectorization tests" begin
