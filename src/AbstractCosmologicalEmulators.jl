@@ -3,7 +3,9 @@ module AbstractCosmologicalEmulators
 using Base: @kwdef
 using Adapt
 using ChainRulesCore
+using JSON
 using Lux
+using NPZ
 using SimpleChains
 
 export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator

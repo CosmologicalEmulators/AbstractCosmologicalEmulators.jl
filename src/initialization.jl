@@ -139,3 +139,42 @@ function init_emulator(NN_dict::AbstractDict{String,Any}, weight, ::Type{SimpleC
     end
     return _init_simplechainsemulator(NN_dict, weight)
 end
+
+function load_trained_emulator(path::String;
+                               backend=SimpleChainsEmulator,
+                               weights_file="weights.npy",
+                               inminmax_file="inminmax.npy",
+                               outminmax_file="outminmax.npy",
+                               nn_setup_file="nn_setup.json",
+                               postprocessing_file="postprocessing.jl",
+                               metadata_file="metadata.json",
+                               validate::Bool=true)
+
+    # Load NN architecture and weights
+    nn_dict = JSON.parsefile(joinpath(path, nn_setup_file))
+    weights = NPZ.npzread(joinpath(path, weights_file))
+    trained_nn = init_emulator(nn_dict, weights, backend; validate=validate)
+
+    # Load normalization
+    inminmax = NPZ.npzread(joinpath(path, inminmax_file))
+    outminmax = NPZ.npzread(joinpath(path, outminmax_file))
+
+    # Load postprocessing function
+    postprocessing = include(joinpath(path, postprocessing_file))
+
+    # Load metadata if exists
+    description = Dict()
+    metadata_path = joinpath(path, metadata_file)
+    if isfile(metadata_path)
+        description = JSON.parsefile(metadata_path)
+    end
+
+    # Construct GenericEmulator
+    return GenericEmulator(
+        TrainedEmulator = trained_nn,
+        InMinMax = inminmax,
+        OutMinMax = outminmax,
+        Postprocessing = postprocessing,
+        Description = description
+    )
+end

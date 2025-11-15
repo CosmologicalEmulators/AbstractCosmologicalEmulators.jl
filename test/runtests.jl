@@ -2,6 +2,7 @@ using Test
 
 # Include all test dependencies at the top level
 using JSON
+using NPZ
 using SimpleChains
 using ForwardDiff
 using Zygote
@@ -28,4 +29,7 @@ using AbstractCosmologicalEmulators
 
     # Numerical safety validation tests
     include("test_numerical_safety.jl")
+
+    # GenericEmulator tests
+    include("test_generic_emulator.jl")
 end
