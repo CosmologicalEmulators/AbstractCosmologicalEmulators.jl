@@ -35,4 +35,7 @@ using AbstractCosmologicalEmulators
 
     # Akima interpolation tests
     include("test_akima_interpolation.jl")
+
+    # Edge cases and additional coverage tests
+    include("test_edge_cases.jl")
 end
