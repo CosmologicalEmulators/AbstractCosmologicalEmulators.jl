@@ -7,8 +7,6 @@ using JSON
 using Lux
 using NPZ
 using SimpleChains
-using Zygote
-using Zygote: @adjoint
 
 export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator
 export maximin, inv_maximin, run_emulator, get_emulator_description, init_emulator
