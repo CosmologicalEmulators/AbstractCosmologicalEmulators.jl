@@ -20,7 +20,7 @@ end
 # Akima Spline Chainrules
 # =============================================================================
 
-@adjoint function _akima_slopes(u::AbstractVector, t::AbstractVector)                   # length n-1
+function ChainRulesCore.rrule(::typeof(_akima_slopes), u::AbstractVector, t::AbstractVector)
     n = length(u)
     dt = diff(t)                     # length n-1
     m = zeros(eltype(u), n + 3)
@@ -31,9 +31,9 @@ end
     m[n+2] = 2m[n+1] - m[n]
     m[n+3] = 2m[n+2] - m[n+1]
 
-    function pullback(Δm)
-        # Ensure gm is a mutable array - handles Fill arrays and other immutable types
-        gm = collect(Δm)             # running adjoint of m
+    function _akima_slopes_pullback(Δm)
+        # Ensure gm is a mutable array - handles Fill arrays, thunks, and other immutable types
+        gm = collect(ChainRulesCore.unthunk(Δm))  # running adjoint of m
 
         # --- extrapolation terms: do them in *reverse* program order ---
 
@@ -74,13 +74,13 @@ end
             δt[i+1] -= g * diffu * invdt2
         end
 
-        return (δu, δt)
+        return (NoTangent(), δu, δt)
     end
 
-    return m, pullback
+    return m, _akima_slopes_pullback
 end
 
-@adjoint function _akima_coefficients(t, m)
+function ChainRulesCore.rrule(::typeof(_akima_coefficients), t, m)
     n = length(t)
     dt = diff(t)
 
@@ -104,7 +104,9 @@ end
     d = (b[1:(end-1)] .+ b[2:end] .- 2 .* m[3:(end-2)]) ./ dt .^ 2
 
     function _akima_coefficients_pullback(Δ)
-        Δb, Δc, Δd = Δ
+        # Unthunk the input tangent
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+        Δb, Δc, Δd = Δ_unthunked
 
         # Pre-allocate gradient arrays once and reuse - major optimization
         ∂t = zeros(eltype(t), length(t))
@@ -192,13 +194,13 @@ end
             @. ∂m[2:end] += ∂diff_m
         end
 
-        return (∂t, ∂m)
+        return (NoTangent(), ∂t, ∂m)
     end
 
     return (b, c, d), _akima_coefficients_pullback
 end
 
-@adjoint function _akima_eval(u, t, b, c, d, tq::AbstractArray)
+function ChainRulesCore.rrule(::typeof(_akima_eval), u, t, b, c, d, tq::AbstractArray)
     # Forward pass - Replace map() with pre-allocated loop for better performance
     n_query = length(tq)
     # Promote ALL input types for proper ForwardDiff support
@@ -213,18 +215,21 @@ end
         results[i] = ((d[idx] * wj + c[idx]) * wj + b[idx]) * wj + u[idx]
     end
 
-    function pullback(ȳ)
+    function _akima_eval_pullback(ȳ)
+        # Unthunk the input tangent
+        ȳ_unthunked = ChainRulesCore.unthunk(ȳ)
+
         # Pre-allocate all gradients once for better memory efficiency
         ū_total = zero(u)
         t̄_total = zero(t)
         b̄_total = zero(b)
         c̄_total = zero(c)
         d̄_total = zero(d)
-        tq̄ = similar(tq, promote_type(eltype(ȳ), eltype(tq)))
+        tq̄ = similar(tq, promote_type(eltype(ȳ_unthunked), eltype(tq)))
 
         # Optimized gradient accumulation loop with better SIMD potential
         @inbounds for i in eachindex(tq)
-            ȳ_i = ȳ[i]
+            ȳ_i = ȳ_unthunked[i]
             if !iszero(ȳ_i)  # Skip computation for zero gradients
                 idx = _akima_find_interval(t, tq[i])
                 wj = tq[i] - t[idx]
@@ -246,13 +251,13 @@ end
             end
         end
 
-        return ū_total, t̄_total, b̄_total, c̄_total, d̄_total, tq̄
+        return NoTangent(), ū_total, t̄_total, b̄_total, c̄_total, d̄_total, tq̄
     end
 
-    return results, pullback
+    return results, _akima_eval_pullback
 end
 
-@adjoint function _akima_slopes(u::AbstractMatrix, t)
+function ChainRulesCore.rrule(::typeof(_akima_slopes), u::AbstractMatrix, t)
     n, n_cols = size(u)
     dt = diff(t)
     m = zeros(promote_type(eltype(u), eltype(t)), n + 3, n_cols)
@@ -266,13 +271,16 @@ end
         m[n+3, col] = 2m[n+2, col] - m[n+1, col]
     end
 
-    function pullback_matrix(Δm)
+    function _akima_slopes_matrix_pullback(Δm)
+        # Unthunk the input tangent
+        Δm_unthunked = ChainRulesCore.unthunk(Δm)
+
         ∂u = zero(u)
         ∂t = zero(t)
 
         # Process each column using the vector adjoint logic
         for col in 1:n_cols
-            Δm_col = collect(Δm[:, col])
+            Δm_col = collect(Δm_unthunked[:, col])
 
             # Apply vector adjoint logic for this column
             # Extrapolation terms in reverse order
@@ -304,13 +312,13 @@ end
             end
         end
 
-        return (∂u, ∂t)
+        return (NoTangent(), ∂u, ∂t)
     end
 
-    return m, pullback_matrix
+    return m, _akima_slopes_matrix_pullback
 end
 
-@adjoint function _akima_coefficients(t, m::AbstractMatrix)
+function ChainRulesCore.rrule(::typeof(_akima_coefficients), t, m::AbstractMatrix)
     # Optimized matrix version without recursive Zygote calls
 
     n = length(t)
@@ -344,13 +352,19 @@ end
         d[:, col] = (view(b, 1:(n-1), col) .+ view(b, 2:n, col) .- 2 .* view(m, 3:(n+1), col)) ./ dt .^ 2
     end
 
-    function pullback_matrix_coeffs(Δ)
-        Δb, Δc, Δd = Δ
+    function _akima_coefficients_matrix_pullback(Δ)
+        # Unthunk the input tangent
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+        Δb, Δc, Δd = Δ_unthunked
 
-        # Handle Nothing for unused outputs
-        Δb_local = Δb === nothing ? zeros(eltype(m), n, n_cols) : copy(Δb)
-        Δc_local = Δc === nothing ? zeros(eltype(m), n - 1, n_cols) : Δc
-        Δd_local = Δd === nothing ? zeros(eltype(m), n - 1, n_cols) : Δd
+        # Handle Nothing and ZeroTangent for unused outputs - unthunk each component individually
+        Δb_unthunked = ChainRulesCore.unthunk(Δb)
+        Δc_unthunked = ChainRulesCore.unthunk(Δc)
+        Δd_unthunked = ChainRulesCore.unthunk(Δd)
+
+        Δb_local = (Δb === nothing || Δb_unthunked isa ChainRulesCore.ZeroTangent) ? zeros(eltype(m), n, n_cols) : copy(Δb_unthunked)
+        Δc_local = (Δc === nothing || Δc_unthunked isa ChainRulesCore.ZeroTangent) ? zeros(eltype(m), n - 1, n_cols) : Δc_unthunked
+        Δd_local = (Δd === nothing || Δd_unthunked isa ChainRulesCore.ZeroTangent) ? zeros(eltype(m), n - 1, n_cols) : Δd_unthunked
 
         ∂t = zeros(eltype(t), n)
         ∂m = zeros(eltype(m), n + 3, n_cols)
@@ -409,13 +423,13 @@ end
             end
         end
 
-        return (∂t, ∂m)
+        return (NoTangent(), ∂t, ∂m)
     end
 
-    return (b, c, d), pullback_matrix_coeffs
+    return (b, c, d), _akima_coefficients_matrix_pullback
 end
 
-@adjoint function _akima_eval(u::AbstractMatrix, t, b::AbstractMatrix, c::AbstractMatrix,
+function ChainRulesCore.rrule(::typeof(_akima_eval), u::AbstractMatrix, t, b::AbstractMatrix, c::AbstractMatrix,
                                d::AbstractMatrix, tq::AbstractArray)
     n_query = length(tq)
     n_cols = size(u, 2)
@@ -433,13 +447,16 @@ end
         end
     end
 
-    function pullback_matrix_eval(ȳ)
+    function _akima_eval_matrix_pullback(ȳ)
+        # Unthunk the input tangent
+        ȳ_unthunked = ChainRulesCore.unthunk(ȳ)
+
         ū = zero(u)
         t̄ = zero(t)
         b̄ = zero(b)
         c̄ = zero(c)
         d̄ = zero(d)
-        tq̄ = zeros(promote_type(eltype(ȳ), eltype(tq)), n_query)
+        tq̄ = zeros(promote_type(eltype(ȳ_unthunked), eltype(tq)), n_query)
 
         # Compute gradients for all columns
         @inbounds for i in 1:n_query
@@ -452,7 +469,7 @@ end
             t̄_accum = zero(eltype(t̄))
 
             @simd for col in 1:n_cols
-                ȳ_ic = ȳ[i, col]
+                ȳ_ic = ȳ_unthunked[i, col]
                 if !iszero(ȳ_ic)
                     # Polynomial derivative: f'(w) = 3*d*w² + 2*c*w + b
                     dwj = 3 * d[idx, col] * wj_sq + 2 * c[idx, col] * wj + b[idx, col]
@@ -470,8 +487,189 @@ end
             tq̄[i] = tq̄_accum
         end
 
-        return ū, t̄, b̄, c̄, d̄, tq̄
+        return NoTangent(), ū, t̄, b̄, c̄, d̄, tq̄
     end
 
-    return results, pullback_matrix_eval
+    return results, _akima_eval_matrix_pullback
+end
+
+# =============================================================================
+# Fused rrule for _akima_interpolation (vector version) - Performance Optimization
+# =============================================================================
+#
+# This fused rule manually composes the pullbacks of:
+#   - _akima_slopes
+#   - _akima_coefficients
+#   - _akima_eval
+# into a single pullback function, avoiding intermediate allocations and function call overhead.
+#
+function ChainRulesCore.rrule(::typeof(_akima_interpolation), u::AbstractVector, t::AbstractVector, t_new::AbstractArray)
+    n = length(u)
+    dt = diff(t)
+
+    # === Forward Pass ===
+    # Compute slopes
+    m = zeros(eltype(u), n + 3)
+    m[3:(n+1)] .= diff(u) ./ dt
+    m[2] = 2m[3] - m[4]
+    m[1] = 2m[2] - m[3]
+    m[n+2] = 2m[n+1] - m[n]
+    m[n+3] = 2m[n+2] - m[n+1]
+
+    # Compute coefficients
+    eps_akima = eps(eltype(m)) * 100
+    b = (m[4:end] .+ m[1:(end-3)]) ./ 2
+
+    dm = abs.(diff(m))
+    f1 = dm[3:(n+2)]
+    f2 = dm[1:n]
+    f12 = f1 + f2
+    use_weighted = f12 .> eps_akima
+
+    for i in eachindex(f12)
+        if use_weighted[i]
+            b[i] = (f1[i] * m[i+1] + f2[i] * m[i+2]) / f12[i]
+        end
+    end
+
+    c = (3 .* m[3:(end-2)] .- 2 .* b[1:(end-1)] .- b[2:end]) ./ dt
+    d = (b[1:(end-1)] .+ b[2:end] .- 2 .* m[3:(end-2)]) ./ dt .^ 2
+
+    # Evaluate at query points
+    n_query = length(t_new)
+    T = promote_type(eltype(u), eltype(t), eltype(b), eltype(c), eltype(d), eltype(t_new))
+    results = zeros(T, n_query)
+
+    @inbounds for i in eachindex(t_new)
+        idx = _akima_find_interval(t, t_new[i])
+        wj = t_new[i] - t[idx]
+        results[i] = ((d[idx] * wj + c[idx]) * wj + b[idx]) * wj + u[idx]
+    end
+
+    # === Fused Pullback ===
+    function _akima_interpolation_fused_pullback(ȳ)
+        ȳ_unthunked = ChainRulesCore.unthunk(ȳ)
+
+        # Gradients w.r.t. final outputs (will be accumulated)
+        ∂u = zero(u)
+        ∂t = zero(t)
+        ∂t_new = similar(t_new, promote_type(eltype(ȳ_unthunked), eltype(t_new)))
+
+        # === Pullback through _akima_eval ===
+        ∂b = zero(b)
+        ∂c = zero(c)
+        ∂d = zero(d)
+
+        @inbounds for i in eachindex(t_new)
+            ȳ_i = ȳ_unthunked[i]
+            if !iszero(ȳ_i)
+                idx = _akima_find_interval(t, t_new[i])
+                wj = t_new[i] - t[idx]
+                wj_sq = wj * wj
+
+                # Polynomial derivative: f'(w) = 3*d*w² + 2*c*w + b
+                dwj = 3 * d[idx] * wj_sq + 2 * c[idx] * wj + b[idx]
+
+                ∂u[idx] += ȳ_i
+                ∂t[idx] -= ȳ_i * dwj
+                ∂t_new[i] = ȳ_i * dwj
+                ∂b[idx] += ȳ_i * wj
+                ∂c[idx] += ȳ_i * wj_sq
+                ∂d[idx] += ȳ_i * wj * wj_sq
+            else
+                ∂t_new[i] = zero(eltype(∂t_new))
+            end
+        end
+
+        # === Pullback through _akima_coefficients ===
+        ∂m = zero(m)
+        dt_inv = @. 1.0 / dt
+        dt_inv_sq = @. dt_inv^2
+
+        # From d computation
+        @. ∂b[1:(end-1)] += ∂d * dt_inv_sq
+        @. ∂b[2:end] += ∂d * dt_inv_sq
+        @. ∂m[3:(end-2)] -= 2.0 * ∂d * dt_inv_sq
+
+        ∂dt_from_d = @. -2.0 * ∂d * (b[1:(end-1)] + b[2:end] - 2.0 * m[3:(end-2)]) * dt_inv_sq / dt
+        @. ∂t[1:(end-1)] -= ∂dt_from_d
+        @. ∂t[2:end] += ∂dt_from_d
+
+        # From c computation
+        @. ∂m[3:(end-2)] += 3.0 * ∂c * dt_inv
+        @. ∂b[1:(end-1)] -= 2.0 * ∂c * dt_inv
+        @. ∂b[2:end] -= ∂c * dt_inv
+
+        ∂dt_from_c = @. -∂c * (3.0 * m[3:(end-2)] - 2.0 * b[1:(end-1)] - b[2:end]) * dt_inv^2
+        @. ∂t[1:(end-1)] -= ∂dt_from_c
+        @. ∂t[2:end] += ∂dt_from_c
+
+        # From b computation (conditional)
+        ∂f1 = zeros(eltype(f1), length(f1))
+        ∂f2 = zeros(eltype(f2), length(f2))
+        ∂f12 = zeros(eltype(f12), length(f12))
+
+        for i in eachindex(use_weighted)
+            if use_weighted[i]
+                f12_inv_i = 1.0 / f12[i]
+                ∂f1[i] += ∂b[i] * m[i+1] * f12_inv_i
+                ∂f2[i] += ∂b[i] * m[i+2] * f12_inv_i
+                ∂m[i+1] += ∂b[i] * f1[i] * f12_inv_i
+                ∂m[i+2] += ∂b[i] * f2[i] * f12_inv_i
+                ∂f12[i] += -∂b[i] * (f1[i] * m[i+1] + f2[i] * m[i+2]) * f12_inv_i^2
+            else
+                ∂m[i+3] += ∂b[i] / 2
+                ∂m[i] += ∂b[i] / 2
+            end
+        end
+
+        # f12 = f1 + f2
+        @. ∂f1 += ∂f12
+        @. ∂f2 += ∂f12
+
+        # dm = abs.(diff(m))
+        ∂dm = zeros(eltype(dm), length(dm))
+        @. ∂dm[3:(n+2)] += ∂f1
+        @. ∂dm[1:n] += ∂f2
+
+        diff_m = diff(m)
+        ∂diff_m = @. ∂dm * sign(diff_m)
+
+        # diff(m) pullback
+        @. ∂m[1:(end-1)] -= ∂diff_m
+        @. ∂m[2:end] += ∂diff_m
+
+        # === Pullback through _akima_slopes ===
+        # Extrapolation terms in reverse order
+        ∂m[n+2] += 2∂m[n+3]
+        ∂m[n+1] -= ∂m[n+3]
+        ∂m[n+1] += 2∂m[n+2]
+        ∂m[n] -= ∂m[n+2]
+        ∂m[2] += 2∂m[1]
+        ∂m[3] -= ∂m[1]
+        ∂m[3] += 2∂m[2]
+        ∂m[4] -= ∂m[2]
+
+        # Interior slopes
+        sm_bar = ∂m[3:(n+1)]
+
+        @inbounds for i in 1:n-1
+            g = sm_bar[i]
+            invdt = 1 / dt[i]
+
+            # w.r.t. u
+            ∂u[i] -= g * invdt
+            ∂u[i+1] += g * invdt
+
+            # w.r.t. t
+            diffu = u[i+1] - u[i]
+            invdt2 = invdt^2
+            ∂t[i] += g * diffu * invdt2
+            ∂t[i+1] -= g * diffu * invdt2
+        end
+
+        return (NoTangent(), ∂u, ∂t, ∂t_new)
+    end
+
+    return results, _akima_interpolation_fused_pullback
 end
