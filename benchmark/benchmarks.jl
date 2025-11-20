@@ -442,24 +442,24 @@ const y_matrix_medium = hcat([sin.(2π .* x_akima_medium .+ i) .+ 0.1 .* randn(n
 SUITE["akima"]["forward"] = BenchmarkGroup(["vector", "matrix"])
 
 # Vector version benchmarks (single interpolation)
-SUITE["akima"]["forward"]["vector_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+SUITE["akima"]["forward"]["vector_small"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
     $y_akima_small, $x_akima_small, $x_eval_small
 )
 
-SUITE["akima"]["forward"]["vector_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+SUITE["akima"]["forward"]["vector_medium"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
     $y_akima_medium, $x_akima_medium, $x_eval_medium
 )
 
-SUITE["akima"]["forward"]["vector_large"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+SUITE["akima"]["forward"]["vector_large"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
     $y_akima_large, $x_akima_large, $x_eval_large
 )
 
 # Matrix version benchmarks (multiple interpolations)
-SUITE["akima"]["forward"]["matrix_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+SUITE["akima"]["forward"]["matrix_small"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
     $y_matrix_small, $x_akima_small, $x_eval_small
 )
 
-SUITE["akima"]["forward"]["matrix_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+SUITE["akima"]["forward"]["matrix_medium"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
     $y_matrix_medium, $x_akima_medium, $x_eval_medium
 )
 
@@ -502,13 +502,13 @@ SUITE["akima"]["components"]["coefficients_large"] = @benchmarkable AbstractCosm
 
 # Scalar function for vector interpolation (gradient w.r.t. y data)
 function akima_scalar_y(y, x, x_eval)
-    result = AbstractCosmologicalEmulators._akima_interpolation(y, x, x_eval)
+    result = AbstractCosmologicalEmulators.akima_interpolation(y, x, x_eval)
     return sum(result)
 end
 
 # Scalar function for matrix interpolation
 function akima_scalar_y_matrix(y_matrix, x, x_eval)
-    result = AbstractCosmologicalEmulators._akima_interpolation(y_matrix, x, x_eval)
+    result = AbstractCosmologicalEmulators.akima_interpolation(y_matrix, x, x_eval)
     return sum(result)
 end
 
@@ -590,7 +590,7 @@ for n in [10, 25, 50, 100, 200, 500]
     x_nodes = sort(vcat([0.0], rand(n - 2), [1.0]))
     y_nodes = sin.(2π .* x_nodes) .+ 0.1 .* randn(n)
 
-    SUITE["akima"]["scaling"]["nodes_$(n)"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+    SUITE["akima"]["scaling"]["nodes_$(n)"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
         $y_nodes, $x_nodes, $x_eval_fixed
     )
 end
@@ -602,7 +602,7 @@ const y_nodes_fixed = y_akima_medium
 for n_eval in [10, 50, 100, 250, 500, 1000]
     x_eval_var = sort(rand(n_eval))
 
-    SUITE["akima"]["scaling"]["eval_$(n_eval)"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+    SUITE["akima"]["scaling"]["eval_$(n_eval)"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
         $y_nodes_fixed, $x_nodes_fixed, $x_eval_var
     )
 end

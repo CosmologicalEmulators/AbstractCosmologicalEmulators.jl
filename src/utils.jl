@@ -426,7 +426,7 @@ function _akima_eval(u, t, b, c, d, tq::AbstractArray)
 end
 
 """
-    _akima_interpolation(u, t, t_new)
+    akima_interpolation(u, t, t_new)
 
 Evaluates the one-dimensional Akima spline that interpolates the data points ``(t_i, u_i)``
 at new abscissae `t_new`.
@@ -461,12 +461,12 @@ d_j = \\frac{b_j + b_{j+1} - 2m_j}{(t_{j+1}-t_j)^2}
 \\]
 
 # Automatic Differentiation
-The implementation is free of mutation on the inputs and uses only element-wise arithmetic, making the returned value differentiable with both `ForwardDiff.jl` (dual numbers) and `Zygote.jl` (reverse-mode AD). You can therefore embed `_akima_interpolation` in optimization or machine-learning pipelines and back-propagate through the interpolation seamlessly.
+The implementation is free of mutation on the inputs and uses only element-wise arithmetic, making the returned value differentiable with both `ForwardDiff.jl` (dual numbers) and `Zygote.jl` (reverse-mode AD). You can therefore embed `akima_interpolation` in optimization or machine-learning pipelines and back-propagate through the interpolation seamlessly.
 
 # Notes
 The algorithm and numerical results are equivalent to the Akima spline in `DataInterpolations.jl`, but this routine is self-contained and avoids any package dependency.
 """
-function _akima_interpolation(u, t, t_new)
+function akima_interpolation(u, t, t_new)
     n = length(t)
     dt = diff(t)
 
@@ -608,7 +608,7 @@ function _akima_eval(u::AbstractMatrix, t, b::AbstractMatrix, c::AbstractMatrix,
 end
 
 """
-    _akima_interpolation(u::AbstractMatrix, t, t_new)
+    akima_interpolation(u::AbstractMatrix, t, t_new)
 
 Akima spline interpolation for multiple data series sharing the same x-coordinates.
 Uses a simple comprehension-based approach that is compatible with automatic differentiation.
@@ -628,10 +628,10 @@ k_in = range(0.01, 0.3, length=50)
 k_out = range(0.01, 0.3, length=100)
 jacobian = randn(50, 11)  # 11 parameters
 
-result = _akima_interpolation(jacobian, k_in, k_out)  # (100, 11)
+result = akima_interpolation(jacobian, k_in, k_out)  # (100, 11)
 ```
 """
-function _akima_interpolation(u::AbstractMatrix, t, t_new)
+function akima_interpolation(u::AbstractMatrix, t, t_new)
     # Matrix-native implementation: compute shared operations once for all columns
     # This is much more efficient than column-wise processing, especially for Jacobians
     # Key optimization: diff(t) computed once instead of n_cols times

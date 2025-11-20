@@ -494,7 +494,7 @@ function ChainRulesCore.rrule(::typeof(_akima_eval), u::AbstractMatrix, t, b::Ab
 end
 
 # =============================================================================
-# Fused rrule for _akima_interpolation (vector version) - Performance Optimization
+# Fused rrule for akima_interpolation (vector version) - Performance Optimization
 # =============================================================================
 #
 # This fused rule manually composes the pullbacks of:
@@ -503,7 +503,7 @@ end
 #   - _akima_eval
 # into a single pullback function, avoiding intermediate allocations and function call overhead.
 #
-function ChainRulesCore.rrule(::typeof(_akima_interpolation), u::AbstractVector, t::AbstractVector, t_new::AbstractArray)
+function ChainRulesCore.rrule(::typeof(akima_interpolation), u::AbstractVector, t::AbstractVector, t_new::AbstractArray)
     n = length(u)
     dt = diff(t)
 
@@ -547,7 +547,7 @@ function ChainRulesCore.rrule(::typeof(_akima_interpolation), u::AbstractVector,
     end
 
     # === Fused Pullback ===
-    function _akima_interpolation_fused_pullback(ȳ)
+    function akima_interpolation_fused_pullback(ȳ)
         ȳ_unthunked = ChainRulesCore.unthunk(ȳ)
 
         # Gradients w.r.t. final outputs (will be accumulated)
@@ -671,5 +671,5 @@ function ChainRulesCore.rrule(::typeof(_akima_interpolation), u::AbstractVector,
         return (NoTangent(), ∂u, ∂t, ∂t_new)
     end
 
-    return results, _akima_interpolation_fused_pullback
+    return results, akima_interpolation_fused_pullback
 end

@@ -24,22 +24,22 @@ const INTERP_Y = rand(N_INTERP)
         x2 = INTERP_X2
 
         @testset "ForwardDiff vs Zygote: Complete Pipeline" begin
-            # Test the full _akima_interpolation pipeline
+            # Test the full akima_interpolation pipeline
             @testset "Gradient w.r.t. y (data values)" begin
-                grad_fd = ForwardDiff.gradient(y -> sum(AbstractCosmologicalEmulators._akima_interpolation(y, x1, x2)), y)
-                grad_zy = Zygote.gradient(y -> sum(AbstractCosmologicalEmulators._akima_interpolation(y, x1, x2)), y)[1]
+                grad_fd = ForwardDiff.gradient(y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), y)
+                grad_zy = Zygote.gradient(y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), y)[1]
                 @test grad_fd ≈ grad_zy rtol=1e-9
             end
 
             @testset "Gradient w.r.t. x1 (input grid)" begin
-                grad_fd = ForwardDiff.gradient(x1 -> sum(AbstractCosmologicalEmulators._akima_interpolation(y, x1, x2)), x1)
-                grad_zy = Zygote.gradient(x1 -> sum(AbstractCosmologicalEmulators._akima_interpolation(y, x1, x2)), x1)[1]
+                grad_fd = ForwardDiff.gradient(x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x1)
+                grad_zy = Zygote.gradient(x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x1)[1]
                 @test grad_fd ≈ grad_zy rtol=1e-9
             end
 
             @testset "Gradient w.r.t. x2 (query points)" begin
-                grad_fd = ForwardDiff.gradient(x2 -> sum(AbstractCosmologicalEmulators._akima_interpolation(y, x1, x2)), x2)
-                grad_zy = Zygote.gradient(x2 -> sum(AbstractCosmologicalEmulators._akima_interpolation(y, x1, x2)), x2)[1]
+                grad_fd = ForwardDiff.gradient(x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x2)
+                grad_zy = Zygote.gradient(x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x2)[1]
                 @test grad_fd ≈ grad_zy rtol=1e-9
             end
         end
@@ -88,31 +88,31 @@ const INTERP_Y = rand(N_INTERP)
             # to ANY of the input arguments (u, t, or tq)
 
             # Test 1: Differentiate w.r.t. y (data values)
-            f_y(y_val) = sum(AbstractCosmologicalEmulators._akima_interpolation(y_val, x1, x2))
+            f_y(y_val) = sum(AbstractCosmologicalEmulators.akima_interpolation(y_val, x1, x2))
             @test ForwardDiff.derivative(y_val -> f_y([y_val, y[2:end]...]), y[1]) isa Real
 
             # Test 2: Differentiate w.r.t. x1 (input grid)
-            f_x1(x1_val) = sum(AbstractCosmologicalEmulators._akima_interpolation(y, [x1_val, x1[2:end]...], x2))
+            f_x1(x1_val) = sum(AbstractCosmologicalEmulators.akima_interpolation(y, [x1_val, x1[2:end]...], x2))
             @test ForwardDiff.derivative(f_x1, x1[5]) isa Real
 
             # Test 3: Differentiate w.r.t. x2 (query points)
-            f_x2(x2_val) = sum(AbstractCosmologicalEmulators._akima_interpolation(y, x1, [x2_val, x2[2:end]...]))
+            f_x2(x2_val) = sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, [x2_val, x2[2:end]...]))
             @test ForwardDiff.derivative(f_x2, x2[5]) isa Real
 
             # Test 4: Verify Dual number propagation through the entire pipeline
             # This tests that the type promotion in the adjoint is correct
             y_dual = ForwardDiff.Dual.(y, ones(length(y)))
-            result = AbstractCosmologicalEmulators._akima_interpolation(y_dual, x1, x2)
+            result = AbstractCosmologicalEmulators.akima_interpolation(y_dual, x1, x2)
             @test all(r -> r isa ForwardDiff.Dual, result)
 
             # Verify values match the non-Dual version
-            result_plain = AbstractCosmologicalEmulators._akima_interpolation(y, x1, x2)
+            result_plain = AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)
             @test all(i -> ForwardDiff.value(result[i]) ≈ result_plain[i], eachindex(result))
         end
     end
 
     @testset "Matrix Akima Interpolation Tests" begin
-        # Test that the matrix version of _akima_interpolation produces identical
+        # Test that the matrix version of akima_interpolation produces identical
         # results to the column-by-column approach, which is the key optimization
         # for Jacobian computations with AP transformations.
 
@@ -123,10 +123,10 @@ const INTERP_Y = rand(N_INTERP)
             jacobian = randn(50, 11)
 
             # Matrix version (optimized)
-            result_matrix = AbstractCosmologicalEmulators._akima_interpolation(jacobian, k_in, k_out)
+            result_matrix = AbstractCosmologicalEmulators.akima_interpolation(jacobian, k_in, k_out)
 
             # Column-by-column version (reference)
-            result_cols = hcat([AbstractCosmologicalEmulators._akima_interpolation(jacobian[:, i], k_in, k_out)
+            result_cols = hcat([AbstractCosmologicalEmulators.akima_interpolation(jacobian[:, i], k_in, k_out)
                                for i in 1:size(jacobian, 2)]...)
 
             # Should be identical (not just approximately equal)
@@ -141,26 +141,26 @@ const INTERP_Y = rand(N_INTERP)
 
             # Test case 2: Single column (should still work)
             data_single = randn(20, 1)
-            result_single_matrix = AbstractCosmologicalEmulators._akima_interpolation(data_single, k_in, k_out)
-            result_single_vector = AbstractCosmologicalEmulators._akima_interpolation(data_single[:, 1], k_in, k_out)
+            result_single_matrix = AbstractCosmologicalEmulators.akima_interpolation(data_single, k_in, k_out)
+            result_single_vector = AbstractCosmologicalEmulators.akima_interpolation(data_single[:, 1], k_in, k_out)
             @test maximum(abs.(result_single_matrix[:, 1] - result_single_vector)) < 1e-14
 
             # Test case 3: Two columns
             data_two = randn(20, 2)
-            result_two = AbstractCosmologicalEmulators._akima_interpolation(data_two, k_in, k_out)
+            result_two = AbstractCosmologicalEmulators.akima_interpolation(data_two, k_in, k_out)
             @test size(result_two) == (30, 2)
             for i in 1:2
-                result_vec = AbstractCosmologicalEmulators._akima_interpolation(data_two[:, i], k_in, k_out)
+                result_vec = AbstractCosmologicalEmulators.akima_interpolation(data_two[:, i], k_in, k_out)
                 @test maximum(abs.(result_two[:, i] - result_vec)) < 1e-14
             end
 
             # Test case 4: Many columns (stress test)
             data_many = randn(20, 50)
-            result_many = AbstractCosmologicalEmulators._akima_interpolation(data_many, k_in, k_out)
+            result_many = AbstractCosmologicalEmulators.akima_interpolation(data_many, k_in, k_out)
             @test size(result_many) == (30, 50)
             # Check first, middle, and last columns
             for i in [1, 25, 50]
-                result_vec = AbstractCosmologicalEmulators._akima_interpolation(data_many[:, i], k_in, k_out)
+                result_vec = AbstractCosmologicalEmulators.akima_interpolation(data_many[:, i], k_in, k_out)
                 @test maximum(abs.(result_many[:, i] - result_vec)) < 1e-14
             end
         end
@@ -278,14 +278,14 @@ const INTERP_Y = rand(N_INTERP)
 
             # Test case 5: Float32 input
             data_f32 = randn(Float32, 10, 5)
-            result_f32 = AbstractCosmologicalEmulators._akima_interpolation(data_f32, k_in, k_out)
+            result_f32 = AbstractCosmologicalEmulators.akima_interpolation(data_f32, k_in, k_out)
             @test eltype(result_f32) == Float64  # Promotes to Float64 due to Float64 k_in
             @test size(result_f32) == (15, 5)
 
             # Test case 6: All Float32
             k_in_f32 = Float32.(k_in)
             k_out_f32 = Float32.(k_out)
-            result_all_f32 = AbstractCosmologicalEmulators._akima_interpolation(data_f32, k_in_f32, k_out_f32)
+            result_all_f32 = AbstractCosmologicalEmulators.akima_interpolation(data_f32, k_in_f32, k_out_f32)
             @test eltype(result_all_f32) == Float32
             @test size(result_all_f32) == (15, 5)
         end
@@ -297,7 +297,7 @@ const INTERP_Y = rand(N_INTERP)
 
             # Monotonic increasing function
             data_mono = hcat([collect(range(0.0, 10.0, length=10)) for _ in 1:3]...)
-            result_mono = AbstractCosmologicalEmulators._akima_interpolation(data_mono, k_in, k_out)
+            result_mono = AbstractCosmologicalEmulators.akima_interpolation(data_mono, k_in, k_out)
 
             # Each column should be monotonically increasing
             for col in 1:3
@@ -322,12 +322,12 @@ const INTERP_Y = rand(N_INTERP)
             # Define naive (column-wise) version - non-mutating for Zygote compatibility
             function naive_akima_matrix(jac, t_in, t_out)
                 n_cols = size(jac, 2)
-                return hcat([AbstractCosmologicalEmulators._akima_interpolation(jac[:, i], t_in, t_out) for i in 1:n_cols]...)
+                return hcat([AbstractCosmologicalEmulators.akima_interpolation(jac[:, i], t_in, t_out) for i in 1:n_cols]...)
             end
 
             # Define optimized (matrix) version - just calls the matrix method directly
             function optimized_akima_matrix(jac, t_in, t_out)
-                return AbstractCosmologicalEmulators._akima_interpolation(jac, t_in, t_out)
+                return AbstractCosmologicalEmulators.akima_interpolation(jac, t_in, t_out)
             end
 
             @testset "Gradient w.r.t. matrix values" begin
