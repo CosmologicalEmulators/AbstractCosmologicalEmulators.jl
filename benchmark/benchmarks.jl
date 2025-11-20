@@ -406,3 +406,205 @@ if !isnothing(ext)
 else
     println("Warning: BackgroundCosmologyExt not loaded, skipping background benchmarks")
 end
+
+# --- Akima Interpolation Benchmarks ---
+SUITE["akima"] = BenchmarkGroup(["interpolation", "gradients"])
+
+# Generate test data for Akima benchmarks
+const n_akima_small = 20
+const n_akima_medium = 100
+const n_akima_large = 500
+const n_eval_small = 50
+const n_eval_medium = 250
+const n_eval_large = 1000
+
+# Small dataset
+const x_akima_small = sort(vcat([0.0], rand(n_akima_small - 2), [1.0]))
+const y_akima_small = sin.(2π .* x_akima_small) .+ 0.1 .* randn(n_akima_small)
+const x_eval_small = sort(rand(n_eval_small))
+
+# Medium dataset
+const x_akima_medium = sort(vcat([0.0], rand(n_akima_medium - 2), [1.0]))
+const y_akima_medium = sin.(2π .* x_akima_medium) .+ 0.1 .* randn(n_akima_medium)
+const x_eval_medium = sort(rand(n_eval_medium))
+
+# Large dataset
+const x_akima_large = sort(vcat([0.0], rand(n_akima_large - 2), [1.0]))
+const y_akima_large = sin.(2π .* x_akima_large) .+ 0.1 .* randn(n_akima_large)
+const x_eval_large = sort(rand(n_eval_large))
+
+# Matrix version data (multiple interpolation problems at once)
+const n_problems = 10
+const y_matrix_small = hcat([sin.(2π .* x_akima_small .+ i) .+ 0.1 .* randn(n_akima_small) for i in 1:n_problems]...)
+const y_matrix_medium = hcat([sin.(2π .* x_akima_medium .+ i) .+ 0.1 .* randn(n_akima_medium) for i in 1:n_problems]...)
+
+# --- Forward Pass Benchmarks ---
+SUITE["akima"]["forward"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version benchmarks (single interpolation)
+SUITE["akima"]["forward"]["vector_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+    $y_akima_small, $x_akima_small, $x_eval_small
+)
+
+SUITE["akima"]["forward"]["vector_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+    $y_akima_medium, $x_akima_medium, $x_eval_medium
+)
+
+SUITE["akima"]["forward"]["vector_large"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+    $y_akima_large, $x_akima_large, $x_eval_large
+)
+
+# Matrix version benchmarks (multiple interpolations)
+SUITE["akima"]["forward"]["matrix_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+    $y_matrix_small, $x_akima_small, $x_eval_small
+)
+
+SUITE["akima"]["forward"]["matrix_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+    $y_matrix_medium, $x_akima_medium, $x_eval_medium
+)
+
+# --- Component Benchmarks (individual functions) ---
+SUITE["akima"]["components"] = BenchmarkGroup(["slopes", "coefficients", "eval"])
+
+# Slopes computation
+SUITE["akima"]["components"]["slopes_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_slopes(
+    $y_akima_small, $x_akima_small
+)
+
+SUITE["akima"]["components"]["slopes_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_slopes(
+    $y_akima_medium, $x_akima_medium
+)
+
+SUITE["akima"]["components"]["slopes_large"] = @benchmarkable AbstractCosmologicalEmulators._akima_slopes(
+    $y_akima_large, $x_akima_large
+)
+
+# Coefficients computation (requires slopes as input)
+const m_small = AbstractCosmologicalEmulators._akima_slopes(y_akima_small, x_akima_small)
+const m_medium = AbstractCosmologicalEmulators._akima_slopes(y_akima_medium, x_akima_medium)
+const m_large = AbstractCosmologicalEmulators._akima_slopes(y_akima_large, x_akima_large)
+
+SUITE["akima"]["components"]["coefficients_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_coefficients(
+    $x_akima_small, $m_small
+)
+
+SUITE["akima"]["components"]["coefficients_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_coefficients(
+    $x_akima_medium, $m_medium
+)
+
+SUITE["akima"]["components"]["coefficients_large"] = @benchmarkable AbstractCosmologicalEmulators._akima_coefficients(
+    $x_akima_large, $m_large
+)
+
+# --- Gradient Benchmarks ---
+# Helper functions that return scalar values (sum of interpolated values)
+# This allows us to compute gradients w.r.t. the input data
+
+# Scalar function for vector interpolation (gradient w.r.t. y data)
+function akima_scalar_y(y, x, x_eval)
+    result = AbstractCosmologicalEmulators._akima_interpolation(y, x, x_eval)
+    return sum(result)
+end
+
+# Scalar function for matrix interpolation
+function akima_scalar_y_matrix(y_matrix, x, x_eval)
+    result = AbstractCosmologicalEmulators._akima_interpolation(y_matrix, x, x_eval)
+    return sum(result)
+end
+
+SUITE["akima"]["gradients"] = BenchmarkGroup(["forwarddiff", "zygote"])
+
+# --- ForwardDiff Gradients ---
+SUITE["akima"]["gradients"]["forwarddiff"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_small"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small), $y_akima_small
+)
+
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_medium"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_large"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large), $y_akima_large
+)
+
+# Matrix version gradients
+SUITE["akima"]["gradients"]["forwarddiff"]["matrix_small"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small), vec($y_matrix_small)
+) setup = (y_mat = reshape(vec($y_matrix_small), size($y_matrix_small)))
+
+SUITE["akima"]["gradients"]["forwarddiff"]["matrix_medium"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), vec($y_matrix_medium)
+) setup = (y_mat = reshape(vec($y_matrix_medium), size($y_matrix_medium)))
+
+# --- Zygote Gradients ---
+SUITE["akima"]["gradients"]["zygote"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["akima"]["gradients"]["zygote"]["vector_small"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small), $y_akima_small
+)
+
+SUITE["akima"]["gradients"]["zygote"]["vector_medium"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["zygote"]["vector_large"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large), $y_akima_large
+)
+
+# Matrix version gradients
+SUITE["akima"]["gradients"]["zygote"]["matrix_small"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small), $y_matrix_small
+)
+
+SUITE["akima"]["gradients"]["zygote"]["matrix_medium"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), $y_matrix_medium
+)
+
+# --- Gradient Comparison (ForwardDiff vs Zygote) ---
+SUITE["akima"]["gradients"]["comparison"] = BenchmarkGroup(["speed"])
+
+# Medium-sized problem for fair comparison
+SUITE["akima"]["gradients"]["comparison"]["forward_pass"] = @benchmarkable akima_scalar_y(
+    $y_akima_medium, $x_akima_medium, $x_eval_medium
+)
+
+SUITE["akima"]["gradients"]["comparison"]["forwarddiff_medium"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["comparison"]["zygote_medium"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+# --- Scaling Benchmarks (performance vs problem size) ---
+SUITE["akima"]["scaling"] = BenchmarkGroup(["nodes", "eval_points"])
+
+# Vary number of interpolation nodes (fixed eval points)
+const x_eval_fixed = sort(rand(100))
+
+for n in [10, 25, 50, 100, 200, 500]
+    x_nodes = sort(vcat([0.0], rand(n - 2), [1.0]))
+    y_nodes = sin.(2π .* x_nodes) .+ 0.1 .* randn(n)
+
+    SUITE["akima"]["scaling"]["nodes_$(n)"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+        $y_nodes, $x_nodes, $x_eval_fixed
+    )
+end
+
+# Vary number of evaluation points (fixed nodes)
+const x_nodes_fixed = x_akima_medium
+const y_nodes_fixed = y_akima_medium
+
+for n_eval in [10, 50, 100, 250, 500, 1000]
+    x_eval_var = sort(rand(n_eval))
+
+    SUITE["akima"]["scaling"]["eval_$(n_eval)"] = @benchmarkable AbstractCosmologicalEmulators._akima_interpolation(
+        $y_nodes_fixed, $x_nodes_fixed, $x_eval_var
+    )
+end
+
+println("Akima interpolation benchmarks added successfully")
