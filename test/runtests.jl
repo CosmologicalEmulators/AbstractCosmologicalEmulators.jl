@@ -32,4 +32,7 @@ using AbstractCosmologicalEmulators
 
     # GenericEmulator tests
     include("test_generic_emulator.jl")
+
+    # Akima interpolation tests
+    include("test_akima_interpolation.jl")
 end
