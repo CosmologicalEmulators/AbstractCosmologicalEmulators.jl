@@ -3,6 +3,8 @@ using SimpleChains
 using Test
 using ForwardDiff
 using Zygote
+using DifferentiationInterface
+import ADTypes: AutoForwardDiff, AutoZygote
 using AbstractCosmologicalEmulators
 
 @testset "Core Functionality Tests" begin
@@ -83,8 +85,26 @@ using AbstractCosmologicalEmulators
         @test_logs (:warn, "No emulator description found!") AbstractCosmologicalEmulators.get_emulator_description(sc_emu_copy)
     end
 
-    @testset "Gradient Tests" begin
-        @test ForwardDiff.gradient(test_sum, A) ≈ Zygote.gradient(test_sum, A)[1]
-        @test ForwardDiff.gradient(test_suminv, A) ≈ Zygote.gradient(test_suminv, A)[1]
+    @testset "Gradient Tests (DifferentiationInterface)" begin
+        # Test gradient consistency using DifferentiationInterface
+        # This tests the maximin and inv_maximin functions with multiple AD backends
+
+        @testset "maximin gradients" begin
+            # Test with ForwardDiff backend
+            grad_fd = DifferentiationInterface.gradient(test_sum, AutoForwardDiff(), A)
+            # Test with Zygote backend
+            grad_zy = DifferentiationInterface.gradient(test_sum, AutoZygote(), A)
+            # Compare the two backends
+            @test grad_fd ≈ grad_zy rtol=1e-9
+        end
+
+        @testset "inv_maximin gradients" begin
+            # Test with ForwardDiff backend
+            grad_fd = DifferentiationInterface.gradient(test_suminv, AutoForwardDiff(), A)
+            # Test with Zygote backend
+            grad_zy = DifferentiationInterface.gradient(test_suminv, AutoZygote(), A)
+            # Compare the two backends
+            @test grad_fd ≈ grad_zy rtol=1e-9
+        end
     end
 end

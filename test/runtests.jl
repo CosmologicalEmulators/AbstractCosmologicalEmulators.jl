@@ -6,6 +6,8 @@ using NPZ
 using SimpleChains
 using ForwardDiff
 using Zygote
+using DifferentiationInterface
+import ADTypes: AutoForwardDiff, AutoZygote
 using OrdinaryDiffEqTsit5
 using Integrals
 using DataInterpolations

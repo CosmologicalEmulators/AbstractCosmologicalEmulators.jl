@@ -10,6 +10,9 @@ using Test
 using AbstractCosmologicalEmulators
 using ForwardDiff
 using Zygote
+using Mooncake
+using DifferentiationInterface
+import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
 
 # Test fixtures (simplified from Effort.jl test fixtures)
 const N_INTERP = 64
@@ -23,49 +26,112 @@ const INTERP_Y = rand(N_INTERP)
         x1 = INTERP_X1
         x2 = INTERP_X2
 
-        @testset "ForwardDiff vs Zygote: Complete Pipeline" begin
-            # Test the full akima_interpolation pipeline
+        @testset "ForwardDiff vs Zygote: Complete Pipeline (DifferentiationInterface)" begin
+            # Test the full akima_interpolation pipeline using DifferentiationInterface
             @testset "Gradient w.r.t. y (data values)" begin
-                grad_fd = ForwardDiff.gradient(y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), y)
-                grad_zy = Zygote.gradient(y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), y)[1]
+                grad_fd = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoForwardDiff(), y)
+                grad_zy = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoZygote(), y)
                 @test grad_fd ≈ grad_zy rtol=1e-9
             end
 
             @testset "Gradient w.r.t. x1 (input grid)" begin
-                grad_fd = ForwardDiff.gradient(x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x1)
-                grad_zy = Zygote.gradient(x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x1)[1]
+                grad_fd = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoForwardDiff(), x1)
+                grad_zy = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoZygote(), x1)
                 @test grad_fd ≈ grad_zy rtol=1e-9
             end
 
             @testset "Gradient w.r.t. x2 (query points)" begin
-                grad_fd = ForwardDiff.gradient(x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x2)
-                grad_zy = Zygote.gradient(x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)), x2)[1]
+                grad_fd = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoForwardDiff(), x2)
+                grad_zy = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoZygote(), x2)
                 @test grad_fd ≈ grad_zy rtol=1e-9
             end
         end
 
-        @testset "ForwardDiff vs Zygote: Individual Components" begin
+        @testset "Mooncake.jl Backend Validation" begin
+            # Test that Mooncake.jl can differentiate through Akima interpolation
+            # This validates compatibility with cutting-edge reverse-mode AD
+
+            @testset "Gradient w.r.t. y (data values) - Mooncake" begin
+                grad_mooncake = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoMooncake(; config=Mooncake.Config()), y)
+                grad_zy = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoZygote(), y)
+                @test grad_mooncake ≈ grad_zy rtol=1e-9
+            end
+
+            @testset "Gradient w.r.t. x1 (input grid) - Mooncake" begin
+                grad_mooncake = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoMooncake(; config=Mooncake.Config()), x1)
+                grad_zy = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoZygote(), x1)
+                @test grad_mooncake ≈ grad_zy rtol=1e-9
+            end
+
+            @testset "Gradient w.r.t. x2 (query points) - Mooncake" begin
+                grad_mooncake = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoMooncake(; config=Mooncake.Config()), x2)
+                grad_zy = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x1, x2)),
+                    AutoZygote(), x2)
+                @test grad_mooncake ≈ grad_zy rtol=1e-9
+            end
+        end
+
+        @testset "ForwardDiff vs Zygote: Individual Components (DifferentiationInterface)" begin
             # Test each step of the Akima pipeline separately to catch issues early
 
             @testset "Step 1: _akima_slopes" begin
-                grad_fd_y = ForwardDiff.gradient(y -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)), y)
-                grad_zy_y = Zygote.gradient(y -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)), y)[1]
+                grad_fd_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoForwardDiff(), y)
+                grad_zy_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoZygote(), y)
                 @test grad_fd_y ≈ grad_zy_y rtol=1e-9
 
-                grad_fd_x = ForwardDiff.gradient(x1 -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)), x1)
-                grad_zy_x = Zygote.gradient(x1 -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)), x1)[1]
+                grad_fd_x = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoForwardDiff(), x1)
+                grad_zy_x = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoZygote(), x1)
                 @test grad_fd_x ≈ grad_zy_x rtol=1e-9
             end
 
             @testset "Step 2: _akima_coefficients" begin
                 m = AbstractCosmologicalEmulators._akima_slopes(y, x1)
 
-                grad_fd_m = ForwardDiff.gradient(m -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))), m)
-                grad_zy_m = Zygote.gradient(m -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))), m)[1]
+                grad_fd_m = DifferentiationInterface.gradient(
+                    m -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoForwardDiff(), m)
+                grad_zy_m = DifferentiationInterface.gradient(
+                    m -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoZygote(), m)
                 @test grad_fd_m ≈ grad_zy_m rtol=1e-9
 
-                grad_fd_x = ForwardDiff.gradient(x1 -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))), x1)
-                grad_zy_x = Zygote.gradient(x1 -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))), x1)[1]
+                grad_fd_x = DifferentiationInterface.gradient(
+                    x1 -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoForwardDiff(), x1)
+                grad_zy_x = DifferentiationInterface.gradient(
+                    x1 -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoZygote(), x1)
                 @test grad_fd_x ≈ grad_zy_x rtol=1e-9
             end
 
@@ -73,12 +139,20 @@ const INTERP_Y = rand(N_INTERP)
                 m = AbstractCosmologicalEmulators._akima_slopes(y, x1)
                 b, c, d = AbstractCosmologicalEmulators._akima_coefficients(x1, m)
 
-                grad_fd_y = ForwardDiff.gradient(y -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)), y)
-                grad_zy_y = Zygote.gradient(y -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)), y)[1]
+                grad_fd_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoForwardDiff(), y)
+                grad_zy_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoZygote(), y)
                 @test grad_fd_y ≈ grad_zy_y rtol=1e-9
 
-                grad_fd_x2 = ForwardDiff.gradient(x2 -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)), x2)
-                grad_zy_x2 = Zygote.gradient(x2 -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)), x2)[1]
+                grad_fd_x2 = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoForwardDiff(), x2)
+                grad_zy_x2 = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoZygote(), x2)
                 @test grad_fd_x2 ≈ grad_zy_x2 rtol=1e-9
             end
         end
@@ -165,7 +239,7 @@ const INTERP_Y = rand(N_INTERP)
             end
         end
 
-        @testset "Component-level AD: ForwardDiff vs Zygote" begin
+        @testset "Component-level AD: ForwardDiff vs Zygote (DifferentiationInterface)" begin
             # Component-level tests similar to vector version tests (lines 41-78)
             # These verify that each step of the Akima pipeline works correctly with AD
             u_matrix = randn(10, 5)
@@ -174,8 +248,12 @@ const INTERP_Y = rand(N_INTERP)
 
             @testset "Component 1: _akima_slopes (matrix)" begin
                 # Test w.r.t. u (matrix values)
-                grad_fd_u = ForwardDiff.gradient(u -> sum(AbstractCosmologicalEmulators._akima_slopes(u, t)), u_matrix)
-                grad_zy_u = Zygote.gradient(u -> sum(AbstractCosmologicalEmulators._akima_slopes(u, t)), u_matrix)[1]
+                grad_fd_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_slopes(u, t)),
+                    AutoForwardDiff(), u_matrix)
+                grad_zy_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_slopes(u, t)),
+                    AutoZygote(), u_matrix)
                 @test grad_fd_u ≈ grad_zy_u rtol=1e-9
 
                 # Test w.r.t. t (input grid) - Zygote vs finite differences
@@ -209,8 +287,8 @@ const INTERP_Y = rand(N_INTERP)
                     return sum(b) + sum(c) + sum(d)
                 end
 
-                grad_fd_m = ForwardDiff.gradient(sum_coeffs, m)
-                grad_zy_m = Zygote.gradient(sum_coeffs, m)[1]
+                grad_fd_m = DifferentiationInterface.gradient(sum_coeffs, AutoForwardDiff(), m)
+                grad_zy_m = DifferentiationInterface.gradient(sum_coeffs, AutoZygote(), m)
                 @test grad_fd_m ≈ grad_zy_m rtol=1e-9
 
                 # Test w.r.t. t (input grid) - this gradient was just fixed!
@@ -250,13 +328,21 @@ const INTERP_Y = rand(N_INTERP)
                 b, c, d = AbstractCosmologicalEmulators._akima_coefficients(t, m)
 
                 # Test w.r.t. u (matrix values)
-                grad_fd_u = ForwardDiff.gradient(u -> sum(AbstractCosmologicalEmulators._akima_eval(u, t, b, c, d, t_out)), u_matrix)
-                grad_zy_u = Zygote.gradient(u -> sum(AbstractCosmologicalEmulators._akima_eval(u, t, b, c, d, t_out)), u_matrix)[1]
+                grad_fd_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_eval(u, t, b, c, d, t_out)),
+                    AutoForwardDiff(), u_matrix)
+                grad_zy_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_eval(u, t, b, c, d, t_out)),
+                    AutoZygote(), u_matrix)
                 @test grad_fd_u ≈ grad_zy_u rtol=1e-9
 
                 # Test w.r.t. t_out (query points)
-                grad_fd_tout = ForwardDiff.gradient(tq -> sum(AbstractCosmologicalEmulators._akima_eval(u_matrix, t, b, c, d, tq)), t_out)
-                grad_zy_tout = Zygote.gradient(tq -> sum(AbstractCosmologicalEmulators._akima_eval(u_matrix, t, b, c, d, tq)), t_out)[1]
+                grad_fd_tout = DifferentiationInterface.gradient(
+                    tq -> sum(AbstractCosmologicalEmulators._akima_eval(u_matrix, t, b, c, d, tq)),
+                    AutoForwardDiff(), t_out)
+                grad_zy_tout = DifferentiationInterface.gradient(
+                    tq -> sum(AbstractCosmologicalEmulators._akima_eval(u_matrix, t, b, c, d, tq)),
+                    AutoZygote(), t_out)
                 @test grad_fd_tout ≈ grad_zy_tout rtol=1e-9
 
                 # Test w.r.t. b, c, d coefficients (Zygote only)
@@ -332,14 +418,22 @@ const INTERP_Y = rand(N_INTERP)
 
             @testset "Gradient w.r.t. matrix values" begin
                 # Zygote
-                grad_naive_zy = Zygote.gradient(jac -> sum(naive_akima_matrix(jac, k_in, k_out)), jacobian)[1]
-                grad_opt_zy = Zygote.gradient(jac -> sum(optimized_akima_matrix(jac, k_in, k_out)), jacobian)[1]
+                grad_naive_zy = DifferentiationInterface.gradient(
+                    jac -> sum(naive_akima_matrix(jac, k_in, k_out)),
+                    AutoZygote(), jacobian)
+                grad_opt_zy = DifferentiationInterface.gradient(
+                    jac -> sum(optimized_akima_matrix(jac, k_in, k_out)),
+                    AutoZygote(), jacobian)
                 @test maximum(abs.(grad_naive_zy - grad_opt_zy)) < 1e-12
 
                 # ForwardDiff (vectorized for matrix)
                 jac_vec = vec(jacobian)
-                grad_naive_fd = ForwardDiff.gradient(jv -> sum(naive_akima_matrix(reshape(jv, 50, 11), k_in, k_out)), jac_vec)
-                grad_opt_fd = ForwardDiff.gradient(jv -> sum(optimized_akima_matrix(reshape(jv, 50, 11), k_in, k_out)), jac_vec)
+                grad_naive_fd = DifferentiationInterface.gradient(
+                    jv -> sum(naive_akima_matrix(reshape(jv, 50, 11), k_in, k_out)),
+                    AutoForwardDiff(), jac_vec)
+                grad_opt_fd = DifferentiationInterface.gradient(
+                    jv -> sum(optimized_akima_matrix(reshape(jv, 50, 11), k_in, k_out)),
+                    AutoForwardDiff(), jac_vec)
                 @test maximum(abs.(grad_naive_fd - grad_opt_fd)) < 1e-12
 
                 # Zygote vs ForwardDiff consistency (optimized version)
@@ -353,14 +447,20 @@ const INTERP_Y = rand(N_INTERP)
                 # Zygote works correctly for all cases.
 
                 # Zygote - works for both naive and optimized versions
-                grad_naive_zy = Zygote.gradient(k -> sum(naive_akima_matrix(jacobian, k, k_out)), k_in)[1]
-                grad_opt_zy = Zygote.gradient(k -> sum(optimized_akima_matrix(jacobian, k, k_out)), k_in)[1]
+                grad_naive_zy = DifferentiationInterface.gradient(
+                    k -> sum(naive_akima_matrix(jacobian, k, k_out)),
+                    AutoZygote(), k_in)
+                grad_opt_zy = DifferentiationInterface.gradient(
+                    k -> sum(optimized_akima_matrix(jacobian, k, k_out)),
+                    AutoZygote(), k_in)
 
                 @test maximum(abs.(grad_naive_zy - grad_opt_zy)) < 1e-10
 
                 # ForwardDiff - only test the naive version
                 # (optimized version does not support ForwardDiff w.r.t. t)
-                grad_naive_fd = ForwardDiff.gradient(k -> sum(naive_akima_matrix(jacobian, k, k_out)), k_in)
+                grad_naive_fd = DifferentiationInterface.gradient(
+                    k -> sum(naive_akima_matrix(jacobian, k, k_out)),
+                    AutoForwardDiff(), k_in)
 
                 # Verify Zygote vs ForwardDiff for naive version only
                 @test maximum(abs.(grad_naive_zy - grad_naive_fd)) < 1e-9
@@ -368,13 +468,21 @@ const INTERP_Y = rand(N_INTERP)
 
             @testset "Gradient w.r.t. output grid (k_out)" begin
                 # Zygote
-                grad_naive_zy = Zygote.gradient(k -> sum(naive_akima_matrix(jacobian, k_in, k)), k_out)[1]
-                grad_opt_zy = Zygote.gradient(k -> sum(optimized_akima_matrix(jacobian, k_in, k)), k_out)[1]
+                grad_naive_zy = DifferentiationInterface.gradient(
+                    k -> sum(naive_akima_matrix(jacobian, k_in, k)),
+                    AutoZygote(), k_out)
+                grad_opt_zy = DifferentiationInterface.gradient(
+                    k -> sum(optimized_akima_matrix(jacobian, k_in, k)),
+                    AutoZygote(), k_out)
                 @test maximum(abs.(grad_naive_zy - grad_opt_zy)) < 1e-12
 
                 # ForwardDiff
-                grad_naive_fd = ForwardDiff.gradient(k -> sum(naive_akima_matrix(jacobian, k_in, k)), k_out)
-                grad_opt_fd = ForwardDiff.gradient(k -> sum(optimized_akima_matrix(jacobian, k_in, k)), k_out)
+                grad_naive_fd = DifferentiationInterface.gradient(
+                    k -> sum(naive_akima_matrix(jacobian, k_in, k)),
+                    AutoForwardDiff(), k_out)
+                grad_opt_fd = DifferentiationInterface.gradient(
+                    k -> sum(optimized_akima_matrix(jacobian, k_in, k)),
+                    AutoForwardDiff(), k_out)
                 @test maximum(abs.(grad_naive_fd - grad_opt_fd)) < 1e-12
 
                 # Zygote vs ForwardDiff consistency

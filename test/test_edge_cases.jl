@@ -12,6 +12,8 @@ using Test
 using AbstractCosmologicalEmulators
 using ForwardDiff
 using Zygote
+using DifferentiationInterface
+import ADTypes: AutoForwardDiff, AutoZygote
 
 @testset "Edge Cases and Additional Coverage" begin
 
@@ -72,8 +74,12 @@ using Zygote
             @test all(isfinite.(result))
 
             # Test gradient computation works with minimal points
-            grad_fd = ForwardDiff.gradient(y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x_min, x_query)), y_min)
-            grad_zy = Zygote.gradient(y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x_min, x_query)), y_min)[1]
+            grad_fd = DifferentiationInterface.gradient(
+                y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x_min, x_query)),
+                AutoForwardDiff(), y_min)
+            grad_zy = DifferentiationInterface.gradient(
+                y -> sum(AbstractCosmologicalEmulators.akima_interpolation(y, x_min, x_query)),
+                AutoZygote(), y_min)
             @test grad_fd ≈ grad_zy rtol=1e-9
         end
 
@@ -306,24 +312,29 @@ using Zygote
             @test AbstractCosmologicalEmulators.inv_maximin(normalized_max, minmax) ≈ input_max rtol=1e-14
         end
 
-        @testset "Automatic differentiation compatibility" begin
+        @testset "Automatic differentiation compatibility (DifferentiationInterface)" begin
             # Test that AD works through maximin/inv_maximin
             minmax = [0.0 10.0; -5.0 5.0]
             input = [5.0, 0.0]
 
             # ForwardDiff through maximin
-            grad_maximin = ForwardDiff.gradient(x -> sum(AbstractCosmologicalEmulators.maximin(x, minmax)), input)
+            grad_maximin = DifferentiationInterface.gradient(
+                x -> sum(AbstractCosmologicalEmulators.maximin(x, minmax)),
+                AutoForwardDiff(), input)
             @test all(isfinite.(grad_maximin))
 
             # ForwardDiff through inv_maximin
             normalized = AbstractCosmologicalEmulators.maximin(input, minmax)
-            grad_inv = ForwardDiff.gradient(x -> sum(AbstractCosmologicalEmulators.inv_maximin(x, minmax)), normalized)
+            grad_inv = DifferentiationInterface.gradient(
+                x -> sum(AbstractCosmologicalEmulators.inv_maximin(x, minmax)),
+                AutoForwardDiff(), normalized)
             @test all(isfinite.(grad_inv))
 
             # Zygote through roundtrip
-            grad_roundtrip = Zygote.gradient(x -> sum(AbstractCosmologicalEmulators.inv_maximin(
-                AbstractCosmologicalEmulators.maximin(x, minmax), minmax
-            )), input)[1]
+            grad_roundtrip = DifferentiationInterface.gradient(
+                x -> sum(AbstractCosmologicalEmulators.inv_maximin(
+                    AbstractCosmologicalEmulators.maximin(x, minmax), minmax
+                )), AutoZygote(), input)
             @test grad_roundtrip ≈ ones(2) rtol=1e-10  # Roundtrip derivative should be identity
         end
     end

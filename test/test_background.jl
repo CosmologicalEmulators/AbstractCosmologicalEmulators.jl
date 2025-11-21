@@ -7,6 +7,8 @@ using FastGaussQuadrature
 using ForwardDiff
 using FiniteDifferences
 using Zygote
+using DifferentiationInterface
+import ADTypes: AutoForwardDiff, AutoZygote
 
 # Note: The extension and imports are already set up in test_extensions.jl
 # which includes this file. We have access to:
@@ -214,22 +216,59 @@ if !isnothing(ext)
         @test f_z(1.0, mycosmo) == f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
     end
 
-    @testset "Gradient tests" begin
+    @testset "Gradient tests (DifferentiationInterface)" begin
         z = Array(LinRange(0.0, 10.0, 100))
         x = [0.3, 0.67, 0.06, -1.0, 0.0, 0.2]
-        @test isapprox(Zygote.gradient(x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-3)
-        @test isapprox(Zygote.gradient(x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-4)
-        @test isapprox(Zygote.gradient(x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-4)
+
+        # ForwardDiff vs Zygote comparisons using DifferentiationInterface
+        @test isapprox(
+            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoZygote(), x),
+            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1],
+            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-3)
+
+        @test isapprox(
+            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoZygote(), x),
+            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1],
+            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-4)
+
+        @test isapprox(
+            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoZygote(), x),
+            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1],
+            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-4)
+
         z = 1.0
-        @test isapprox(Zygote.gradient(x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1], ForwardDiff.gradient(x -> D_z_x(z, x), x), rtol=1e-3)
-        @test isapprox(Zygote.gradient(x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1], ForwardDiff.gradient(x -> f_z_x(z, x), x), rtol=1e-3)
-        @test isapprox(Zygote.gradient(x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1], ForwardDiff.gradient(x -> r_z_x(z, x), x), rtol=1e-4)
+        @test isapprox(
+            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoZygote(), x),
+            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1],
+            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-3)
+
+        @test isapprox(
+            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoZygote(), x),
+            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1],
+            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-3)
+
+        @test isapprox(
+            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoZygote(), x),
+            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-5)
+        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1],
+            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
+            rtol=1e-4)
     end
 
 
@@ -536,11 +575,9 @@ if !isnothing(ext)
         @test all(isfinite.(f_array))
     end
 
-    @testset "S_of_K rrule tests" begin
+    @testset "S_of_K rrule tests (DifferentiationInterface)" begin
         # Test the rrule for S_of_K function
         # This tests all three branches (Ω = 0, Ω > 0, Ω < 0)
-        using ForwardDiff
-        using Zygote
 
         # Array of r values for testing
         r_array = [0.5, 1.0, 2.0, 3.0, 5.0]
@@ -551,7 +588,7 @@ if !isnothing(ext)
             # provides the analytical limit. We test near Ω = 0 instead.
             Ω = 1e-10  # Very small but non-zero
 
-            # Function for ForwardDiff
+            # Function for jacobian
             function S_flat(params)
                 Ω_val, r_vals = params[1], params[2:end]
                 return S_of_K(Ω_val, r_vals)
@@ -559,12 +596,14 @@ if !isnothing(ext)
 
             # Compute Jacobian with ForwardDiff
             params = vcat([Ω], r_array)
-            J_forward = ForwardDiff.jacobian(S_flat, params)
+            J_forward = DifferentiationInterface.jacobian(S_flat, AutoForwardDiff(), params)
 
             # Compute gradients with Zygote for each output
             J_zygote = zeros(length(r_array), length(params))
             for i in 1:length(r_array)
-                grad = Zygote.gradient(p -> S_of_K(p[1], p[2:end])[i], params)[1]
+                grad = DifferentiationInterface.gradient(
+                    p -> S_of_K(p[1], p[2:end])[i],
+                    AutoZygote(), params)
                 J_zygote[i, :] = grad
             end
 
@@ -583,12 +622,14 @@ if !isnothing(ext)
 
             # Compute Jacobian with ForwardDiff
             params = vcat([Ω], r_array)
-            J_forward = ForwardDiff.jacobian(S_closed, params)
+            J_forward = DifferentiationInterface.jacobian(S_closed, AutoForwardDiff(), params)
 
             # Compute gradients with Zygote for each output
             J_zygote = zeros(length(r_array), length(params))
             for i in 1:length(r_array)
-                grad = Zygote.gradient(p -> S_of_K(p[1], p[2:end])[i], params)[1]
+                grad = DifferentiationInterface.gradient(
+                    p -> S_of_K(p[1], p[2:end])[i],
+                    AutoZygote(), params)
                 J_zygote[i, :] = grad
             end
 
@@ -599,7 +640,7 @@ if !isnothing(ext)
         @testset "Open universe (Ω < 0)" begin
             Ω = -0.01
 
-            # Function for ForwardDiff
+            # Function for jacobian
             function S_open(params)
                 Ω_val, r_vals = params[1], params[2:end]
                 return S_of_K(Ω_val, r_vals)
@@ -607,12 +648,14 @@ if !isnothing(ext)
 
             # Compute Jacobian with ForwardDiff
             params = vcat([Ω], r_array)
-            J_forward = ForwardDiff.jacobian(S_open, params)
+            J_forward = DifferentiationInterface.jacobian(S_open, AutoForwardDiff(), params)
 
             # Compute gradients with Zygote for each output
             J_zygote = zeros(length(r_array), length(params))
             for i in 1:length(r_array)
-                grad = Zygote.gradient(p -> S_of_K(p[1], p[2:end])[i], params)[1]
+                grad = DifferentiationInterface.gradient(
+                    p -> S_of_K(p[1], p[2:end])[i],
+                    AutoZygote(), params)
                 J_zygote[i, :] = grad
             end
 
