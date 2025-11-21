@@ -157,6 +157,70 @@ const INTERP_Y = rand(N_INTERP)
             end
         end
 
+        @testset "Mooncake.jl Backend: Individual Components" begin
+            # Test each component separately with Mooncake backend
+            # This validates that custom ChainRules work with Mooncake
+
+            @testset "Step 1: _akima_slopes - Mooncake" begin
+                grad_mooncake_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoMooncake(; config=Mooncake.Config()), y)
+                grad_zy_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoZygote(), y)
+                @test grad_mooncake_y ≈ grad_zy_y rtol=1e-9
+
+                grad_mooncake_x = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoMooncake(; config=Mooncake.Config()), x1)
+                grad_zy_x = DifferentiationInterface.gradient(
+                    x1 -> sum(AbstractCosmologicalEmulators._akima_slopes(y, x1)),
+                    AutoZygote(), x1)
+                @test grad_mooncake_x ≈ grad_zy_x rtol=1e-9
+            end
+
+            @testset "Step 2: _akima_coefficients - Mooncake" begin
+                m = AbstractCosmologicalEmulators._akima_slopes(y, x1)
+
+                grad_mooncake_m = DifferentiationInterface.gradient(
+                    m -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoMooncake(; config=Mooncake.Config()), m)
+                grad_zy_m = DifferentiationInterface.gradient(
+                    m -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoZygote(), m)
+                @test grad_mooncake_m ≈ grad_zy_m rtol=1e-9
+
+                grad_mooncake_x = DifferentiationInterface.gradient(
+                    x1 -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoMooncake(; config=Mooncake.Config()), x1)
+                grad_zy_x = DifferentiationInterface.gradient(
+                    x1 -> sum(sum.(AbstractCosmologicalEmulators._akima_coefficients(x1, m))),
+                    AutoZygote(), x1)
+                @test grad_mooncake_x ≈ grad_zy_x rtol=1e-9
+            end
+
+            @testset "Step 3: _akima_eval - Mooncake" begin
+                m = AbstractCosmologicalEmulators._akima_slopes(y, x1)
+                b, c, d = AbstractCosmologicalEmulators._akima_coefficients(x1, m)
+
+                grad_mooncake_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoMooncake(; config=Mooncake.Config()), y)
+                grad_zy_y = DifferentiationInterface.gradient(
+                    y -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoZygote(), y)
+                @test grad_mooncake_y ≈ grad_zy_y rtol=1e-9
+
+                grad_mooncake_x2 = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoMooncake(; config=Mooncake.Config()), x2)
+                grad_zy_x2 = DifferentiationInterface.gradient(
+                    x2 -> sum(AbstractCosmologicalEmulators._akima_eval(y, x1, b, c, d, x2)),
+                    AutoZygote(), x2)
+                @test grad_mooncake_x2 ≈ grad_zy_x2 rtol=1e-9
+            end
+        end
+
         @testset "ForwardDiff with all input types (type promotion test)" begin
             # Test that type promotion works correctly when ForwardDiff is applied
             # to ANY of the input arguments (u, t, or tq)
@@ -515,6 +579,94 @@ const INTERP_Y = rand(N_INTERP)
                 jacobian_opt = ForwardDiff.jacobian(opt_flat, jac_vec)
 
                 @test maximum(abs.(jacobian_naive - jacobian_opt)) < 1e-11
+            end
+
+            @testset "Mooncake.jl Backend: Matrix Gradients" begin
+                # Test Mooncake with matrix operations
+                # This validates that Mooncake can handle the optimized matrix implementation
+
+                @testset "Gradient w.r.t. matrix values - Mooncake" begin
+                    grad_mooncake = DifferentiationInterface.gradient(
+                        jac -> sum(optimized_akima_matrix(jac, k_in, k_out)),
+                        AutoMooncake(; config=Mooncake.Config()), jacobian)
+                    grad_zy = DifferentiationInterface.gradient(
+                        jac -> sum(optimized_akima_matrix(jac, k_in, k_out)),
+                        AutoZygote(), jacobian)
+                    @test maximum(abs.(grad_mooncake - grad_zy)) < 1e-10
+                end
+
+                @testset "Gradient w.r.t. input grid - Mooncake" begin
+                    grad_mooncake = DifferentiationInterface.gradient(
+                        k -> sum(optimized_akima_matrix(jacobian, k, k_out)),
+                        AutoMooncake(; config=Mooncake.Config()), k_in)
+                    grad_zy = DifferentiationInterface.gradient(
+                        k -> sum(optimized_akima_matrix(jacobian, k, k_out)),
+                        AutoZygote(), k_in)
+                    @test maximum(abs.(grad_mooncake - grad_zy)) < 1e-10
+                end
+
+                @testset "Gradient w.r.t. output grid - Mooncake" begin
+                    grad_mooncake = DifferentiationInterface.gradient(
+                        k -> sum(optimized_akima_matrix(jacobian, k_in, k)),
+                        AutoMooncake(; config=Mooncake.Config()), k_out)
+                    grad_zy = DifferentiationInterface.gradient(
+                        k -> sum(optimized_akima_matrix(jacobian, k_in, k)),
+                        AutoZygote(), k_out)
+                    @test maximum(abs.(grad_mooncake - grad_zy)) < 1e-10
+                end
+            end
+        end
+
+        @testset "Mooncake.jl Backend: Matrix Components" begin
+            # Test matrix version components with Mooncake
+            u_matrix = randn(10, 5)
+            t = collect(range(0.0, 1.0, length=10))
+            t_out = collect(range(0.1, 0.9, length=15))
+
+            @testset "Component 1: _akima_slopes (matrix) - Mooncake" begin
+                grad_mooncake_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_slopes(u, t)),
+                    AutoMooncake(; config=Mooncake.Config()), u_matrix)
+                grad_zy_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_slopes(u, t)),
+                    AutoZygote(), u_matrix)
+                @test grad_mooncake_u ≈ grad_zy_u rtol=1e-9
+            end
+
+            @testset "Component 2: _akima_coefficients (matrix) - Mooncake" begin
+                m = AbstractCosmologicalEmulators._akima_slopes(u_matrix, t)
+
+                function sum_coeffs(m_var)
+                    b, c, d = AbstractCosmologicalEmulators._akima_coefficients(t, m_var)
+                    return sum(b) + sum(c) + sum(d)
+                end
+
+                grad_mooncake_m = DifferentiationInterface.gradient(
+                    sum_coeffs, AutoMooncake(; config=Mooncake.Config()), m)
+                grad_zy_m = DifferentiationInterface.gradient(
+                    sum_coeffs, AutoZygote(), m)
+                @test grad_mooncake_m ≈ grad_zy_m rtol=1e-9
+            end
+
+            @testset "Component 3: _akima_eval (matrix) - Mooncake" begin
+                m = AbstractCosmologicalEmulators._akima_slopes(u_matrix, t)
+                b, c, d = AbstractCosmologicalEmulators._akima_coefficients(t, m)
+
+                grad_mooncake_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_eval(u, t, b, c, d, t_out)),
+                    AutoMooncake(; config=Mooncake.Config()), u_matrix)
+                grad_zy_u = DifferentiationInterface.gradient(
+                    u -> sum(AbstractCosmologicalEmulators._akima_eval(u, t, b, c, d, t_out)),
+                    AutoZygote(), u_matrix)
+                @test grad_mooncake_u ≈ grad_zy_u rtol=1e-9
+
+                grad_mooncake_tout = DifferentiationInterface.gradient(
+                    tq -> sum(AbstractCosmologicalEmulators._akima_eval(u_matrix, t, b, c, d, tq)),
+                    AutoMooncake(; config=Mooncake.Config()), t_out)
+                grad_zy_tout = DifferentiationInterface.gradient(
+                    tq -> sum(AbstractCosmologicalEmulators._akima_eval(u_matrix, t, b, c, d, tq)),
+                    AutoZygote(), t_out)
+                @test grad_mooncake_tout ≈ grad_zy_tout rtol=1e-9
             end
         end
     end
