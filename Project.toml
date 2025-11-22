@@ -1,7 +1,7 @@
 name = "AbstractCosmologicalEmulators"
 uuid = "c83c1981-e5c4-4837-9eb8-c9b1572acfc6"
-authors = ["Marco Bonici <bonici.marco@gmail.com>"]
 version = "0.8.0"
+authors = ["Marco Bonici <bonici.marco@gmail.com>"]
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
@@ -23,23 +23,18 @@ OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 BackgroundCosmologyExt = ["DataInterpolations", "FastGaussQuadrature", "Integrals", "LinearAlgebra", "OrdinaryDiffEqTsit5"]
 
 [compat]
-ADTypes = "1"
 Adapt = "3, 4"
 ChainRulesCore = "1.26"
 DataInterpolations = "6, 8"
-DifferentiationInterface = "0.6, 0.7"
 FastGaussQuadrature = "1"
-ForwardDiff = "0.10.38"
 Integrals = "4.7.0"
 JSON = "1"
 LinearAlgebra = "1.10"
 Lux = "1"
-Mooncake = "0.4, 0.5"
 NPZ = "0.4"
 OrdinaryDiffEqTsit5 = "1"
 SciMLSensitivity = "7.90"
 SimpleChains = "0.4"
-Zygote = "0.7.10"
 julia = "1.10"
 
 [extras]
@@ -56,10 +51,11 @@ Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SciMLSensitivity = "1ed8b502-d754-442c-8d5d-10ac956f44a1"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["ADTypes", "DataInterpolations", "DifferentiationInterface", "FastGaussQuadrature", "FiniteDifferences", "ForwardDiff", "Integrals", "JSON", "LinearAlgebra", "Lux", "Mooncake", "NPZ", "OrdinaryDiffEqTsit5", "SimpleChains", "Test", "Zygote"]
+test = ["ADTypes", "DataInterpolations", "DifferentiationInterface", "FastGaussQuadrature", "FiniteDifferences", "ForwardDiff", "Integrals", "JSON", "LinearAlgebra", "Lux", "Mooncake", "NPZ", "OrdinaryDiffEqTsit5", "Random", "SimpleChains", "Test", "Zygote"]

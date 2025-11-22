@@ -23,9 +23,10 @@ using AbstractCosmologicalEmulators
 
     NN_dict = JSON.parsefile(pwd()*"/testNN.json")
     weights = SimpleChains.init_params(mlpd)
+    # Create description in the same format as init_emulator
+    nn_descript = Dict{String,Any}("emulator_description" => get(NN_dict, "emulator_description", Dict()))
     sc_emu = SimpleChainsEmulator(Architecture = mlpd, Weights = weights,
-                                  Description = Dict("emulator_description"=>
-                                  NN_dict["emulator_description"]))
+                                  Description = nn_descript)
 
     n_grad = 1024
     A = randn(n_grad)

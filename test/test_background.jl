@@ -8,7 +8,8 @@ using ForwardDiff
 using FiniteDifferences
 using Zygote
 using DifferentiationInterface
-import ADTypes: AutoForwardDiff, AutoZygote
+import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
+using Mooncake
 
 # Note: The extension and imports are already set up in test_extensions.jl
 # which includes this file. We have access to:
@@ -220,55 +221,79 @@ if !isnothing(ext)
         z = Array(LinRange(0.0, 10.0, 100))
         x = [0.3, 0.67, 0.06, -1.0, 0.0, 0.2]
 
-        # ForwardDiff vs Zygote comparisons using DifferentiationInterface
-        @test isapprox(
-            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoZygote(), x),
-            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1],
-            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-3)
+        # ForwardDiff vs Zygote vs Mooncake comparisons using DifferentiationInterface
+        @testset "D_z gradients (vectorized z)" begin
+            grad_fd = DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x)
+            grad_zy = DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoZygote(), x)
+            grad_mk = DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoMooncake(; config=Mooncake.Config()), x)
 
-        @test isapprox(
-            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoZygote(), x),
-            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1],
-            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-4)
+            @test isapprox(grad_zy, grad_fd, rtol=1e-5)
+            @test isapprox(grad_mk, grad_fd, rtol=1e-10)  # Mooncake should match very precisely
+            @test isapprox(grad_mk, grad_zy, rtol=1e-10)
+            @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1], grad_fd, rtol=1e-3)
+            println("✅ Mooncake D_z gradient (vectorized z): SUCCESS")
+        end
 
-        @test isapprox(
-            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoZygote(), x),
-            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1],
-            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-4)
+        @testset "f_z gradients (vectorized z)" begin
+            grad_fd = DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x)
+            grad_zy = DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoZygote(), x)
+            grad_mk = DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoMooncake(; config=Mooncake.Config()), x)
+
+            @test isapprox(grad_zy, grad_fd, rtol=1e-5)
+            @test isapprox(grad_mk, grad_fd, rtol=1e-10)
+            @test isapprox(grad_mk, grad_zy, rtol=1e-10)
+            @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1], grad_fd, rtol=1e-4)
+            println("✅ Mooncake f_z gradient (vectorized z): SUCCESS")
+        end
+
+        @testset "r_z gradients (vectorized z)" begin
+            grad_fd = DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x)
+            grad_zy = DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoZygote(), x)
+            grad_mk = DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoMooncake(; config=Mooncake.Config()), x)
+
+            @test isapprox(grad_zy, grad_fd, rtol=1e-5)
+            @test isapprox(grad_mk, grad_fd, rtol=1e-10)
+            @test isapprox(grad_mk, grad_zy, rtol=1e-10)
+            @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1], grad_fd, rtol=1e-4)
+            println("✅ Mooncake r_z gradient (vectorized z): SUCCESS")
+        end
 
         z = 1.0
-        @test isapprox(
-            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoZygote(), x),
-            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1],
-            DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-3)
+        @testset "D_z gradients (scalar z)" begin
+            grad_fd = DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoForwardDiff(), x)
+            grad_zy = DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoZygote(), x)
+            grad_mk = DifferentiationInterface.gradient(x -> D_z_x(z, x), AutoMooncake(; config=Mooncake.Config()), x)
 
-        @test isapprox(
-            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoZygote(), x),
-            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1],
-            DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-3)
+            @test isapprox(grad_zy, grad_fd, rtol=1e-5)
+            @test isapprox(grad_mk, grad_fd, rtol=1e-10)
+            @test isapprox(grad_mk, grad_zy, rtol=1e-10)
+            @test isapprox(grad(central_fdm(5, 1), x -> D_z_x(z, x), x)[1], grad_fd, rtol=1e-3)
+            println("✅ Mooncake D_z gradient (scalar z): SUCCESS")
+        end
 
-        @test isapprox(
-            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoZygote(), x),
-            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-5)
-        @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1],
-            DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x),
-            rtol=1e-4)
+        @testset "f_z gradients (scalar z)" begin
+            grad_fd = DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoForwardDiff(), x)
+            grad_zy = DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoZygote(), x)
+            grad_mk = DifferentiationInterface.gradient(x -> f_z_x(z, x), AutoMooncake(; config=Mooncake.Config()), x)
+
+            @test isapprox(grad_zy, grad_fd, rtol=1e-5)
+            @test isapprox(grad_mk, grad_fd, rtol=1e-10)
+            @test isapprox(grad_mk, grad_zy, rtol=1e-10)
+            @test isapprox(grad(central_fdm(5, 1), x -> f_z_x(z, x), x)[1], grad_fd, rtol=1e-3)
+            println("✅ Mooncake f_z gradient (scalar z): SUCCESS")
+        end
+
+        @testset "r_z gradients (scalar z)" begin
+            grad_fd = DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoForwardDiff(), x)
+            grad_zy = DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoZygote(), x)
+            grad_mk = DifferentiationInterface.gradient(x -> r_z_x(z, x), AutoMooncake(; config=Mooncake.Config()), x)
+
+            @test isapprox(grad_zy, grad_fd, rtol=1e-5)
+            @test isapprox(grad_mk, grad_fd, rtol=1e-10)
+            @test isapprox(grad_mk, grad_zy, rtol=1e-10)
+            @test isapprox(grad(central_fdm(5, 1), x -> r_z_x(z, x), x)[1], grad_fd, rtol=1e-4)
+            println("✅ Mooncake r_z gradient (scalar z): SUCCESS")
+        end
     end
 
 
