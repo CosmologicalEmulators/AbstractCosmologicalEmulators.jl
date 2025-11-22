@@ -112,7 +112,13 @@ using Mooncake
             Model = lux_model,
             Parameters = ps,
             States = st,
-            Description = Dict()
+            Description = Dict{String, Any}(
+                    "emulator_description" => Dict{String, Any}(
+                        "author" => "Test Author",
+                        "parameters" => "x, y, z",
+                        "version" => 1.0,
+                        "backend" => "Lux"
+                    ))
         )
 
         # Define postprocessing
