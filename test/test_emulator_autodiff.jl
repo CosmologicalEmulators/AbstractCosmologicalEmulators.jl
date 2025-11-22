@@ -222,7 +222,7 @@ using Mooncake
         end
 
         gen_emu_aux = GenericEmulator(
-            TrainedEmulator = sc_emu,
+            TrainedEmulator = lux_emu,
             InMinMax = InMinMax,
             OutMinMax = OutMinMax,
             Postprocessing = custom_postprocess
