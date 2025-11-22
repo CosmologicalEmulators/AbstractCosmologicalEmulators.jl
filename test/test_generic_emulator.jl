@@ -237,7 +237,7 @@ end
             NPZ.npzwrite(outminmax_file, test_outminmax)
 
             open(postprocessing_file, "w") do f
-                write(f, "x -> x")
+                write(f, "(params, output, aux, emu) -> output")
             end
 
             open(metadata_file, "w") do f
