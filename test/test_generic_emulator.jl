@@ -5,6 +5,9 @@ using SimpleChains
 using Lux
 using NPZ
 using JSON
+using DifferentiationInterface
+import ADTypes: AutoMooncake, AutoForwardDiff
+using Mooncake
 
 @testset "GenericEmulator Tests" begin
     # Setup: Create a simple test emulator
