@@ -25,14 +25,11 @@ jobs:
           - ubuntu-latest
           - windows-latest
           - macos-latest
-        arch:
-          - x64
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       - uses: actions/cache@v4
         env:
           cache-name: cache-artifacts

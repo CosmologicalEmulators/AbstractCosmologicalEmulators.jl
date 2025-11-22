@@ -5,6 +5,9 @@ using SimpleChains
 using Lux
 using NPZ
 using JSON
+using DifferentiationInterface
+import ADTypes: AutoMooncake, AutoForwardDiff
+using Mooncake
 
 @testset "GenericEmulator Tests" begin
     # Setup: Create a simple test emulator
@@ -172,5 +175,132 @@ end
     finally
         # Cleanup
         rm(test_dir, recursive=true, force=true)
+    end
+
+    @testset "Loaded Emulator JSON Metadata Conversion and Mooncake Tests" begin
+        # This testset verifies that emulators loaded from JSON files have:
+        # 1. Properly converted metadata (JSON.Object → Dict{String, Any})
+        # 2. Can be differentiated with Mooncake.jl without StackOverflowError
+
+        test_dir = mktempdir()
+        try
+            # Create nested JSON metadata that would contain JSON.Object types
+            nested_metadata = Dict(
+                "author" => "Test Author",
+                "version" => "1.0",
+                "nested_data" => Dict(
+                    "parameters" => ["param1", "param2"],
+                    "values" => [1.0, 2.0, 3.0],
+                    "deeply_nested" => Dict(
+                        "flag" => true,
+                        "count" => 42
+                    )
+                )
+            )
+
+            # Save the emulator with JSON metadata
+            nn_setup_file = joinpath(test_dir, "nn_setup.json")
+            weights_file = joinpath(test_dir, "weights.npy")
+            inminmax_file = joinpath(test_dir, "inminmax.npy")
+            outminmax_file = joinpath(test_dir, "outminmax.npy")
+            postprocessing_file = joinpath(test_dir, "postprocessing.jl")
+            metadata_file = joinpath(test_dir, "metadata.json")
+
+            # Create test emulator data
+            n_input = 3
+            n_output = 5
+            # Calculate correct number of weights for architecture:
+            # Layer 1: (3 × 8) + 8 = 32
+            # Output: (8 × 5) + 5 = 45
+            # Total: 77 weights
+            test_weights = randn(77)
+            test_inminmax = [0.0 1.0; 0.0 1.0; 0.0 1.0]
+            test_outminmax = [0.0 1.0; 0.0 1.0; 0.0 1.0; 0.0 1.0; 0.0 1.0]
+
+            # Write nn_setup with metadata (simplified to 1 hidden layer)
+            nn_setup = Dict(
+                "n_input_features" => n_input,
+                "n_output_features" => n_output,
+                "n_hidden_layers" => 1,
+                "layers" => Dict(
+                    "layer_1" => Dict("n_neurons" => 8, "activation_function" => "tanh")
+                ),
+                "emulator_description" => nested_metadata
+            )
+
+            open(nn_setup_file, "w") do f
+                JSON.print(f, nn_setup)
+            end
+
+            NPZ.npzwrite(weights_file, test_weights)
+            NPZ.npzwrite(inminmax_file, test_inminmax)
+            NPZ.npzwrite(outminmax_file, test_outminmax)
+
+            open(postprocessing_file, "w") do f
+                write(f, "(params, output, aux, emu) -> output")
+            end
+
+            open(metadata_file, "w") do f
+                JSON.print(f, nested_metadata)
+            end
+
+            # Load the emulator (this will trigger JSON.Object → Dict conversion)
+            loaded_emu = load_trained_emulator(test_dir, backend=LuxEmulator)
+
+            @testset "Metadata conversion verification" begin
+                # Verify the TrainedEmulator Description has been converted
+                desc = loaded_emu.TrainedEmulator.Description
+
+                @test desc isa AbstractDict
+                @test haskey(desc, "emulator_description")
+
+                # The critical test: verify NO JSON.Object types remain
+                emu_desc = desc["emulator_description"]
+                @test !(typeof(emu_desc) <: JSON.Object)
+                @test typeof(emu_desc) == Dict{String, Any}
+
+                # Verify nested structures are also converted
+                @test typeof(emu_desc["nested_data"]) == Dict{String, Any}
+                @test typeof(emu_desc["nested_data"]["deeply_nested"]) == Dict{String, Any}
+
+                # Verify content is preserved
+                @test emu_desc["author"] == "Test Author"
+                @test emu_desc["nested_data"]["deeply_nested"]["count"] == 42
+            end
+
+            @testset "Mooncake differentiation with loaded emulator" begin
+                # Test that Mooncake can differentiate through the loaded emulator
+                # This would fail with StackOverflowError if JSON.Object wasn't converted
+
+                test_input = [0.5, 0.5, 0.5]
+
+                function loss_func(input)
+                    output = run_emulator(input, loaded_emu)
+                    return sum(output .^ 2)
+                end
+
+                # This is the critical test - should work without StackOverflowError
+                grad_mooncake = DifferentiationInterface.gradient(
+                    loss_func,
+                    AutoMooncake(; config=Mooncake.Config()),
+                    test_input
+                )
+
+                @test all(isfinite.(grad_mooncake))
+                @test length(grad_mooncake) == length(test_input)
+
+                # Verify consistency with ForwardDiff
+                grad_fd = DifferentiationInterface.gradient(
+                    loss_func,
+                    AutoForwardDiff(),
+                    test_input
+                )
+
+                @test grad_fd ≈ grad_mooncake rtol=1e-5
+            end
+
+        finally
+            rm(test_dir, recursive=true, force=true)
+        end
     end
 end
