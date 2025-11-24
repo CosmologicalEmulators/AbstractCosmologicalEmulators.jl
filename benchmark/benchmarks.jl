@@ -13,6 +13,11 @@ using FastGaussQuadrature
 using ForwardDiff
 using Zygote
 
+# DifferentiationInterface for unified gradient API
+using DifferentiationInterface
+import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
+using Mooncake
+
 mlpd = SimpleChain(
   static(6),
   TurboDense(tanh, 64),
@@ -326,15 +331,37 @@ if !isnothing(ext)
     SUITE["gradients"]["forward_r_z"] = @benchmarkable r_z_x($z_grad_array, $x_grad_params)
 
     # --- Backward computation (gradients) benchmarks ---
-    # ForwardDiff gradients
+    # Original API benchmarks (kept for historical comparison)
     SUITE["gradients"]["forwarddiff_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_grad_params)
     SUITE["gradients"]["forwarddiff_f_z"] = @benchmarkable ForwardDiff.gradient(x -> f_z_x($z_grad_array, x), $x_grad_params)
     SUITE["gradients"]["forwarddiff_r_z"] = @benchmarkable ForwardDiff.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
 
-    # Zygote gradients
     SUITE["gradients"]["zygote_D_z"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_grad_array, x), $x_grad_params)
     SUITE["gradients"]["zygote_f_z"] = @benchmarkable Zygote.gradient(x -> f_z_x($z_grad_array, x), $x_grad_params)
     SUITE["gradients"]["zygote_r_z"] = @benchmarkable Zygote.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
+
+    # DifferentiationInterface API benchmarks (unified interface)
+    SUITE["gradients"]["di_forwarddiff_D_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> D_z_x($z_grad_array, x), AutoForwardDiff(), $x_grad_params)
+    SUITE["gradients"]["di_forwarddiff_f_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> f_z_x($z_grad_array, x), AutoForwardDiff(), $x_grad_params)
+    SUITE["gradients"]["di_forwarddiff_r_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> r_z_x($z_grad_array, x), AutoForwardDiff(), $x_grad_params)
+
+    SUITE["gradients"]["di_zygote_D_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> D_z_x($z_grad_array, x), AutoZygote(), $x_grad_params)
+    SUITE["gradients"]["di_zygote_f_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> f_z_x($z_grad_array, x), AutoZygote(), $x_grad_params)
+    SUITE["gradients"]["di_zygote_r_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> r_z_x($z_grad_array, x), AutoZygote(), $x_grad_params)
+
+    # Mooncake gradients (new backend)
+    SUITE["gradients"]["di_mooncake_D_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> D_z_x($z_grad_array, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+    SUITE["gradients"]["di_mooncake_f_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> f_z_x($z_grad_array, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+    SUITE["gradients"]["di_mooncake_r_z"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> r_z_x($z_grad_array, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
 
     # --- Different redshift array sizes benchmarks ---
     SUITE["gradients"]["scaling"] = BenchmarkGroup(["array_size"])
@@ -344,6 +371,8 @@ if !isnothing(ext)
     SUITE["gradients"]["scaling"]["forward_D_z_small"] = @benchmarkable D_z_x($z_small, $x_grad_params)
     SUITE["gradients"]["scaling"]["forwarddiff_D_z_small"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_small, x), $x_grad_params)
     SUITE["gradients"]["scaling"]["zygote_D_z_small"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_small, x), $x_grad_params)
+    SUITE["gradients"]["scaling"]["di_mooncake_D_z_small"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> D_z_x($z_small, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
 
     # Medium array (100 points - already done above)
 
@@ -352,6 +381,8 @@ if !isnothing(ext)
     SUITE["gradients"]["scaling"]["forward_D_z_large"] = @benchmarkable D_z_x($z_large, $x_grad_params)
     SUITE["gradients"]["scaling"]["forwarddiff_D_z_large"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_large, x), $x_grad_params)
     SUITE["gradients"]["scaling"]["zygote_D_z_large"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_large, x), $x_grad_params)
+    SUITE["gradients"]["scaling"]["di_mooncake_D_z_large"] = @benchmarkable DifferentiationInterface.gradient(
+        x -> D_z_x($z_large, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
 
     # --- Single redshift benchmarks for comparison ---
     const z_single = 1.0
@@ -387,6 +418,14 @@ if !isnothing(ext)
     SUITE["gradients"]["single_z"]["zygote_f_z"] = @benchmarkable Zygote.gradient(f_z_single, $x_grad_params)
     SUITE["gradients"]["single_z"]["zygote_r_z"] = @benchmarkable Zygote.gradient(r_z_single, $x_grad_params)
 
+    # DifferentiationInterface + Mooncake
+    SUITE["gradients"]["single_z"]["di_mooncake_D_z"] = @benchmarkable DifferentiationInterface.gradient(
+        D_z_single, AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+    SUITE["gradients"]["single_z"]["di_mooncake_f_z"] = @benchmarkable DifferentiationInterface.gradient(
+        f_z_single, AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+    SUITE["gradients"]["single_z"]["di_mooncake_r_z"] = @benchmarkable DifferentiationInterface.gradient(
+        r_z_single, AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+
     # --- Comparison with different parameter variations ---
     SUITE["gradients"]["parameter_sensitivity"] = BenchmarkGroup(["params"])
 
@@ -406,3 +445,282 @@ if !isnothing(ext)
 else
     println("Warning: BackgroundCosmologyExt not loaded, skipping background benchmarks")
 end
+
+# --- Akima Interpolation Benchmarks ---
+SUITE["akima"] = BenchmarkGroup(["interpolation", "gradients"])
+
+# Generate test data for Akima benchmarks
+const n_akima_small = 20
+const n_akima_medium = 100
+const n_akima_large = 500
+const n_eval_small = 50
+const n_eval_medium = 250
+const n_eval_large = 1000
+
+# Small dataset
+const x_akima_small = sort(vcat([0.0], rand(n_akima_small - 2), [1.0]))
+const y_akima_small = sin.(2π .* x_akima_small) .+ 0.1 .* randn(n_akima_small)
+const x_eval_small = sort(rand(n_eval_small))
+
+# Medium dataset
+const x_akima_medium = sort(vcat([0.0], rand(n_akima_medium - 2), [1.0]))
+const y_akima_medium = sin.(2π .* x_akima_medium) .+ 0.1 .* randn(n_akima_medium)
+const x_eval_medium = sort(rand(n_eval_medium))
+
+# Large dataset
+const x_akima_large = sort(vcat([0.0], rand(n_akima_large - 2), [1.0]))
+const y_akima_large = sin.(2π .* x_akima_large) .+ 0.1 .* randn(n_akima_large)
+const x_eval_large = sort(rand(n_eval_large))
+
+# Matrix version data (multiple interpolation problems at once)
+const n_problems = 10
+const y_matrix_small = hcat([sin.(2π .* x_akima_small .+ i) .+ 0.1 .* randn(n_akima_small) for i in 1:n_problems]...)
+const y_matrix_medium = hcat([sin.(2π .* x_akima_medium .+ i) .+ 0.1 .* randn(n_akima_medium) for i in 1:n_problems]...)
+
+# --- Forward Pass Benchmarks ---
+SUITE["akima"]["forward"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version benchmarks (single interpolation)
+SUITE["akima"]["forward"]["vector_small"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
+    $y_akima_small, $x_akima_small, $x_eval_small
+)
+
+SUITE["akima"]["forward"]["vector_medium"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
+    $y_akima_medium, $x_akima_medium, $x_eval_medium
+)
+
+SUITE["akima"]["forward"]["vector_large"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
+    $y_akima_large, $x_akima_large, $x_eval_large
+)
+
+# Matrix version benchmarks (multiple interpolations)
+SUITE["akima"]["forward"]["matrix_small"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
+    $y_matrix_small, $x_akima_small, $x_eval_small
+)
+
+SUITE["akima"]["forward"]["matrix_medium"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
+    $y_matrix_medium, $x_akima_medium, $x_eval_medium
+)
+
+# --- Component Benchmarks (individual functions) ---
+SUITE["akima"]["components"] = BenchmarkGroup(["slopes", "coefficients", "eval"])
+
+# Slopes computation
+SUITE["akima"]["components"]["slopes_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_slopes(
+    $y_akima_small, $x_akima_small
+)
+
+SUITE["akima"]["components"]["slopes_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_slopes(
+    $y_akima_medium, $x_akima_medium
+)
+
+SUITE["akima"]["components"]["slopes_large"] = @benchmarkable AbstractCosmologicalEmulators._akima_slopes(
+    $y_akima_large, $x_akima_large
+)
+
+# Coefficients computation (requires slopes as input)
+const m_small = AbstractCosmologicalEmulators._akima_slopes(y_akima_small, x_akima_small)
+const m_medium = AbstractCosmologicalEmulators._akima_slopes(y_akima_medium, x_akima_medium)
+const m_large = AbstractCosmologicalEmulators._akima_slopes(y_akima_large, x_akima_large)
+
+SUITE["akima"]["components"]["coefficients_small"] = @benchmarkable AbstractCosmologicalEmulators._akima_coefficients(
+    $x_akima_small, $m_small
+)
+
+SUITE["akima"]["components"]["coefficients_medium"] = @benchmarkable AbstractCosmologicalEmulators._akima_coefficients(
+    $x_akima_medium, $m_medium
+)
+
+SUITE["akima"]["components"]["coefficients_large"] = @benchmarkable AbstractCosmologicalEmulators._akima_coefficients(
+    $x_akima_large, $m_large
+)
+
+# --- Gradient Benchmarks ---
+# Helper functions that return scalar values (sum of interpolated values)
+# This allows us to compute gradients w.r.t. the input data
+
+# Scalar function for vector interpolation (gradient w.r.t. y data)
+function akima_scalar_y(y, x, x_eval)
+    result = AbstractCosmologicalEmulators.akima_interpolation(y, x, x_eval)
+    return sum(result)
+end
+
+# Scalar function for matrix interpolation
+function akima_scalar_y_matrix(y_matrix, x, x_eval)
+    result = AbstractCosmologicalEmulators.akima_interpolation(y_matrix, x, x_eval)
+    return sum(result)
+end
+
+SUITE["akima"]["gradients"] = BenchmarkGroup(["forwarddiff", "zygote", "mooncake", "di"])
+
+# --- Original ForwardDiff Gradients (for comparison) ---
+SUITE["akima"]["gradients"]["forwarddiff"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_small"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small), $y_akima_small
+)
+
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_medium"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_large"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large), $y_akima_large
+)
+
+# Matrix version gradients
+SUITE["akima"]["gradients"]["forwarddiff"]["matrix_small"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small), vec($y_matrix_small)
+) setup = (y_mat = reshape(vec($y_matrix_small), size($y_matrix_small)))
+
+SUITE["akima"]["gradients"]["forwarddiff"]["matrix_medium"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), vec($y_matrix_medium)
+) setup = (y_mat = reshape(vec($y_matrix_medium), size($y_matrix_medium)))
+
+# --- Original Zygote Gradients (for comparison) ---
+SUITE["akima"]["gradients"]["zygote"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["akima"]["gradients"]["zygote"]["vector_small"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small), $y_akima_small
+)
+
+SUITE["akima"]["gradients"]["zygote"]["vector_medium"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["zygote"]["vector_large"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large), $y_akima_large
+)
+
+# Matrix version gradients
+SUITE["akima"]["gradients"]["zygote"]["matrix_small"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small), $y_matrix_small
+)
+
+SUITE["akima"]["gradients"]["zygote"]["matrix_medium"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), $y_matrix_medium
+)
+
+# --- DifferentiationInterface API Gradients ---
+SUITE["akima"]["gradients"]["di_forwarddiff"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version
+SUITE["akima"]["gradients"]["di_forwarddiff"]["vector_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoForwardDiff(), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["di_zygote"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version
+SUITE["akima"]["gradients"]["di_zygote"]["vector_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoZygote(), $y_akima_medium
+)
+
+# Matrix version
+SUITE["akima"]["gradients"]["di_zygote"]["matrix_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), AutoZygote(), $y_matrix_medium
+)
+
+# --- Mooncake Gradients (new backend) ---
+SUITE["akima"]["gradients"]["mooncake"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["akima"]["gradients"]["mooncake"]["vector_small"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small),
+    AutoMooncake(; config=Mooncake.Config()), $y_akima_small
+)
+
+SUITE["akima"]["gradients"]["mooncake"]["vector_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium),
+    AutoMooncake(; config=Mooncake.Config()), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["mooncake"]["vector_large"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large),
+    AutoMooncake(; config=Mooncake.Config()), $y_akima_large
+)
+
+# Matrix version gradients
+SUITE["akima"]["gradients"]["mooncake"]["matrix_small"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small),
+    AutoMooncake(; config=Mooncake.Config()), $y_matrix_small
+)
+
+SUITE["akima"]["gradients"]["mooncake"]["matrix_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium),
+    AutoMooncake(; config=Mooncake.Config()), $y_matrix_medium
+)
+
+# --- Gradient Comparison (ForwardDiff vs Zygote vs Mooncake) ---
+SUITE["akima"]["gradients"]["comparison"] = BenchmarkGroup(["speed"])
+
+# Medium-sized problem for fair comparison
+SUITE["akima"]["gradients"]["comparison"]["forward_pass"] = @benchmarkable akima_scalar_y(
+    $y_akima_medium, $x_akima_medium, $x_eval_medium
+)
+
+# Original API benchmarks
+SUITE["akima"]["gradients"]["comparison"]["forwarddiff_medium"] = @benchmarkable ForwardDiff.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["comparison"]["zygote_medium"] = @benchmarkable Zygote.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+)
+
+# DifferentiationInterface + Mooncake
+SUITE["akima"]["gradients"]["comparison"]["di_mooncake_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium),
+    AutoMooncake(; config=Mooncake.Config()), $y_akima_medium
+)
+
+# DifferentiationInterface versions for overhead comparison
+SUITE["akima"]["gradients"]["comparison"]["di_forwarddiff_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoForwardDiff(), $y_akima_medium
+)
+
+SUITE["akima"]["gradients"]["comparison"]["di_zygote_medium"] = @benchmarkable DifferentiationInterface.gradient(
+    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoZygote(), $y_akima_medium
+)
+
+# --- Scaling Benchmarks (performance vs problem size) ---
+SUITE["akima"]["scaling"] = BenchmarkGroup(["nodes", "eval_points"])
+
+# Vary number of interpolation nodes (fixed eval points)
+const x_eval_fixed = sort(rand(100))
+
+for n in [10, 25, 50, 100, 200, 500]
+    x_nodes = sort(vcat([0.0], rand(n - 2), [1.0]))
+    y_nodes = sin.(2π .* x_nodes) .+ 0.1 .* randn(n)
+
+    SUITE["akima"]["scaling"]["nodes_$(n)"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
+        $y_nodes, $x_nodes, $x_eval_fixed
+    )
+end
+
+# Vary number of evaluation points (fixed nodes)
+const x_nodes_fixed = x_akima_medium
+const y_nodes_fixed = y_akima_medium
+
+for n_eval in [10, 50, 100, 250, 500, 1000]
+    x_eval_var = sort(rand(n_eval))
+
+    SUITE["akima"]["scaling"]["eval_$(n_eval)"] = @benchmarkable AbstractCosmologicalEmulators.akima_interpolation(
+        $y_nodes_fixed, $x_nodes_fixed, $x_eval_var
+    )
+end
+
+println("Akima interpolation benchmarks added successfully")
+println()
+println("=== DifferentiationInterface & Mooncake Integration ===")
+println("Gradient benchmarks now include:")
+println("  - Original API: ForwardDiff.gradient(), Zygote.gradient()")
+println("  - DifferentiationInterface: Unified API for all backends")
+println("  - Mooncake: New reverse-mode AD backend")
+println()
+println("Background cosmology gradients: ForwardDiff, Zygote, and Mooncake via DI")
+println("Akima interpolation gradients: ForwardDiff, Zygote, and Mooncake via DI")
+println("Scaling benchmarks: Included for small/large array sizes")
+println("Comparison benchmarks: Direct comparison of all three backends")

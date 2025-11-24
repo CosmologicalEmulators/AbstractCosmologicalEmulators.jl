@@ -101,8 +101,38 @@ function _get_lux_params_states(NN_dict::AbstractDict{String,Any}, weights)
 
 end
 
+"""
+    _convert_json_to_dict(obj)
+
+Recursively convert JSON.Object types to regular Dict{String, Any}.
+
+This is necessary for compatibility with Mooncake.jl, which cannot handle
+recursive JSON.Object types (causes StackOverflowError in tangent_type computation).
+
+# Arguments
+- `obj`: Any object to convert (Dict, Array, or primitive)
+
+# Returns
+- Converted object with all JSON.Object types replaced by Dict{String, Any}
+"""
+function _convert_json_to_dict(obj::AbstractDict)
+    # Convert any dict type (including JSON.Object) to Dict{String, Any} recursively
+    return Dict{String, Any}(String(k) => _convert_json_to_dict(v) for (k, v) in obj)
+end
+
+function _convert_json_to_dict(obj::AbstractArray)
+    # Convert arrays recursively (may contain nested dicts/JSON objects)
+    return [_convert_json_to_dict(item) for item in obj]
+end
+
+function _convert_json_to_dict(obj)
+    # Primitives (String, Number, Bool, Nothing) pass through unchanged
+    return obj
+end
+
 function _get_emulator_description_dict(input_dict::AbstractDict{String,Any})
-    return input_dict["emulator_description"]
+    # Convert JSON.Object types to regular Dict{String, Any} for Mooncake compatibility
+    return _convert_json_to_dict(input_dict["emulator_description"])
 end
 
 function _init_luxemulator(NN_dict::AbstractDict{String,Any}, weight)
@@ -138,4 +168,43 @@ function init_emulator(NN_dict::AbstractDict{String,Any}, weight, ::Type{SimpleC
         validate_trained_weights(weight, NN_dict)
     end
     return _init_simplechainsemulator(NN_dict, weight)
+end
+
+function load_trained_emulator(path::String;
+                               backend=SimpleChainsEmulator,
+                               weights_file="weights.npy",
+                               inminmax_file="inminmax.npy",
+                               outminmax_file="outminmax.npy",
+                               nn_setup_file="nn_setup.json",
+                               postprocessing_file="postprocessing.jl",
+                               metadata_file="metadata.json",
+                               validate::Bool=true)
+
+    # Load NN architecture and weights
+    nn_dict = JSON.parsefile(joinpath(path, nn_setup_file))
+    weights = NPZ.npzread(joinpath(path, weights_file))
+    trained_nn = init_emulator(nn_dict, weights, backend; validate=validate)
+
+    # Load normalization
+    inminmax = NPZ.npzread(joinpath(path, inminmax_file))
+    outminmax = NPZ.npzread(joinpath(path, outminmax_file))
+
+    # Load postprocessing function
+    postprocessing = include(joinpath(path, postprocessing_file))
+
+    # Load metadata if exists (convert JSON.Object to Dict for Mooncake compatibility)
+    description = Dict()
+    metadata_path = joinpath(path, metadata_file)
+    if isfile(metadata_path)
+        description = _convert_json_to_dict(JSON.parsefile(metadata_path))
+    end
+
+    # Construct GenericEmulator
+    return GenericEmulator(
+        TrainedEmulator = trained_nn,
+        InMinMax = inminmax,
+        OutMinMax = outminmax,
+        Postprocessing = postprocessing,
+        Description = description
+    )
 end

@@ -2,9 +2,13 @@ using Test
 
 # Include all test dependencies at the top level
 using JSON
+using NPZ
 using SimpleChains
 using ForwardDiff
 using Zygote
+using DifferentiationInterface
+import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
+using Mooncake
 using OrdinaryDiffEqTsit5
 using Integrals
 using DataInterpolations
@@ -28,4 +32,19 @@ using AbstractCosmologicalEmulators
 
     # Numerical safety validation tests
     include("test_numerical_safety.jl")
+
+    # GenericEmulator tests
+    include("test_generic_emulator.jl")
+
+    # GenericEmulator automatic differentiation tests
+    include("test_emulator_autodiff.jl")
+
+    # LuxEmulator automatic differentiation tests
+    include("test_lux_emulator_autodiff.jl")
+
+    # Akima interpolation tests
+    include("test_akima_interpolation.jl")
+
+    # Edge cases and additional coverage tests
+    include("test_edge_cases.jl")
 end
