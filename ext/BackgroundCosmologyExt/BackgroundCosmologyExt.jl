@@ -46,7 +46,6 @@ function __init__()
     y_grid_dF = vcat(LinRange(min_y, 10.0, 10000), LinRange(10.1, max_y, 10000))
     dFdy_grid = [_dFdy(y) for y in y_grid_dF]
     dFdy_interpolant[] = AkimaInterpolation(dFdy_grid, y_grid_dF)
-
 end
 
 end # module BackgroundCosmologyExt

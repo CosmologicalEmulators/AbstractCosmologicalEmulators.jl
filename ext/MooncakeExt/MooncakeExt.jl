@@ -26,4 +26,11 @@ using Mooncake: @from_chainrules, MinimalCtx
 # High-level Akima interpolation interface
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.akima_interpolation), AbstractVector, AbstractVector, AbstractArray}
 
+# Register r̃_z rrule if BackgroundCosmologyExt is loaded
+# This provides 5-10x speedup for background cosmology gradient computations
+bg_ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+if bg_ext !== nothing
+    @from_chainrules MinimalCtx Tuple{typeof(bg_ext.r̃_z), Number, Any, Any}
+end
+
 end # module MooncakeExt

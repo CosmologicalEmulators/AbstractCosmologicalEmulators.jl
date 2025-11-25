@@ -292,3 +292,103 @@ function D_f_z(z, cosmo::w0waCDMCosmology)
     Ωk0 = cosmo.ωk / cosmo.h^2
     return D_f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
+
+# =============================================================================
+# Helper functions for r̃_z gradient computation
+# =============================================================================
+# These functions compute ∂E²/∂θ for each parameter θ
+# Used in the ChainRules rrule for r̃_z to provide analytical gradients
+
+"""
+    _∂E2_∂Ωcb0(a, ρDE)
+
+Compute ∂E²/∂Ωcb0 = a⁻³ - ρDE
+"""
+function _∂E2_∂Ωcb0(a, ρDE)
+    return a^(-3) - ρDE
+end
+
+"""
+    _∂E2_∂h(a, Ωγ0, ΩνE2, ρDE, h, Ών0)
+
+Compute ∂E²/∂h considering all h-dependencies:
+- Direct Ωγ0(h) = 2.469×10⁻⁵/h² term
+- ΩΛ0(h) through Ωγ0 and Ών0
+- ΩνE²(h) through Ωγ0
+"""
+function _∂E2_∂h(a, Ωγ0, ΩνE2, ρDE, h, Ων0)
+    # ∂Ωγ0/∂h = -2 * 2.469e-5 / h³
+    ∂Ωγ0_∂h = -2 * 2.469e-5 / h^3
+
+    # ∂E²/∂h = (∂Ωγ0/∂h) * [a⁻⁴ + (ΩνE² - ρDE - Ών0*ρDE)/Ωγ0]
+    # This accounts for:
+    # - Direct Ωγ0 * a⁻⁴ term
+    # - ΩΛ0 * ρDE term (ΩΛ0 depends on Ωγ0 and Ών0)
+    # - ΩνE² term (linear in Ωγ0)
+    return ∂Ωγ0_∂h * (a^(-4) + (ΩνE2 - ρDE - Ων0 * ρDE) / Ωγ0)
+end
+
+"""
+    _∂Ων0_∂mν(Ωγ0, mν; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
+
+Compute ∂Ών0/∂mν where Ών0 = ΩνE²(a=1, Ωγ0, mν)
+"""
+function _∂Ων0_∂mν(Ωγ0, mν; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
+    Γν = (4 / 11)^(1 / 3) * (Neff / 3)^(1 / 4)
+    # At a = 1, y = mν / (kB * Tν)
+    y = mν / (kB * Tν)
+    # ∂ΩνE²/∂mν = (15/π⁴) Γν⁴ Ωγ0 * dF/dy * (1/(kB*Tν))
+    return (15 / π^4) * Γν^4 * Ωγ0 * dFdy_interpolant[](y) / (kB * Tν)
+end
+
+"""
+    _∂E2_∂mν(a, Ωγ0, mν, Ων0_∂mν, ρDE; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
+
+Compute ∂E²/∂mν considering:
+- ΩΛ0(mν) through Ών0(mν)
+- ΩνE²(a, mν) directly
+"""
+function _∂E2_∂mν(a, Ωγ0, mν, Ων0_∂mν, ρDE; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
+    Γν = (4 / 11)^(1 / 3) * (Neff / 3)^(1 / 4)
+    y = _get_y(mν, a; kB=kB, Tν=Tν)
+
+    # ∂(ΩνE²(a))/∂mν = (15/π⁴) Γν⁴ Ωγ0 * dF/dy * (a/(kB*Tν)) / a⁴
+    ∂ΩνE2a_∂mν = (15 / π^4) * Γν^4 * Ωγ0 * dFdy_interpolant[](y) * a / ((kB * Tν) * a^4)
+
+    # ∂E²/∂mν = -∂Ών0/∂mν * ρDE + ∂(ΩνE²(a))/∂mν
+    return -Ων0_∂mν * ρDE + ∂ΩνE2a_∂mν
+end
+
+"""
+    _∂E2_∂w0(a, ΩΛ0, ρDE)
+
+Compute ∂E²/∂w0 = -3 ΩΛ0 ρDE ln(a)
+Only affects ρDE term
+"""
+function _∂E2_∂w0(a, ΩΛ0, ρDE)
+    # ∂ρDE/∂w0 = -3 ln(a) * ρDE
+    # ∂E²/∂w0 = ΩΛ0 * ∂ρDE/∂w0
+    return -3 * ΩΛ0 * ρDE * log(a)
+end
+
+"""
+    _∂E2_∂wa(a, ΩΛ0, ρDE)
+
+Compute ∂E²/∂wa = 3 ΩΛ0 ρDE [a - 1 - ln(a)]
+Only affects ρDE term
+"""
+function _∂E2_∂wa(a, ΩΛ0, ρDE)
+    # ∂ρDE/∂wa = ρDE * [3(a-1) - 3 ln(a)]
+    # ∂E²/∂wa = ΩΛ0 * ∂ρDE/∂wa
+    return 3 * ΩΛ0 * ρDE * (a - 1 - log(a))
+end
+
+"""
+    _∂E2_∂Ωk0(a, ρDE)
+
+Compute ∂E²/∂Ωk0 = a⁻² - ρDE
+Similar to ∂E²/∂Ωcb0 but with a⁻² instead of a⁻³
+"""
+function _∂E2_∂Ωk0(a, ρDE)
+    return a^(-2) - ρDE
+end
