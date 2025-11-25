@@ -1,6 +1,6 @@
 name = "AbstractCosmologicalEmulators"
 uuid = "c83c1981-e5c4-4837-9eb8-c9b1572acfc6"
-version = "0.8.0"
+version = "0.8.1"
 authors = ["Marco Bonici <bonici.marco@gmail.com>"]
 
 [deps]
@@ -17,10 +17,12 @@ DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 
 [extensions]
 BackgroundCosmologyExt = ["DataInterpolations", "FastGaussQuadrature", "Integrals", "LinearAlgebra", "OrdinaryDiffEqTsit5"]
+MooncakeExt = ["Mooncake"]
 
 [compat]
 Adapt = "3, 4"
@@ -31,6 +33,7 @@ Integrals = "4.7.0"
 JSON = "1"
 LinearAlgebra = "1.10"
 Lux = "1"
+Mooncake = "0.4, 0.5"
 NPZ = "0.4"
 OrdinaryDiffEqTsit5 = "1"
 SciMLSensitivity = "7.90"

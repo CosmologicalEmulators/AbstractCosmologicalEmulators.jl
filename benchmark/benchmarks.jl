@@ -551,6 +551,20 @@ function akima_scalar_y_matrix(y_matrix, x, x_eval)
     return sum(result)
 end
 
+# Wrapper functions for ForwardDiff that reshape vector inputs to matrices
+# These are needed because ForwardDiff.gradient works with vectors
+function akima_scalar_y_matrix_forwarddiff_small(y_vec, x, x_eval)
+    # Reshape vector back to matrix: (n_akima_small, n_problems) = (20, 10)
+    y_matrix = reshape(y_vec, n_akima_small, n_problems)
+    return akima_scalar_y_matrix(y_matrix, x, x_eval)
+end
+
+function akima_scalar_y_matrix_forwarddiff_medium(y_vec, x, x_eval)
+    # Reshape vector back to matrix: (n_akima_medium, n_problems) = (100, 10)
+    y_matrix = reshape(y_vec, n_akima_medium, n_problems)
+    return akima_scalar_y_matrix(y_matrix, x, x_eval)
+end
+
 SUITE["akima"]["gradients"] = BenchmarkGroup(["forwarddiff", "zygote", "mooncake", "di"])
 
 # --- Original ForwardDiff Gradients (for comparison) ---
@@ -569,14 +583,14 @@ SUITE["akima"]["gradients"]["forwarddiff"]["vector_large"] = @benchmarkable Forw
     y -> akima_scalar_y(y, $x_akima_large, $x_eval_large), $y_akima_large
 )
 
-# Matrix version gradients
+# Matrix version gradients (using wrapper functions that reshape vectors to matrices)
 SUITE["akima"]["gradients"]["forwarddiff"]["matrix_small"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small), vec($y_matrix_small)
-) setup = (y_mat = reshape(vec($y_matrix_small), size($y_matrix_small)))
+    y -> akima_scalar_y_matrix_forwarddiff_small(y, $x_akima_small, $x_eval_small), vec($y_matrix_small)
+)
 
 SUITE["akima"]["gradients"]["forwarddiff"]["matrix_medium"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), vec($y_matrix_medium)
-) setup = (y_mat = reshape(vec($y_matrix_medium), size($y_matrix_medium)))
+    y -> akima_scalar_y_matrix_forwarddiff_medium(y, $x_akima_medium, $x_eval_medium), vec($y_matrix_medium)
+)
 
 # --- Original Zygote Gradients (for comparison) ---
 SUITE["akima"]["gradients"]["zygote"] = BenchmarkGroup(["vector", "matrix"])
