@@ -15,6 +15,7 @@ using Zygote
 
 # DifferentiationInterface for unified gradient API
 using DifferentiationInterface
+using DifferentiationInterface: prepare_gradient, gradient!
 import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
 using Mooncake
 
@@ -331,37 +332,173 @@ if !isnothing(ext)
     SUITE["gradients"]["forward_r_z"] = @benchmarkable r_z_x($z_grad_array, $x_grad_params)
 
     # --- Backward computation (gradients) benchmarks ---
-    # Original API benchmarks (kept for historical comparison)
-    SUITE["gradients"]["forwarddiff_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_grad_params)
-    SUITE["gradients"]["forwarddiff_f_z"] = @benchmarkable ForwardDiff.gradient(x -> f_z_x($z_grad_array, x), $x_grad_params)
-    SUITE["gradients"]["forwarddiff_r_z"] = @benchmarkable ForwardDiff.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
+    # Using DifferentiationInterface with preparation for all backends
+    SUITE["gradients"]["forwarddiff_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
-    SUITE["gradients"]["zygote_D_z"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_grad_array, x), $x_grad_params)
-    SUITE["gradients"]["zygote_f_z"] = @benchmarkable Zygote.gradient(x -> f_z_x($z_grad_array, x), $x_grad_params)
-    SUITE["gradients"]["zygote_r_z"] = @benchmarkable Zygote.gradient(x -> r_z_x($z_grad_array, x), $x_grad_params)
+    SUITE["gradients"]["forwarddiff_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> f_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
-    # DifferentiationInterface API benchmarks (unified interface)
-    SUITE["gradients"]["di_forwarddiff_D_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> D_z_x($z_grad_array, x), AutoForwardDiff(), $x_grad_params)
-    SUITE["gradients"]["di_forwarddiff_f_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> f_z_x($z_grad_array, x), AutoForwardDiff(), $x_grad_params)
-    SUITE["gradients"]["di_forwarddiff_r_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> r_z_x($z_grad_array, x), AutoForwardDiff(), $x_grad_params)
+    SUITE["gradients"]["forwarddiff_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> r_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
-    SUITE["gradients"]["di_zygote_D_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> D_z_x($z_grad_array, x), AutoZygote(), $x_grad_params)
-    SUITE["gradients"]["di_zygote_f_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> f_z_x($z_grad_array, x), AutoZygote(), $x_grad_params)
-    SUITE["gradients"]["di_zygote_r_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> r_z_x($z_grad_array, x), AutoZygote(), $x_grad_params)
+    SUITE["gradients"]["zygote_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
-    # Mooncake gradients (new backend)
-    SUITE["gradients"]["di_mooncake_D_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> D_z_x($z_grad_array, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
-    SUITE["gradients"]["di_mooncake_f_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> f_z_x($z_grad_array, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
-    SUITE["gradients"]["di_mooncake_r_z"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> r_z_x($z_grad_array, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+    SUITE["gradients"]["zygote_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> f_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["zygote_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> r_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    # DifferentiationInterface API benchmarks (unified interface) with preparation
+    SUITE["gradients"]["di_forwarddiff_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["di_forwarddiff_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> f_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["di_forwarddiff_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> r_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["di_zygote_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["di_zygote_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> f_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["di_zygote_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> r_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    # Mooncake gradients (new backend) with preparation
+    SUITE["gradients"]["di_mooncake_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["di_mooncake_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = x -> f_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["di_mooncake_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = x -> r_z_x($z_grad_array, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
     # --- Different redshift array sizes benchmarks ---
     SUITE["gradients"]["scaling"] = BenchmarkGroup(["array_size"])
@@ -369,20 +506,78 @@ if !isnothing(ext)
     # Small array (10 points)
     const z_small = Array(LinRange(0.0, 10.0, 10))
     SUITE["gradients"]["scaling"]["forward_D_z_small"] = @benchmarkable D_z_x($z_small, $x_grad_params)
-    SUITE["gradients"]["scaling"]["forwarddiff_D_z_small"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_small, x), $x_grad_params)
-    SUITE["gradients"]["scaling"]["zygote_D_z_small"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_small, x), $x_grad_params)
-    SUITE["gradients"]["scaling"]["di_mooncake_D_z_small"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> D_z_x($z_small, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+
+    SUITE["gradients"]["scaling"]["forwarddiff_D_z_small"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> D_z_x($z_small, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["scaling"]["zygote_D_z_small"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> D_z_x($z_small, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["scaling"]["di_mooncake_D_z_small"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = x -> D_z_x($z_small, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
     # Medium array (100 points - already done above)
 
     # Large array (500 points)
     const z_large = Array(LinRange(0.0, 10.0, 500))
     SUITE["gradients"]["scaling"]["forward_D_z_large"] = @benchmarkable D_z_x($z_large, $x_grad_params)
-    SUITE["gradients"]["scaling"]["forwarddiff_D_z_large"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_large, x), $x_grad_params)
-    SUITE["gradients"]["scaling"]["zygote_D_z_large"] = @benchmarkable Zygote.gradient(x -> D_z_x($z_large, x), $x_grad_params)
-    SUITE["gradients"]["scaling"]["di_mooncake_D_z_large"] = @benchmarkable DifferentiationInterface.gradient(
-        x -> D_z_x($z_large, x), AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+
+    SUITE["gradients"]["scaling"]["forwarddiff_D_z_large"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> D_z_x($z_large, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["scaling"]["zygote_D_z_large"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = x -> D_z_x($z_large, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["scaling"]["di_mooncake_D_z_large"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = x -> D_z_x($z_large, x);
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
     # --- Single redshift benchmarks for comparison ---
     const z_single = 1.0
@@ -409,37 +604,148 @@ if !isnothing(ext)
     SUITE["gradients"]["single_z"]["forward_f_z"] = @benchmarkable f_z_single($x_grad_params)
     SUITE["gradients"]["single_z"]["forward_r_z"] = @benchmarkable r_z_single($x_grad_params)
 
-    # Gradient computation for single z
-    SUITE["gradients"]["single_z"]["forwarddiff_D_z"] = @benchmarkable ForwardDiff.gradient(D_z_single, $x_grad_params)
-    SUITE["gradients"]["single_z"]["forwarddiff_f_z"] = @benchmarkable ForwardDiff.gradient(f_z_single, $x_grad_params)
-    SUITE["gradients"]["single_z"]["forwarddiff_r_z"] = @benchmarkable ForwardDiff.gradient(r_z_single, $x_grad_params)
+    # Gradient computation for single z with preparation
+    SUITE["gradients"]["single_z"]["forwarddiff_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = D_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
-    SUITE["gradients"]["single_z"]["zygote_D_z"] = @benchmarkable Zygote.gradient(D_z_single, $x_grad_params)
-    SUITE["gradients"]["single_z"]["zygote_f_z"] = @benchmarkable Zygote.gradient(f_z_single, $x_grad_params)
-    SUITE["gradients"]["single_z"]["zygote_r_z"] = @benchmarkable Zygote.gradient(r_z_single, $x_grad_params)
+    SUITE["gradients"]["single_z"]["forwarddiff_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = f_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
-    # DifferentiationInterface + Mooncake
-    SUITE["gradients"]["single_z"]["di_mooncake_D_z"] = @benchmarkable DifferentiationInterface.gradient(
-        D_z_single, AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
-    SUITE["gradients"]["single_z"]["di_mooncake_f_z"] = @benchmarkable DifferentiationInterface.gradient(
-        f_z_single, AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
-    SUITE["gradients"]["single_z"]["di_mooncake_r_z"] = @benchmarkable DifferentiationInterface.gradient(
-        r_z_single, AutoMooncake(; config=Mooncake.Config()), $x_grad_params)
+    SUITE["gradients"]["single_z"]["forwarddiff_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = r_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["single_z"]["zygote_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = D_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["single_z"]["zygote_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = f_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["single_z"]["zygote_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoZygote();
+        f = r_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    # DifferentiationInterface + Mooncake with preparation
+    SUITE["gradients"]["single_z"]["di_mooncake_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = D_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["single_z"]["di_mooncake_f_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = f_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
+
+    SUITE["gradients"]["single_z"]["di_mooncake_r_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoMooncake(; config=Mooncake.Config());
+        f = r_z_single;
+        typical_x = copy($x_grad_params);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_grad_params);
+        grad = similar(params)
+    )
 
     # --- Comparison with different parameter variations ---
     SUITE["gradients"]["parameter_sensitivity"] = BenchmarkGroup(["params"])
 
-    # Standard ΛCDM (w0=-1, wa=0, Ωk0=0)
+    # Standard ΛCDM (w0=-1, wa=0, Ωk0=0) with preparation
     const x_lcdm = [0.3, 0.67, 0.06, -1.0, 0.0, 0.0]
-    SUITE["gradients"]["parameter_sensitivity"]["lcdm_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_lcdm)
+    SUITE["gradients"]["parameter_sensitivity"]["lcdm_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_lcdm);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_lcdm);
+        grad = similar(params)
+    )
 
-    # w0waCDM (varying dark energy)
+    # w0waCDM (varying dark energy) with preparation
     const x_w0wa = [0.3, 0.67, 0.06, -0.8, 0.3, 0.0]
-    SUITE["gradients"]["parameter_sensitivity"]["w0wa_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_w0wa)
+    SUITE["gradients"]["parameter_sensitivity"]["w0wa_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_w0wa);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_w0wa);
+        grad = similar(params)
+    )
 
-    # Curved universe
+    # Curved universe with preparation
     const x_curved = [0.3, 0.67, 0.06, -1.0, 0.0, 0.1]
-    SUITE["gradients"]["parameter_sensitivity"]["curved_D_z"] = @benchmarkable ForwardDiff.gradient(x -> D_z_x($z_grad_array, x), $x_curved)
+    SUITE["gradients"]["parameter_sensitivity"]["curved_D_z"] = @benchmarkable begin
+        gradient!(f, grad, prep, backend, params)
+    end setup = (
+        backend = AutoForwardDiff();
+        f = x -> D_z_x($z_grad_array, x);
+        typical_x = copy($x_curved);
+        prep = prepare_gradient(f, backend, typical_x);
+        params = copy($x_curved);
+        grad = similar(params)
+    )
 
     println("Gradient computation benchmarks added successfully")
 else
@@ -551,109 +857,244 @@ function akima_scalar_y_matrix(y_matrix, x, x_eval)
     return sum(result)
 end
 
+# Wrapper functions for ForwardDiff (via DifferentiationInterface) that reshape vector inputs to matrices
+# These are needed because DifferentiationInterface.gradient with AutoForwardDiff() works with vectors
+function akima_scalar_y_matrix_forwarddiff_small(y_vec, x, x_eval)
+    # Reshape vector back to matrix: (n_akima_small, n_problems) = (20, 10)
+    y_matrix = reshape(y_vec, n_akima_small, n_problems)
+    return akima_scalar_y_matrix(y_matrix, x, x_eval)
+end
+
+function akima_scalar_y_matrix_forwarddiff_medium(y_vec, x, x_eval)
+    # Reshape vector back to matrix: (n_akima_medium, n_problems) = (100, 10)
+    y_matrix = reshape(y_vec, n_akima_medium, n_problems)
+    return akima_scalar_y_matrix(y_matrix, x, x_eval)
+end
+
 SUITE["akima"]["gradients"] = BenchmarkGroup(["forwarddiff", "zygote", "mooncake", "di"])
 
-# --- Original ForwardDiff Gradients (for comparison) ---
+# --- ForwardDiff Gradients via DifferentiationInterface with preparation ---
 SUITE["akima"]["gradients"]["forwarddiff"] = BenchmarkGroup(["vector", "matrix"])
 
-# Vector version gradients
-SUITE["akima"]["gradients"]["forwarddiff"]["vector_small"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small), $y_akima_small
+# Vector version gradients with preparation
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_akima_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_small);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["forwarddiff"]["vector_medium"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["forwarddiff"]["vector_large"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large), $y_akima_large
+SUITE["akima"]["gradients"]["forwarddiff"]["vector_large"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y(y, $x_akima_large, $x_eval_large);
+    typical_x = copy($y_akima_large);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_large);
+    grad = similar(params)
 )
 
-# Matrix version gradients
-SUITE["akima"]["gradients"]["forwarddiff"]["matrix_small"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small), vec($y_matrix_small)
-) setup = (y_mat = reshape(vec($y_matrix_small), size($y_matrix_small)))
+# Matrix version gradients (using wrapper functions that reshape vectors to matrices) with preparation
+SUITE["akima"]["gradients"]["forwarddiff"]["matrix_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y_matrix_forwarddiff_small(y, $x_akima_small, $x_eval_small);
+    typical_x = vec(copy($y_matrix_small));
+    prep = prepare_gradient(f, backend, typical_x);
+    params = vec(copy($y_matrix_small));
+    grad = similar(params)
+)
 
-SUITE["akima"]["gradients"]["forwarddiff"]["matrix_medium"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), vec($y_matrix_medium)
-) setup = (y_mat = reshape(vec($y_matrix_medium), size($y_matrix_medium)))
+SUITE["akima"]["gradients"]["forwarddiff"]["matrix_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y_matrix_forwarddiff_medium(y, $x_akima_medium, $x_eval_medium);
+    typical_x = vec(copy($y_matrix_medium));
+    prep = prepare_gradient(f, backend, typical_x);
+    params = vec(copy($y_matrix_medium));
+    grad = similar(params)
+)
 
-# --- Original Zygote Gradients (for comparison) ---
+# --- Zygote Gradients via DifferentiationInterface with preparation ---
 SUITE["akima"]["gradients"]["zygote"] = BenchmarkGroup(["vector", "matrix"])
 
-# Vector version gradients
-SUITE["akima"]["gradients"]["zygote"]["vector_small"] = @benchmarkable Zygote.gradient(
-    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small), $y_akima_small
+# Vector version gradients with preparation
+SUITE["akima"]["gradients"]["zygote"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_akima_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_small);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["zygote"]["vector_medium"] = @benchmarkable Zygote.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+SUITE["akima"]["gradients"]["zygote"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["zygote"]["vector_large"] = @benchmarkable Zygote.gradient(
-    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large), $y_akima_large
+SUITE["akima"]["gradients"]["zygote"]["vector_large"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y(y, $x_akima_large, $x_eval_large);
+    typical_x = copy($y_akima_large);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_large);
+    grad = similar(params)
 )
 
-# Matrix version gradients
-SUITE["akima"]["gradients"]["zygote"]["matrix_small"] = @benchmarkable Zygote.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small), $y_matrix_small
+# Matrix version gradients with preparation
+SUITE["akima"]["gradients"]["zygote"]["matrix_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_matrix_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_small);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["zygote"]["matrix_medium"] = @benchmarkable Zygote.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), $y_matrix_medium
+SUITE["akima"]["gradients"]["zygote"]["matrix_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_matrix_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_medium);
+    grad = similar(params)
 )
 
-# --- DifferentiationInterface API Gradients ---
+# --- DifferentiationInterface API Gradients with preparation ---
 SUITE["akima"]["gradients"]["di_forwarddiff"] = BenchmarkGroup(["vector", "matrix"])
 
-# Vector version
-SUITE["akima"]["gradients"]["di_forwarddiff"]["vector_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoForwardDiff(), $y_akima_medium
+# Vector version with preparation
+SUITE["akima"]["gradients"]["di_forwarddiff"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
 SUITE["akima"]["gradients"]["di_zygote"] = BenchmarkGroup(["vector", "matrix"])
 
-# Vector version
-SUITE["akima"]["gradients"]["di_zygote"]["vector_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoZygote(), $y_akima_medium
+# Vector version with preparation
+SUITE["akima"]["gradients"]["di_zygote"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-# Matrix version
-SUITE["akima"]["gradients"]["di_zygote"]["matrix_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium), AutoZygote(), $y_matrix_medium
+# Matrix version with preparation
+SUITE["akima"]["gradients"]["di_zygote"]["matrix_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_matrix_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_medium);
+    grad = similar(params)
 )
 
-# --- Mooncake Gradients (new backend) ---
+# --- Mooncake Gradients (new backend) with preparation ---
 SUITE["akima"]["gradients"]["mooncake"] = BenchmarkGroup(["vector", "matrix"])
 
-# Vector version gradients
-SUITE["akima"]["gradients"]["mooncake"]["vector_small"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_small, $x_eval_small),
-    AutoMooncake(; config=Mooncake.Config()), $y_akima_small
+# Vector version gradients with preparation
+SUITE["akima"]["gradients"]["mooncake"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> akima_scalar_y(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_akima_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_small);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["mooncake"]["vector_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium),
-    AutoMooncake(; config=Mooncake.Config()), $y_akima_medium
+SUITE["akima"]["gradients"]["mooncake"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["mooncake"]["vector_large"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_large, $x_eval_large),
-    AutoMooncake(; config=Mooncake.Config()), $y_akima_large
+SUITE["akima"]["gradients"]["mooncake"]["vector_large"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> akima_scalar_y(y, $x_akima_large, $x_eval_large);
+    typical_x = copy($y_akima_large);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_large);
+    grad = similar(params)
 )
 
-# Matrix version gradients
-SUITE["akima"]["gradients"]["mooncake"]["matrix_small"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small),
-    AutoMooncake(; config=Mooncake.Config()), $y_matrix_small
+# Matrix version gradients with preparation
+SUITE["akima"]["gradients"]["mooncake"]["matrix_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> akima_scalar_y_matrix(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_matrix_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_small);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["mooncake"]["matrix_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium),
-    AutoMooncake(; config=Mooncake.Config()), $y_matrix_medium
+SUITE["akima"]["gradients"]["mooncake"]["matrix_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> akima_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_matrix_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_medium);
+    grad = similar(params)
 )
 
-# --- Gradient Comparison (ForwardDiff vs Zygote vs Mooncake) ---
+# --- Gradient Comparison (ForwardDiff vs Zygote vs Mooncake) with preparation ---
 SUITE["akima"]["gradients"]["comparison"] = BenchmarkGroup(["speed"])
 
 # Medium-sized problem for fair comparison
@@ -661,28 +1102,62 @@ SUITE["akima"]["gradients"]["comparison"]["forward_pass"] = @benchmarkable akima
     $y_akima_medium, $x_akima_medium, $x_eval_medium
 )
 
-# Original API benchmarks
-SUITE["akima"]["gradients"]["comparison"]["forwarddiff_medium"] = @benchmarkable ForwardDiff.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+# All backends via DifferentiationInterface with preparation
+SUITE["akima"]["gradients"]["comparison"]["forwarddiff_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["comparison"]["zygote_medium"] = @benchmarkable Zygote.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), $y_akima_medium
+SUITE["akima"]["gradients"]["comparison"]["zygote_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-# DifferentiationInterface + Mooncake
-SUITE["akima"]["gradients"]["comparison"]["di_mooncake_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium),
-    AutoMooncake(; config=Mooncake.Config()), $y_akima_medium
+# DifferentiationInterface + Mooncake with preparation
+SUITE["akima"]["gradients"]["comparison"]["di_mooncake_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-# DifferentiationInterface versions for overhead comparison
-SUITE["akima"]["gradients"]["comparison"]["di_forwarddiff_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoForwardDiff(), $y_akima_medium
+# DifferentiationInterface versions for overhead comparison with preparation
+SUITE["akima"]["gradients"]["comparison"]["di_forwarddiff_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
-SUITE["akima"]["gradients"]["comparison"]["di_zygote_medium"] = @benchmarkable DifferentiationInterface.gradient(
-    y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium), AutoZygote(), $y_akima_medium
+SUITE["akima"]["gradients"]["comparison"]["di_zygote_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> akima_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
 )
 
 # --- Scaling Benchmarks (performance vs problem size) ---
@@ -716,9 +1191,9 @@ println("Akima interpolation benchmarks added successfully")
 println()
 println("=== DifferentiationInterface & Mooncake Integration ===")
 println("Gradient benchmarks now include:")
-println("  - Original API: ForwardDiff.gradient(), Zygote.gradient()")
-println("  - DifferentiationInterface: Unified API for all backends")
-println("  - Mooncake: New reverse-mode AD backend")
+println("  - DifferentiationInterface: Unified API for all AD backends")
+println("  - Backends: ForwardDiff, Zygote, and Mooncake")
+println("  - All benchmarks use DifferentiationInterface for consistency")
 println()
 println("Background cosmology gradients: ForwardDiff, Zygote, and Mooncake via DI")
 println("Akima interpolation gradients: ForwardDiff, Zygote, and Mooncake via DI")
