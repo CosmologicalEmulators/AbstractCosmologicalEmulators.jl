@@ -31,7 +31,6 @@ end
     InMinMax::AbstractMatrix
     OutMinMax::AbstractMatrix
     Postprocessing::Function
-    Description::Dict = Dict()
 end
 
 Adapt.@adapt_structure GenericEmulator
