@@ -177,7 +177,6 @@ function load_trained_emulator(path::String;
                                outminmax_file="outminmax.npy",
                                nn_setup_file="nn_setup.json",
                                postprocessing_file="postprocessing.jl",
-                               metadata_file="metadata.json",
                                validate::Bool=true)
 
     # Load NN architecture and weights
@@ -189,22 +188,15 @@ function load_trained_emulator(path::String;
     inminmax = NPZ.npzread(joinpath(path, inminmax_file))
     outminmax = NPZ.npzread(joinpath(path, outminmax_file))
 
-    # Load postprocessing function
-    postprocessing = include(joinpath(path, postprocessing_file))
-
-    # Load metadata if exists (convert JSON.Object to Dict for Mooncake compatibility)
-    description = Dict()
-    metadata_path = joinpath(path, metadata_file)
-    if isfile(metadata_path)
-        description = _convert_json_to_dict(JSON.parsefile(metadata_path))
-    end
+    # Load postprocessing function in an isolated scope to prevent namespace pollution
+    # and avoid duplicate method definition warnings when loading multiple emulators
+    postprocessing = eval(Meta.parse("let; " * read(joinpath(path, postprocessing_file), String) * " end"))
 
     # Construct GenericEmulator
     return GenericEmulator(
         TrainedEmulator = trained_nn,
         InMinMax = inminmax,
         OutMinMax = outminmax,
-        Postprocessing = postprocessing,
-        Description = description
+        Postprocessing = postprocessing
     )
 end

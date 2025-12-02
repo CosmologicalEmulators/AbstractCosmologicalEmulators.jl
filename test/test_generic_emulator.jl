@@ -44,7 +44,6 @@ using Mooncake
         @test gen_emu.TrainedEmulator === sc_emu
         @test gen_emu.InMinMax == InMinMax
         @test gen_emu.OutMinMax == OutMinMax
-        @test length(gen_emu.Description) == 0
     end
 
     @testset "GenericEmulator Evaluation" begin
@@ -149,12 +148,6 @@ end
             write(f, "(params, output, aux, emu) -> output")
         end
 
-        # Create metadata.json
-        metadata = Dict("test_key" => "test_value")
-        open(joinpath(test_dir, "metadata.json"), "w") do f
-            JSON.print(f, metadata)
-        end
-
         @testset "Load GenericEmulator" begin
             # Load the emulator
             loaded_emu = load_trained_emulator(test_dir)
@@ -162,8 +155,10 @@ end
             @test isa(loaded_emu, GenericEmulator)
             @test loaded_emu.InMinMax == InMinMax
             @test loaded_emu.OutMinMax == OutMinMax
-            @test haskey(loaded_emu.Description, "test_key")
-            @test loaded_emu.Description["test_key"] == "test_value"
+
+            # Verify emulator description is accessible via TrainedEmulator
+            @test haskey(loaded_emu.TrainedEmulator.Description, "emulator_description")
+            @test loaded_emu.TrainedEmulator.Description["emulator_description"]["author"] == "Test Author"
 
             # Test that it runs
             input_params = [0.5, 0.5, 0.5]
@@ -204,7 +199,6 @@ end
             inminmax_file = joinpath(test_dir, "inminmax.npy")
             outminmax_file = joinpath(test_dir, "outminmax.npy")
             postprocessing_file = joinpath(test_dir, "postprocessing.jl")
-            metadata_file = joinpath(test_dir, "metadata.json")
 
             # Create test emulator data
             n_input = 3
@@ -238,10 +232,6 @@ end
 
             open(postprocessing_file, "w") do f
                 write(f, "(params, output, aux, emu) -> output")
-            end
-
-            open(metadata_file, "w") do f
-                JSON.print(f, nested_metadata)
             end
 
             # Load the emulator (this will trigger JSON.Object → Dict conversion)
