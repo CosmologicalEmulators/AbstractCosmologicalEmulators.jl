@@ -45,6 +45,9 @@ using AbstractCosmologicalEmulators
     # Akima interpolation tests
     include("test_akima_interpolation.jl")
 
+    # Cubic Spline interpolation tests
+    include("test_cubic_spline.jl")
+
     # Edge cases and additional coverage tests
     include("test_edge_cases.jl")
 end
