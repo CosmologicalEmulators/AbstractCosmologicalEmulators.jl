@@ -671,7 +671,7 @@ function _cubic_spline_coefficients(u, t)
     tA = Tridiagonal(dl, d_tmp, du)
 
     # RHS d
-    d = zeros(eltype(u), n)
+    d = zeros(promote_type(eltype(u), eltype(t)), n)
     for i in 2:n-1
         d[i] = 6 * (u[i+1] - u[i]) / h[i+1] - 6 * (u[i] - u[i-1]) / h[i]
     end
@@ -701,7 +701,7 @@ function _cubic_spline_coefficients(u::AbstractMatrix, t)
     tA = Tridiagonal(dl, d_tmp, du)
 
     # RHS d (Matrix)
-    d = zeros(eltype(u), n, n_cols)
+    d = zeros(promote_type(eltype(u), eltype(t)), n, n_cols)
     for col in 1:n_cols
         for i in 2:n-1
             d[i, col] = 6 * (u[i+1, col] - u[i, col]) / h[i+1] - 6 * (u[i, col] - u[i-1, col]) / h[i]
@@ -735,7 +735,7 @@ end
 function _cubic_spline_eval(u::AbstractMatrix, t, h, z::AbstractMatrix, tq::AbstractArray)
     n_query = length(tq)
     n_cols = size(u, 2)
-    results = zeros(eltype(u), n_query, n_cols)
+    results = zeros(promote_type(eltype(u), eltype(z), eltype(tq)), n_query, n_cols)
     
     for i in 1:n_query
         # Scalar evaluation for this tq[i] across all cols
