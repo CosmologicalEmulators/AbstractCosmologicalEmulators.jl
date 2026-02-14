@@ -1199,3 +1199,336 @@ println("Background cosmology gradients: ForwardDiff, Zygote, and Mooncake via D
 println("Akima interpolation gradients: ForwardDiff, Zygote, and Mooncake via DI")
 println("Scaling benchmarks: Included for small/large array sizes")
 println("Comparison benchmarks: Direct comparison of all three backends")
+
+# --- Cubic Spline Benchmarks ---
+SUITE["cubic"] = BenchmarkGroup(["interpolation", "gradients"])
+
+# Re-use the same test data as Akima for fair comparison
+# (x_akima_small, y_akima_small, etc. are already defined above)
+
+# --- Forward Pass Benchmarks ---
+SUITE["cubic"]["forward"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version benchmarks (single interpolation)
+SUITE["cubic"]["forward"]["vector_small"] = @benchmarkable AbstractCosmologicalEmulators.cubic_spline_interpolation(
+    $y_akima_small, $x_akima_small, $x_eval_small
+)
+
+SUITE["cubic"]["forward"]["vector_medium"] = @benchmarkable AbstractCosmologicalEmulators.cubic_spline_interpolation(
+    $y_akima_medium, $x_akima_medium, $x_eval_medium
+)
+
+SUITE["cubic"]["forward"]["vector_large"] = @benchmarkable AbstractCosmologicalEmulators.cubic_spline_interpolation(
+    $y_akima_large, $x_akima_large, $x_eval_large
+)
+
+# Matrix version benchmarks (multiple interpolations)
+SUITE["cubic"]["forward"]["matrix_small"] = @benchmarkable AbstractCosmologicalEmulators.cubic_spline_interpolation(
+    $y_matrix_small, $x_akima_small, $x_eval_small
+)
+
+SUITE["cubic"]["forward"]["matrix_medium"] = @benchmarkable AbstractCosmologicalEmulators.cubic_spline_interpolation(
+    $y_matrix_medium, $x_akima_medium, $x_eval_medium
+)
+
+# --- Component Benchmarks ---
+SUITE["cubic"]["components"] = BenchmarkGroup(["coefficients", "eval"])
+
+# Coefficients computation
+SUITE["cubic"]["components"]["coefficients_small"] = @benchmarkable AbstractCosmologicalEmulators._cubic_spline_coefficients(
+    $y_akima_small, $x_akima_small
+)
+
+SUITE["cubic"]["components"]["coefficients_medium"] = @benchmarkable AbstractCosmologicalEmulators._cubic_spline_coefficients(
+    $y_akima_medium, $x_akima_medium
+)
+
+SUITE["cubic"]["components"]["coefficients_large"] = @benchmarkable AbstractCosmologicalEmulators._cubic_spline_coefficients(
+    $y_akima_large, $x_akima_large
+)
+
+# Evaluation (requires coefficients)
+const (h_cubic_small, z_cubic_small) = AbstractCosmologicalEmulators._cubic_spline_coefficients(y_akima_small, x_akima_small)
+const (h_cubic_medium, z_cubic_medium) = AbstractCosmologicalEmulators._cubic_spline_coefficients(y_akima_medium, x_akima_medium)
+const (h_cubic_large, z_cubic_large) = AbstractCosmologicalEmulators._cubic_spline_coefficients(y_akima_large, x_akima_large)
+
+SUITE["cubic"]["components"]["eval_small"] = @benchmarkable AbstractCosmologicalEmulators._cubic_spline_eval(
+    $y_akima_small, $x_akima_small, $h_cubic_small, $z_cubic_small, $x_eval_small
+)
+
+SUITE["cubic"]["components"]["eval_medium"] = @benchmarkable AbstractCosmologicalEmulators._cubic_spline_eval(
+    $y_akima_medium, $x_akima_medium, $h_cubic_medium, $z_cubic_medium, $x_eval_medium
+)
+
+SUITE["cubic"]["components"]["eval_large"] = @benchmarkable AbstractCosmologicalEmulators._cubic_spline_eval(
+    $y_akima_large, $x_akima_large, $h_cubic_large, $z_cubic_large, $x_eval_large
+)
+
+# --- Gradient Benchmarks ---
+# Helper functions for scalar output
+function cubic_scalar_y(y, x, x_eval)
+    result = AbstractCosmologicalEmulators.cubic_spline_interpolation(y, x, x_eval)
+    return sum(result)
+end
+
+function cubic_scalar_y_matrix(y_matrix, x, x_eval)
+    result = AbstractCosmologicalEmulators.cubic_spline_interpolation(y_matrix, x, x_eval)
+    return sum(result)
+end
+
+# Wrapper functions for ForwardDiff (reshaping vector to matrix)
+function cubic_scalar_y_matrix_forwarddiff_small(y_vec, x, x_eval)
+    y_matrix = reshape(y_vec, n_akima_small, n_problems)
+    return cubic_scalar_y_matrix(y_matrix, x, x_eval)
+end
+
+function cubic_scalar_y_matrix_forwarddiff_medium(y_vec, x, x_eval)
+    y_matrix = reshape(y_vec, n_akima_medium, n_problems)
+    return cubic_scalar_y_matrix(y_matrix, x, x_eval)
+end
+
+SUITE["cubic"]["gradients"] = BenchmarkGroup(["forwarddiff", "zygote", "mooncake", "di"])
+
+# --- ForwardDiff Gradients via DifferentiationInterface with preparation ---
+SUITE["cubic"]["gradients"]["forwarddiff"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["cubic"]["gradients"]["forwarddiff"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> cubic_scalar_y(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_akima_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_small);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["forwarddiff"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> cubic_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["forwarddiff"]["vector_large"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> cubic_scalar_y(y, $x_akima_large, $x_eval_large);
+    typical_x = copy($y_akima_large);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_large);
+    grad = similar(params)
+)
+
+# Matrix version gradients
+SUITE["cubic"]["gradients"]["forwarddiff"]["matrix_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> cubic_scalar_y_matrix_forwarddiff_small(y, $x_akima_small, $x_eval_small);
+    typical_x = vec(copy($y_matrix_small));
+    prep = prepare_gradient(f, backend, typical_x);
+    params = vec(copy($y_matrix_small));
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["forwarddiff"]["matrix_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> cubic_scalar_y_matrix_forwarddiff_medium(y, $x_akima_medium, $x_eval_medium);
+    typical_x = vec(copy($y_matrix_medium));
+    prep = prepare_gradient(f, backend, typical_x);
+    params = vec(copy($y_matrix_medium));
+    grad = similar(params)
+)
+
+# --- Zygote Gradients via DifferentiationInterface with preparation ---
+SUITE["cubic"]["gradients"]["zygote"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["cubic"]["gradients"]["zygote"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> cubic_scalar_y(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_akima_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_small);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["zygote"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> cubic_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["zygote"]["vector_large"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> cubic_scalar_y(y, $x_akima_large, $x_eval_large);
+    typical_x = copy($y_akima_large);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_large);
+    grad = similar(params)
+)
+
+# Matrix version gradients
+SUITE["cubic"]["gradients"]["zygote"]["matrix_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> cubic_scalar_y_matrix(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_matrix_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_small);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["zygote"]["matrix_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> cubic_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_matrix_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_medium);
+    grad = similar(params)
+)
+
+# --- Mooncake Gradients (new backend) with preparation ---
+SUITE["cubic"]["gradients"]["mooncake"] = BenchmarkGroup(["vector", "matrix"])
+
+# Vector version gradients
+SUITE["cubic"]["gradients"]["mooncake"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> cubic_scalar_y(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_akima_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_small);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["mooncake"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> cubic_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["mooncake"]["vector_large"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> cubic_scalar_y(y, $x_akima_large, $x_eval_large);
+    typical_x = copy($y_akima_large);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_large);
+    grad = similar(params)
+)
+
+# Matrix version gradients
+SUITE["cubic"]["gradients"]["mooncake"]["matrix_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> cubic_scalar_y_matrix(y, $x_akima_small, $x_eval_small);
+    typical_x = copy($y_matrix_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_small);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["mooncake"]["matrix_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> cubic_scalar_y_matrix(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_matrix_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_matrix_medium);
+    grad = similar(params)
+)
+
+# --- Gradient Comparison (ForwardDiff vs Zygote vs Mooncake) ---
+SUITE["cubic"]["gradients"]["comparison"] = BenchmarkGroup(["speed"])
+
+SUITE["cubic"]["gradients"]["comparison"]["forward_pass"] = @benchmarkable cubic_scalar_y(
+    $y_akima_medium, $x_akima_medium, $x_eval_medium
+)
+
+SUITE["cubic"]["gradients"]["comparison"]["forwarddiff_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = y -> cubic_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["comparison"]["zygote_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = y -> cubic_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
+)
+
+SUITE["cubic"]["gradients"]["comparison"]["mooncake_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = y -> cubic_scalar_y(y, $x_akima_medium, $x_eval_medium);
+    typical_x = copy($y_akima_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($y_akima_medium);
+    grad = similar(params)
+)
+
+# --- Scaling Benchmarks ---
+SUITE["cubic"]["scaling"] = BenchmarkGroup(["nodes", "eval_points"])
+
+for n in [10, 25, 50, 100, 200, 500]
+    x_nodes = sort(vcat([0.0], rand(n - 2), [1.0]))
+    y_nodes = sin.(2π .* x_nodes) .+ 0.1 .* randn(n)
+
+    SUITE["cubic"]["scaling"]["nodes_$(n)"] = @benchmarkable AbstractCosmologicalEmulators.cubic_spline_interpolation(
+        $y_nodes, $x_nodes, $x_eval_fixed
+    )
+end
+
+for n_eval in [10, 50, 100, 250, 500, 1000]
+    x_eval_var = sort(rand(n_eval))
+
+    SUITE["cubic"]["scaling"]["eval_$(n_eval)"] = @benchmarkable AbstractCosmologicalEmulators.cubic_spline_interpolation(
+        $y_nodes_fixed, $x_nodes_fixed, $x_eval_var
+    )
+end
+
+println("Cubic interpolation benchmarks added successfully")
+println("Cubic interpolation gradients: ForwardDiff, Zygote, and Mooncake via DI")
+

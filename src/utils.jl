@@ -639,3 +639,141 @@ function akima_interpolation(u::AbstractMatrix, t, t_new)
     b, c, d = _akima_coefficients(t, m)
     return _akima_eval(u, t, b, c, d, t_new)
 end
+
+
+# =============================================================================
+# Cubic Spline Interpolation
+# =============================================================================
+
+function _cubic_spline_coefficients(u, t)
+    n = length(t)
+    dt = diff(t)
+
+    # We need an array h (intervals) for evaluation, padded with 0
+    h = zeros(eltype(t), n + 1)
+    h[2:n] = dt
+
+    # Construct Tridiagonal Matrix
+    
+    # dl: sub-diagonal, length n-1. 
+    # [h1, h2, ..., h(n-2), 0]
+    dl = zeros(eltype(t), n - 1)
+    dl[1:end-1] = dt[1:end-1]
+
+    # d_tmp: diagonal, length n.
+    d_tmp = 2 .* (h[1:n] .+ h[2:n+1])
+    
+    # du: super-diagonal, length n-1.
+    # [0, h2, ..., h(n-1)]
+    du = zeros(eltype(t), n - 1)
+    du[2:end] = dt[2:end]
+
+    tA = Tridiagonal(dl, d_tmp, du)
+
+    # RHS d
+    d = zeros(promote_type(eltype(u), eltype(t)), n)
+    for i in 2:n-1
+        d[i] = 6 * (u[i+1] - u[i]) / h[i+1] - 6 * (u[i] - u[i-1]) / h[i]
+    end
+    
+    z = tA \ d
+    
+    return h, z
+end
+
+function _cubic_spline_coefficients(u::AbstractMatrix, t)
+    n, n_cols = size(u)
+    # Check dimensions
+    if n != length(t)
+         error("Dimension mismatch: size(u, 1) must equal length(t)")
+    end
+    
+    dt = diff(t)
+    h = zeros(eltype(t), n + 1)
+    h[2:n] = dt
+
+    # Tridiagonal Matrix (shared)
+    dl = zeros(eltype(t), n - 1)
+    dl[1:end-1] = dt[1:end-1]
+    d_tmp = 2 .* (h[1:n] .+ h[2:n+1])
+    du = zeros(eltype(t), n - 1)
+    du[2:end] = dt[2:end]
+    tA = Tridiagonal(dl, d_tmp, du)
+
+    # RHS d (Matrix)
+    d = zeros(promote_type(eltype(u), eltype(t)), n, n_cols)
+    for col in 1:n_cols
+        for i in 2:n-1
+            d[i, col] = 6 * (u[i+1, col] - u[i, col]) / h[i+1] - 6 * (u[i, col] - u[i-1, col]) / h[i]
+        end
+    end
+    
+    # Solve for z (Matrix)
+    z = tA \ d
+    
+    return h, z
+end
+
+function _cubic_spline_eval(u, t, h, z, tq)
+    idx = _akima_find_interval(t, tq)
+    
+    dt = tq - t[idx]
+    dt_next = t[idx+1] - tq
+    h_i = h[idx+1]
+    
+    term1 = (z[idx] * dt_next^3 + z[idx+1] * dt^3) / (6 * h_i)
+    term2 = (u[idx+1] / h_i - z[idx+1] * h_i / 6) * dt
+    term3 = (u[idx] / h_i - z[idx] * h_i / 6) * dt_next
+    
+    return term1 + term2 + term3
+end
+
+function _cubic_spline_eval(u, t, h, z, tq::AbstractArray)
+    map(tqi -> _cubic_spline_eval(u, t, h, z, tqi), tq)
+end
+
+function _cubic_spline_eval(u::AbstractMatrix, t, h, z::AbstractMatrix, tq::AbstractArray)
+    n_query = length(tq)
+    n_cols = size(u, 2)
+    results = zeros(promote_type(eltype(u), eltype(z), eltype(tq)), n_query, n_cols)
+    
+    for i in 1:n_query
+        # Scalar evaluation for this tq[i] across all cols
+        ti = tq[i]
+        idx = _akima_find_interval(t, ti)
+        dt = ti - t[idx]
+        dt_next = t[idx+1] - ti
+        h_i = h[idx+1]
+        
+        # Broadcast over cols
+        for col in 1:n_cols
+             val = (z[idx, col] * dt_next^3 + z[idx+1, col] * dt^3) / (6 * h_i) +
+               (u[idx+1, col] / h_i - z[idx+1, col] * h_i / 6) * dt +
+               (u[idx, col] / h_i - z[idx, col] * h_i / 6) * dt_next
+             results[i, col] = val
+        end
+    end
+    return results
+end
+
+"""
+    cubic_spline_interpolation(u, t, t_new)
+
+Evaluates the one-dimensional Cubic Spline that interpolates the data points ``(t_i, u_i)``
+at new abscissae `t_new`.
+
+# Arguments
+- `u`: Ordinates (function values) ``u_i`` at the data nodes.
+- `t`: Strictly increasing abscissae (knots) ``t_i`` associated with `u`. `length(t)` must equal `length(u)`.
+- `t_new`: The query point(s) where the spline is to be evaluated.
+
+# Returns
+The interpolated value(s) at `t_new`. A scalar input returns a scalar; a vector input returns a vector of the same length.
+
+# Details
+This routine implements the Natural Cubic Spline.
+"""
+function cubic_spline_interpolation(u, t, t_new)
+    h, z = _cubic_spline_coefficients(u, t)
+    return _cubic_spline_eval(u, t, h, z, t_new)
+end

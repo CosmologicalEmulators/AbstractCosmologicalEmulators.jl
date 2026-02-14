@@ -673,3 +673,383 @@ function ChainRulesCore.rrule(::typeof(akima_interpolation), u::AbstractVector, 
 
     return results, akima_interpolation_fused_pullback
 end
+
+# =============================================================================
+# Cubic Spline Chainrules
+# =============================================================================
+
+function ChainRulesCore.rrule(::typeof(_cubic_spline_coefficients), u::AbstractVector, t::AbstractVector)
+    n = length(t)
+    dt = diff(t)
+    h = zeros(eltype(t), n + 1)
+    h[2:n] = dt
+
+    dl = zeros(eltype(t), n - 1)
+    dl[1:end-1] = dt[1:end-1]
+    
+    d_tmp = 2 .* (h[1:n] .+ h[2:n+1])
+    
+    du = zeros(eltype(t), n - 1)
+    du[2:end] = dt[2:end]
+
+    tA = Tridiagonal(dl, d_tmp, du)
+
+    d = zeros(eltype(u), n)
+    for i in 2:n-1
+        d[i] = 6 * (u[i+1] - u[i]) / h[i+1] - 6 * (u[i] - u[i-1]) / h[i]
+    end
+    
+    z = tA \ d
+
+    function _cubic_spline_coefficients_pullback(Δ)
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+        Δh_out, Δz = Δ_unthunked
+        
+        ∂u = zero(u)
+        ∂t = zero(t)
+        ∂dt = zeros(eltype(t), n - 1)
+        
+        # Propagate Δh_out
+        if Δh_out !== nothing && !(Δh_out isa ChainRulesCore.ZeroTangent)
+             if Δh_out isa AbstractVector
+                 @. ∂dt += Δh_out[2:n]
+             end
+        end
+
+        if Δz !== nothing && !(Δz isa ChainRulesCore.ZeroTangent)
+            # Adjoint solve
+            tA_T = transpose(tA) 
+            λ = tA_T \ Δz
+            
+            # Gradients w.r.t A
+            ∂dl = zeros(eltype(t), n - 1)
+            ∂du = zeros(eltype(t), n - 1)
+            ∂d_tmp = zeros(eltype(t), n)
+            
+            @. ∂dl = -λ[2:end] * z[1:end-1]
+            @. ∂du = -λ[1:end-1] * z[2:end]
+            @. ∂d_tmp = -λ * z
+            
+            # Gradients w.r.t d (RHS)
+            ∂d = λ
+            
+            # Propagate ∂d to ∂u and ∂h/∂dt
+            for i in 2:n-1
+                val_d = ∂d[i]
+                if !iszero(val_d)
+                    inv_h_next = 1 / h[i+1] # dt[i]
+                    inv_h_prev = 1 / h[i]   # dt[i-1]
+                    
+                    term_next = 6 * val_d * inv_h_next
+                    term_prev = 6 * val_d * inv_h_prev
+                    
+                    ∂u[i+1] += term_next
+                    ∂u[i]   -= term_next
+                    ∂u[i]   -= term_prev
+                    ∂u[i-1] += term_prev
+                    
+                    diff_u_next = u[i+1] - u[i]
+                    diff_u_prev = u[i] - u[i-1]
+                    
+                    ∂h_next = -6 * diff_u_next * val_d * (inv_h_next^2)
+                    ∂h_prev =  6 * diff_u_prev * val_d * (inv_h_prev^2)
+                    
+                    ∂dt[i]   += ∂h_next
+                    ∂dt[i-1] += ∂h_prev
+                end
+            end
+            
+            # Propagate ∂A to ∂dt
+            @. ∂dt[1:end-1] += ∂dl[1:end-1]
+            @. ∂dt[2:end] += ∂du[2:end]
+            
+            ∂h_from_A = zeros(eltype(t), n + 1)
+            @. ∂h_from_A[1:n] += 2 * ∂d_tmp
+            @. ∂h_from_A[2:n+1] += 2 * ∂d_tmp
+            
+            @. ∂dt += ∂h_from_A[2:n]
+        end
+        
+        # Propagate ∂dt to ∂t
+        for i in 1:n-1
+            ∂t[i] -= ∂dt[i]
+            ∂t[i+1] += ∂dt[i]
+        end
+        
+        return NoTangent(), ∂u, ∂t
+    end
+    
+    return (h, z), _cubic_spline_coefficients_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_cubic_spline_coefficients), u::AbstractMatrix, t::AbstractVector)
+    n, n_cols = size(u)
+    dt = diff(t)
+    h = zeros(eltype(t), n + 1)
+    h[2:n] = dt
+
+    dl = zeros(eltype(t), n - 1)
+    dl[1:end-1] = dt[1:end-1]
+    d_tmp = 2 .* (h[1:n] .+ h[2:n+1])
+    du = zeros(eltype(t), n - 1)
+    du[2:end] = dt[2:end]
+    tA = Tridiagonal(dl, d_tmp, du)
+
+    d = zeros(eltype(u), n, n_cols)
+    for col in 1:n_cols
+        for i in 2:n-1
+            d[i, col] = 6 * (u[i+1, col] - u[i, col]) / h[i+1] - 6 * (u[i, col] - u[i-1, col]) / h[i]
+        end
+    end
+    
+    z = tA \ d
+
+    function _cubic_spline_coefficients_matrix_pullback(Δ)
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+        Δh_out, Δz = Δ_unthunked
+        
+        ∂u = zero(u)
+        ∂t = zero(t)
+        ∂dt = zeros(eltype(t), n - 1)
+        
+        if Δh_out !== nothing && !(Δh_out isa ChainRulesCore.ZeroTangent)
+             if Δh_out isa AbstractVector
+                 @. ∂dt += Δh_out[2:n]
+             end
+        end
+
+        if Δz !== nothing && !(Δz isa ChainRulesCore.ZeroTangent)
+            # Matrix adjoint solve
+            tA_T = transpose(tA)
+            λ = tA_T \ Δz # (n, n_cols)
+            
+            ∂dl = zeros(eltype(t), n - 1)
+            ∂du = zeros(eltype(t), n - 1)
+            ∂d_tmp = zeros(eltype(t), n)
+            
+            # Accumulate gradients from all columns for A
+            # ∂L/∂A = -λ * z^T. 
+            # For diagonal i: sum_col (-λ[i, col] * z[i, col])
+            
+            for col in 1:n_cols
+                @. ∂dl -= λ[2:end, col] * z[1:end-1, col]
+                @. ∂du -= λ[1:end-1, col] * z[2:end, col]
+                @. ∂d_tmp -= λ[:, col] * z[:, col]
+            end
+            
+            ∂d = λ
+            
+            for col in 1:n_cols
+                for i in 2:n-1
+                    val_d = ∂d[i, col]
+                    if !iszero(val_d)
+                        inv_h_next = 1 / h[i+1]
+                        inv_h_prev = 1 / h[i]
+                        
+                        term_next = 6 * val_d * inv_h_next
+                        term_prev = 6 * val_d * inv_h_prev
+                        
+                        ∂u[i+1, col] += term_next
+                        ∂u[i, col]   -= term_next
+                        ∂u[i, col]   -= term_prev
+                        ∂u[i-1, col] += term_prev
+                        
+                        diff_u_next = u[i+1, col] - u[i, col]
+                        diff_u_prev = u[i, col] - u[i-1, col]
+                        
+                        ∂h_next = -6 * diff_u_next * val_d * (inv_h_next^2)
+                        ∂h_prev =  6 * diff_u_prev * val_d * (inv_h_prev^2)
+                        
+                        ∂dt[i]   += ∂h_next
+                        ∂dt[i-1] += ∂h_prev
+                    end
+                end
+            end
+            
+            @. ∂dt[1:end-1] += ∂dl[1:end-1]
+            @. ∂dt[2:end] += ∂du[2:end]
+            
+            ∂h_from_A = zeros(eltype(t), n + 1)
+            @. ∂h_from_A[1:n] += 2 * ∂d_tmp
+            @. ∂h_from_A[2:n+1] += 2 * ∂d_tmp
+            
+            @. ∂dt += ∂h_from_A[2:n]
+        end
+        
+        for i in 1:n-1
+            ∂t[i] -= ∂dt[i]
+            ∂t[i+1] += ∂dt[i]
+        end
+        
+        return NoTangent(), ∂u, ∂t
+    end
+    
+    return (h, z), _cubic_spline_coefficients_matrix_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_cubic_spline_eval), u, t, h, z, tq::AbstractArray)
+    n_query = length(tq)
+    results = similar(tq, promote_type(eltype(u), eltype(z), eltype(tq)))
+    
+    @inbounds for i in 1:n_query
+        idx = _akima_find_interval(t, tq[i])
+        dt = tq[i] - t[idx]
+        dt_next = t[idx+1] - tq[i]
+        h_i = h[idx+1]
+        
+        results[i] = (z[idx] * dt_next^3 + z[idx+1] * dt^3) / (6 * h_i) +
+                     (u[idx+1] / h_i - z[idx+1] * h_i / 6) * dt +
+                     (u[idx] / h_i - z[idx] * h_i / 6) * dt_next
+    end
+    
+    function _cubic_spline_eval_pullback(ȳ)
+        ȳ_unthunked = ChainRulesCore.unthunk(ȳ)
+        
+        ∂u = zero(u)
+        ∂t = zero(t)
+        ∂h = zero(h)
+        ∂z = zero(z)
+        ∂tq = zero(tq)
+        
+        @inbounds for i in 1:n_query
+            val = ȳ_unthunked[i]
+            if !iszero(val)
+                idx = _akima_find_interval(t, tq[i])
+                dt = tq[i] - t[idx]
+                dt_next = t[idx+1] - tq[i]
+                h_i = h[idx+1]
+                inv_h = 1/h_i
+                inv_6h = 1/(6*h_i)
+                
+                # Forward terms
+                # T1 = (z[idx] * dt_next^3 + z[idx+1] * dt^3) / (6 * h_i)
+                # T2 = u[idx+1] / h_i * dt
+                # T3 = -z[idx+1] * h_i / 6 * dt
+                # T4 = u[idx] / h_i * dt_next
+                # T5 = -z[idx] * h_i / 6 * dt_next
+                
+                # Gradients w.r.t z
+                ∂z[idx]   += val * (dt_next^3 * inv_6h - h_i/6 * dt_next)
+                ∂z[idx+1] += val * (dt^3 * inv_6h - h_i/6 * dt)
+                
+                # Gradients w.r.t u
+                ∂u[idx]   += val * (inv_h * dt_next)
+                ∂u[idx+1] += val * (inv_h * dt)
+                
+                # Gradients w.r.t dt, dt_next (which map to tq and t)
+                # dRes/dt = z[idx+1]*3*dt^2/(6h) + u[idx+1]/h - z[idx+1]*h/6
+                # dRes/dt_next = z[idx]*3*dt_next^2/(6h) + u[idx]/h - z[idx]*h/6
+                
+                d_dt = (z[idx+1] * dt^2) / (2 * h_i) + u[idx+1] * inv_h - z[idx+1] * h_i / 6
+                d_dt_next = (z[idx] * dt_next^2) / (2 * h_i) + u[idx] * inv_h - z[idx] * h_i / 6
+                
+                # dt = tq - t[idx]  => d_tq = 1, d_t[idx] = -1
+                # dt_next = t[idx+1] - tq => d_tq = -1, d_t[idx+1] = 1
+                
+                d_tq = d_dt - d_dt_next
+                ∂tq[i] += val * d_tq
+                ∂t[idx] -= val * d_dt
+                ∂t[idx+1] += val * d_dt_next
+                
+                # Gradients w.r.t h_i (h[idx+1])
+                # T1: -1/h^2 * (...)
+                # T2: -u/h^2 * dt
+                # T3: -z/6 * dt
+                # T4: -u/h^2 * dt_next
+                # T5: -z/6 * dt_next
+                
+                T1_num = (z[idx] * dt_next^3 + z[idx+1] * dt^3) / 6
+                
+                d_h = -T1_num / h_i^2 - 
+                      (u[idx+1] * dt + u[idx] * dt_next) / h_i^2 - 
+                      (z[idx+1] * dt + z[idx] * dt_next) / 6
+                      
+                ∂h[idx+1] += val * d_h
+            end
+        end
+        
+        return NoTangent(), ∂u, ∂t, ∂h, ∂z, ∂tq
+    end
+    
+    return results, _cubic_spline_eval_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_cubic_spline_eval), u::AbstractMatrix, t, h, z::AbstractMatrix, tq::AbstractArray)
+    n_query = length(tq)
+    n_cols = size(u, 2)
+    results = zeros(promote_type(eltype(u), eltype(z), eltype(tq)), n_query, n_cols)
+    
+    @inbounds for i in 1:n_query
+        idx = _akima_find_interval(t, tq[i])
+        dt = tq[i] - t[idx]
+        dt_next = t[idx+1] - tq[i]
+        h_i = h[idx+1]
+        
+        for col in 1:n_cols
+            results[i, col] = (z[idx, col] * dt_next^3 + z[idx+1, col] * dt^3) / (6 * h_i) +
+                              (u[idx+1, col] / h_i - z[idx+1, col] * h_i / 6) * dt +
+                              (u[idx, col] / h_i - z[idx, col] * h_i / 6) * dt_next
+        end
+    end
+    
+    function _cubic_spline_eval_matrix_pullback(ȳ)
+        ȳ_unthunked = ChainRulesCore.unthunk(ȳ)
+        
+        ∂u = zero(u)
+        ∂t = zero(t)
+        ∂h = zero(h)
+        ∂z = zero(z)
+        ∂tq = zero(tq)
+        
+        @inbounds for i in 1:n_query
+            idx = _akima_find_interval(t, tq[i])
+            dt = tq[i] - t[idx]
+            dt_next = t[idx+1] - tq[i]
+            h_i = h[idx+1]
+            inv_h = 1/h_i
+            inv_6h = 1/(6*h_i)
+            
+            tq_accum = zero(eltype(tq))
+            t_idx_accum = zero(eltype(t))
+            t_idx1_accum = zero(eltype(t))
+            h_accum = zero(eltype(h))
+            
+            for col in 1:n_cols
+                val = ȳ_unthunked[i, col]
+                if !iszero(val)
+                    # Gradients w.r.t z
+                    ∂z[idx, col]   += val * (dt_next^3 * inv_6h - h_i/6 * dt_next)
+                    ∂z[idx+1, col] += val * (dt^3 * inv_6h - h_i/6 * dt)
+                    
+                    # Gradients w.r.t u
+                    ∂u[idx, col]   += val * (inv_h * dt_next)
+                    ∂u[idx+1, col] += val * (inv_h * dt)
+                    
+                    # Accumulate scalars (t, tq, h)
+                    d_dt = (z[idx+1, col] * dt^2) / (2 * h_i) + u[idx+1, col] * inv_h - z[idx+1, col] * h_i / 6
+                    d_dt_next = (z[idx, col] * dt_next^2) / (2 * h_i) + u[idx, col] * inv_h - z[idx, col] * h_i / 6
+                    
+                    d_tq = d_dt - d_dt_next
+                    tq_accum += val * d_tq
+                    t_idx_accum -= val * d_dt
+                    t_idx1_accum += val * d_dt_next
+                    
+                    T1_num = (z[idx, col] * dt_next^3 + z[idx+1, col] * dt^3) / 6
+                    d_h = -T1_num / h_i^2 - 
+                          (u[idx+1, col] * dt + u[idx, col] * dt_next) / h_i^2 - 
+                          (z[idx+1, col] * dt + z[idx, col] * dt_next) / 6
+                    h_accum += val * d_h
+                end
+            end
+            
+            ∂tq[i] = tq_accum
+            ∂t[idx] += t_idx_accum
+            ∂t[idx+1] += t_idx1_accum
+            ∂h[idx+1] += h_accum
+        end
+        
+        return NoTangent(), ∂u, ∂t, ∂h, ∂z, ∂tq
+    end
+    
+    return results, _cubic_spline_eval_matrix_pullback
+end
