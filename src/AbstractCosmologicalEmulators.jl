@@ -9,7 +9,6 @@ using NPZ
 using SimpleChains
 using LinearAlgebra
 using FFTW
-using FastChebInterp
 using ForwardDiff
 using ForwardDiff: Dual, value, partials, tagtype, Partials
 
