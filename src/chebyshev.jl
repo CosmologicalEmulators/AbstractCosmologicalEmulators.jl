@@ -34,16 +34,19 @@ tuple and the target dimension `dim`.
 function prepare_chebyshev_plan(x_mins::NTuple{N, T}, x_maxs::NTuple{N, T}, Ks::NTuple{N, Int}; size_nd::Union{Tuple, Nothing}=nothing, dim::NTuple{N, Int}=ntuple(i->i, N)) where {N, T}
     nodes = ntuple(i -> chebpoints(Ks[i], x_mins[i], x_maxs[i]), N)
 
-    if size_nd !== nothing
-        for i in 1:N
-            @assert size_nd[dim[i]] == Ks[i] + 1 "Size along target dimension $(dim[i]) must be Ks[$i]+1"
+    if size_nd === nothing
+        # If N > 1, we can only infer size_nd if dim is standard (1, 2, ..., N)
+        if N > 1
+            @assert dim == ntuple(i->i, N) "size_nd must be specified if dim is not (1, ..., N)"
         end
-        fft_plan = FFTW.plan_r2r(zeros(T, size_nd...), FFTW.REDFT00, dim)
-    else
-        @assert N == 1 "For N > 1, size_nd must be specified"
-        fft_plan = FFTW.plan_r2r(zeros(T, Ks[1] + 1), FFTW.REDFT00, 1)
-        dim = (1,)
+        size_nd = ntuple(i -> Ks[i] + 1, N)
     end
+
+    for i in 1:N
+        @assert size_nd[dim[i]] == Ks[i] + 1 "Size along target dimension $(dim[i]) must be Ks[$i]+1"
+    end
+    fft_plan = FFTW.plan_r2r(zeros(T, size_nd...), FFTW.REDFT00, dim)
+
     return ChebyshevPlan(fft_plan, Ks, nodes, dim)
 end
 
