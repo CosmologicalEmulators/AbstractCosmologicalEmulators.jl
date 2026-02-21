@@ -64,4 +64,48 @@ using FiniteDifferences
         grad_mooncake = DifferentiationInterface.gradient(test_f, AutoMooncake(; config=nothing), vals0)
         @test isapprox(grad_mooncake, grad_fd, atol=1e-8)
     end
+
+    @testset "ND Array Support" begin
+        K = 10
+        x_min, x_max = 0.0, 5.0
+
+        # 3D Array: 5 x (K+1) x 3
+        sz = (5, K+1, 3)
+        dim = 2
+        plan_3d = prepare_chebyshev_plan(x_min, x_max, K; size_nd=sz, dim=dim)
+
+        # Generate some data
+        f_vals_3d = randn(sz...)
+
+        # Direct decomposition
+        plan_1d = prepare_chebyshev_plan(x_min, x_max, K)
+
+        c_3d = chebyshev_decomposition(plan_3d, f_vals_3d)
+
+        c_slices = similar(c_3d)
+        for i in 1:sz[1]
+            for j in 1:sz[3]
+                c_slices[i, :, j] = chebyshev_decomposition(plan_1d, f_vals_3d[i, :, j])
+            end
+        end
+
+        @test isapprox(c_3d, c_slices, atol=1e-10)
+
+        test_f_nd(vals) = sum(chebyshev_decomposition(plan_3d, vals))
+
+        # Baseline gradient
+        grad_fd_nd = DifferentiationInterface.gradient(test_f_nd, DifferentiationInterface.AutoFiniteDifferences(; fdm=FiniteDifferences.central_fdm(3, 1)), f_vals_3d)
+
+        # Zygote
+        grad_zygote_nd = DifferentiationInterface.gradient(test_f_nd, AutoZygote(), f_vals_3d)
+        @test isapprox(grad_zygote_nd, grad_fd_nd, atol=1e-8)
+
+        # ForwardDiff
+        grad_forward_nd = DifferentiationInterface.gradient(test_f_nd, AutoForwardDiff(), f_vals_3d)
+        @test isapprox(grad_forward_nd, grad_fd_nd, atol=1e-8)
+
+        # Mooncake
+        grad_mooncake_nd = DifferentiationInterface.gradient(test_f_nd, AutoMooncake(; config=nothing), f_vals_3d)
+        @test isapprox(grad_mooncake_nd, grad_fd_nd, atol=1e-8)
+    end
 end
