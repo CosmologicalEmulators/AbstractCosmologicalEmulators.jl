@@ -12,6 +12,9 @@ NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 SciMLSensitivity = "1ed8b502-d754-442c-8d5d-10ac956f44a1"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+FastChebInterp = "cf66c380-9a80-432c-aff8-4f9c79c0bdde"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 
 [weakdeps]
 DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
@@ -38,6 +41,9 @@ NPZ = "0.4"
 OrdinaryDiffEqTsit5 = "1"
 SciMLSensitivity = "7.90"
 SimpleChains = "0.4"
+FFTW = "1"
+FastChebInterp = "1"
+ForwardDiff = "0.10"
 julia = "1.10"
 
 [extras]
