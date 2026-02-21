@@ -30,7 +30,7 @@ using FiniteDifferences
         plan = prepare_chebyshev_plan(x_min, x_max, K)
 
         # Evaluate f at Chebyshev nodes
-        f_nodes = f_test.(plan.nodes)
+        f_nodes = f_test.(plan.nodes[1])
 
         c = chebyshev_decomposition(plan, f_nodes)
         T_mat = chebyshev_polynomials(x_grid, x_min, x_max, K)
@@ -47,7 +47,7 @@ using FiniteDifferences
         plan = prepare_chebyshev_plan(x_min, x_max, K)
 
         test_f(vals) = sum(chebyshev_decomposition(plan, vals))
-        vals0 = f_test.(plan.nodes)
+        vals0 = f_test.(plan.nodes[1])
 
         # Baseline gradient (FiniteDifferences)
         grad_fd = DifferentiationInterface.gradient(test_f, DifferentiationInterface.AutoFiniteDifferences(; fdm=FiniteDifferences.central_fdm(5, 1)), vals0)
@@ -108,7 +108,6 @@ using FiniteDifferences
         grad_mooncake_nd = DifferentiationInterface.gradient(test_f_nd, AutoMooncake(; config=nothing), f_vals_3d)
         @test isapprox(grad_mooncake_nd, grad_fd_nd, atol=1e-8)
     end
-end
 
     @testset "Multi-Dimensional Support" begin
         # 2D case
