@@ -11,6 +11,20 @@ struct ChebyshevPlan{P, T}
 end
 
 """
+    chebpoints(K::Int, x_min::T, x_max::T) where T
+
+Generate `K+1` Chebyshev nodes of the second kind (extrema) mapped to `[x_min, x_max]`.
+This replaces `FastChebInterp.chebpoints` directly to preserve mathematical behavior natively.
+"""
+function chebpoints(K::Int, x_min::T, x_max::T) where T
+    k = 0:K
+    # Cosine points in [-1, 1], descending from 1 to -1 exactly as FastChebInterp does
+    nodes_std = cos.(π .* k ./ K)
+    nodes = x_min .+ 0.5 .* (nodes_std .+ 1.0) .* (x_max - x_min)
+    return nodes
+end
+
+"""
     prepare_chebyshev_plan(x_min, x_max, K; size_nd=nothing, dim=1)
 
 Precomputes the Chebyshev nodes and the FFT plan required to compute coefficients.
