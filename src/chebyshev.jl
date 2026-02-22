@@ -94,42 +94,42 @@ Computes the Chebyshev coefficients for a function evaluated at the Chebyshev no
 Supports batched inputs (ranks higher than the plan rank) and ForwardDiff.Dual.
 """
 function chebyshev_decomposition(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray) where {ND, P, T}
-    # Case 1: Rank matches exactly (spatial/grid dimensions only)
-    if ndims(f_vals) == ND
+    # Rank for which the plan was created
+    PR = length(size(plan.fft_plan))
+    
+    # Case 1: Rank matches exactly what the plan expects (spatial grid dimensions)
+    if ndims(f_vals) == PR
         return _chebyshev_decomposition_single(plan, f_vals)
     end
 
-    # Case 2: Batched input (Rank > ND)
-    # We treat all dimensions after ND as batch dimensions.
-    grid_size = size(f_vals)[1:ND]
-    batch_size = size(f_vals)[ND+1:end]
+    # Case 2: Batched input (Rank > PR)
+    # Dimensions after PR are treated as batch dimensions.
+    grid_size = size(f_vals)[1:PR]
+    batch_size = size(f_vals)[PR+1:end]
     f_reshaped = reshape(f_vals, grid_size..., :)
     
-    # Pre-allocate result array with correct promoted type
-    # We use a dummy evaluation to get the correct eltype
-    dummy_c = _chebyshev_decomposition_single(plan, copy(selectdim(f_reshaped, ND+1, 1)))
-    c_reshaped = similar(f_reshaped, eltype(dummy_c), size(dummy_c)..., size(f_reshaped, ND+1))
+    # First batch to get result size and type
+    dummy_c = _chebyshev_decomposition_single(plan, copy(selectdim(f_reshaped, PR+1, 1)))
+    c_reshaped = similar(f_reshaped, eltype(dummy_c), size(dummy_c)..., size(f_reshaped, PR+1))
     
     # Process each batch
-    for i in 1:size(f_reshaped, ND+1)
-        # We MUST use copy() to ensure contiguous memory for FFTW plan application,
-        # otherwise we hit "wrong memory alignment" errors.
-        f_slice = copy(selectdim(f_reshaped, ND+1, i))
-        selectdim(c_reshaped, ND+1, i) .= _chebyshev_decomposition_single(plan, f_slice)
+    for i in 1:size(f_reshaped, PR+1)
+        # We MUST use copy() to ensure contiguous memory for FFTW plan application
+        f_slice = copy(selectdim(f_reshaped, PR+1, i))
+        selectdim(c_reshaped, PR+1, i) .= _chebyshev_decomposition_single(plan, f_slice)
     end
     
-    return reshape(c_reshaped, size(c_reshaped)[1:ND]..., batch_size...)
+    return reshape(c_reshaped, size(c_reshaped)[1:PR]..., batch_size...)
 end
 
-# Internal implementation for a single block (Rank == ND)
-function _chebyshev_decomposition_single(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{T, ND}) where {ND, P, T}
-    # FFTW plans are strictly for specific memory layout/rank.
-    # We assume f_vals is contiguous (caller ensures this via copy() if needed).
+# Internal implementation for a single block (Rank == PR)
+function _chebyshev_decomposition_single(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{T}) where {ND, P, T}
+    # f_vals rank must match plan rank (checked by caller)
     c = plan.fft_plan * f_vals
     return _scale_chebyshev_coeffs!(c, ND, plan.dim, plan.K)
 end
 
-function _chebyshev_decomposition_single(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{<:Dual, ND}) where {ND, P, T}
+function _chebyshev_decomposition_single(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{<:Dual}) where {ND, P, T}
     vals = value.(f_vals)
     c_raw_val = plan.fft_plan * vals
     
@@ -138,7 +138,6 @@ function _chebyshev_decomposition_single(plan::ChebyshevPlan{ND, P, T}, f_vals::
     num_partials = length(partials(first(f_vals)))
 
     c_raw_partials = map(1:num_partials) do p
-        # Ensure partials slice is contiguous for FFTW
         p_vals = [partials(x)[p] for x in f_vals]
         plan.fft_plan * p_vals
     end
