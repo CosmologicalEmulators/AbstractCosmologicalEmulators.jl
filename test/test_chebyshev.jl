@@ -159,6 +159,63 @@ using FiniteDifferences
         @test isapprox(grad_zygote_2d, grad_fd_2d, atol=1e-8)
     end
 
+    @testset "Batch Support (Rank > ND)" begin
+        # Case 1: 1D Plan with 2D Matrix (Standard batching)
+        K = 40
+        x_min, x_max = 0.0, 10.0
+        plan_1d = prepare_chebyshev_plan(x_min, x_max, K)
+        
+        n_batch = 5
+        v_mat = randn(K + 1, n_batch)
+        
+        c_mat = chebyshev_decomposition(plan_1d, v_mat)
+        @test size(c_mat) == (K + 1, n_batch)
+        
+        # Verify individual columns
+        for i in 1:n_batch
+            @test isapprox(c_mat[:, i], chebyshev_decomposition(plan_1d, v_mat[:, i]))
+        end
+
+        # Case 2: 2D Plan with 3D Array
+        K_tup = (10, 10)
+        xmin_tup = (0.0, 0.0)
+        xmax_tup = (1.0, 1.0)
+        plan_2d = prepare_chebyshev_plan(xmin_tup, xmax_tup, K_tup)
+        
+        n_batch_nd = 3
+        v_3d = randn(K_tup[1]+1, K_tup[2]+1, n_batch_nd)
+        
+        c_3d = chebyshev_decomposition(plan_2d, v_3d)
+        @test size(c_3d) == (K_tup[1]+1, K_tup[2]+1, n_batch_nd)
+        
+        for i in 1:n_batch_nd
+            @test isapprox(c_3d[:, :, i], chebyshev_decomposition(plan_2d, v_3d[:, :, i]))
+        end
+
+        # Case 3: Memory Alignment (View test)
+        # Slices of larger arrays often have "wrong" alignment for FFTW
+        v_large = randn(K+1, n_batch * 2)
+        v_view = view(v_large, :, 1:n_batch)
+        
+        @test_nowarn chebyshev_decomposition(plan_1d, v_view)
+        
+        # Case 4: AD Compatibility with Batching
+        test_f_batch(v) = sum(chebyshev_decomposition(plan_1d, v))
+        v_batch0 = randn(K+1, 2)
+        
+        # ForwardDiff
+        grad_forward = DifferentiationInterface.gradient(test_f_batch, AutoForwardDiff(), v_batch0)
+        @test size(grad_forward) == size(v_batch0)
+        
+        # Zygote
+        grad_zygote = DifferentiationInterface.gradient(test_f_batch, AutoZygote(), v_batch0)
+        @test isapprox(grad_zygote, grad_forward, atol=1e-12)
+
+        # Mooncake
+        grad_mooncake = DifferentiationInterface.gradient(test_f_batch, AutoMooncake(; config=nothing), v_batch0)
+        @test isapprox(grad_mooncake, grad_forward, atol=1e-12)
+    end
+
     @testset "Comparison with FastChebInterp" begin
         using FastChebInterp
 
