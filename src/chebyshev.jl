@@ -126,42 +126,7 @@ function ChainRulesCore.rrule(::typeof(chebyshev_decomposition), plan::Chebyshev
     c = chebyshev_decomposition(plan, f_vals)
     function chebyshev_decomposition_pullback(Δc_raw)
         Δc = unthunk(Δc_raw)
-        Δf_vals = copy(Δc)
-
-        for i in ND:-1:1
-            d = plan.dim[i]
-            K_i = plan.K[i]
-
-            selectdim(Δf_vals, d, 1) ./= 2
-            selectdim(Δf_vals, d, size(Δf_vals, d)) ./= 2
-            Δf_vals ./= K_i
-
-            K_plus_1 = K_i + 1
-            A_T = zeros(T, K_plus_1, K_plus_1)
-            for k in 0:(K_plus_1-1)
-                for j in 0:(K_plus_1-1)
-                    factor = (j == 0 || j == K_plus_1 - 1) ? 1.0 : 2.0
-                    A_T[j+1, k+1] = factor * cos(pi * j * k / (K_plus_1 - 1))
-                end
-            end
-
-            if N == 1
-                Δf_vals = A_T * Δf_vals
-            else
-                perms = [d; setdiff(1:N, d)]
-                inv_perms = invperm(perms)
-
-                Δc_perm = permutedims(Δf_vals, perms)
-                M = length(Δc_perm) ÷ K_plus_1
-                Δc_mat = reshape(Δc_perm, K_plus_1, M)
-
-                Δf_mat = A_T * Δc_mat
-
-                Δf_perm = reshape(Δf_mat, size(Δc_perm))
-                Δf_vals = permutedims(Δf_perm, inv_perms)
-            end
-        end
-
+        Δf_vals = chebyshev_decomposition(plan, Δc)
         return NoTangent(), NoTangent(), Δf_vals
     end
     return c, chebyshev_decomposition_pullback
