@@ -1532,3 +1532,153 @@ end
 println("Cubic interpolation benchmarks added successfully")
 println("Cubic interpolation gradients: ForwardDiff, Zygote, and Mooncake via DI")
 
+
+# --- Chebyshev Benchmarks ---
+SUITE["chebyshev"] = BenchmarkGroup(["interpolation", "gradients", "decomposition"])
+
+# Test data for Chebyshev
+const K_cheb_small = 19  # 20 nodes
+const K_cheb_medium = 99 # 100 nodes
+const K_cheb_large = 499 # 500 nodes
+
+const x_min_cheb = 0.0
+const x_max_cheb = 1.0
+
+# Plans
+const plan_cheb_small = prepare_chebyshev_plan(x_min_cheb, x_max_cheb, K_cheb_small)
+const plan_cheb_medium = prepare_chebyshev_plan(x_min_cheb, x_max_cheb, K_cheb_medium)
+const plan_cheb_large = prepare_chebyshev_plan(x_min_cheb, x_max_cheb, K_cheb_large)
+
+# Values at nodes
+const f_cheb(x) = sin(2π * x) + 0.5 * cos(4π * x)
+const vals_cheb_small = f_cheb.(plan_cheb_small.nodes[1])
+const vals_cheb_medium = f_cheb.(plan_cheb_medium.nodes[1])
+const vals_cheb_large = f_cheb.(plan_cheb_large.nodes[1])
+
+# Matrix data (multiple problems along dim 2) - Reuse n_problems = 10 from Akima
+const vals_matrix_cheb_small = hcat([f_cheb.(plan_cheb_small.nodes[1] .+ 0.1*i) for i in 1:n_problems]...)
+const plan_matrix_cheb_small = prepare_chebyshev_plan(x_min_cheb, x_max_cheb, K_cheb_small; size_nd=(K_cheb_small+1, n_problems), dim=1)
+
+const vals_matrix_cheb_medium = hcat([f_cheb.(plan_cheb_medium.nodes[1] .+ 0.1*i) for i in 1:n_problems]...)
+const plan_matrix_cheb_medium = prepare_chebyshev_plan(x_min_cheb, x_max_cheb, K_cheb_medium; size_nd=(K_cheb_medium+1, n_problems), dim=1)
+
+# --- Forward Pass Benchmarks ---
+SUITE["chebyshev"]["forward"] = BenchmarkGroup(["vector", "matrix", "polynomials"])
+
+# Polynomials generation
+SUITE["chebyshev"]["forward"]["polynomials_small"] = @benchmarkable chebyshev_polynomials($x_eval_small, $x_min_cheb, $x_max_cheb, $K_cheb_small)
+SUITE["chebyshev"]["forward"]["polynomials_medium"] = @benchmarkable chebyshev_polynomials($x_eval_medium, $x_min_cheb, $x_max_cheb, $K_cheb_medium)
+
+# Decomposition
+SUITE["chebyshev"]["forward"]["vector_small"] = @benchmarkable chebyshev_decomposition($plan_cheb_small, $vals_cheb_small)
+SUITE["chebyshev"]["forward"]["vector_medium"] = @benchmarkable chebyshev_decomposition($plan_cheb_medium, $vals_cheb_medium)
+SUITE["chebyshev"]["forward"]["vector_large"] = @benchmarkable chebyshev_decomposition($plan_cheb_large, $vals_cheb_large)
+
+SUITE["chebyshev"]["forward"]["matrix_small"] = @benchmarkable chebyshev_decomposition($plan_matrix_cheb_small, $vals_matrix_cheb_small)
+SUITE["chebyshev"]["forward"]["matrix_medium"] = @benchmarkable chebyshev_decomposition($plan_matrix_cheb_medium, $vals_matrix_cheb_medium)
+
+# --- Gradient Benchmarks ---
+# Helper functions for scalar output
+function cheb_scalar_vals(vals, plan)
+    c = chebyshev_decomposition(plan, vals)
+    return sum(c)
+end
+
+SUITE["chebyshev"]["gradients"] = BenchmarkGroup(["forwarddiff", "zygote", "mooncake", "di"])
+
+# --- ForwardDiff Gradients ---
+SUITE["chebyshev"]["gradients"]["forwarddiff"] = BenchmarkGroup(["vector", "matrix"])
+
+SUITE["chebyshev"]["gradients"]["forwarddiff"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = v -> cheb_scalar_vals(v, $plan_cheb_small);
+    typical_x = copy($vals_cheb_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($vals_cheb_small);
+    grad = similar(params)
+)
+
+SUITE["chebyshev"]["gradients"]["forwarddiff"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoForwardDiff();
+    f = v -> cheb_scalar_vals(v, $plan_cheb_medium);
+    typical_x = copy($vals_cheb_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($vals_cheb_medium);
+    grad = similar(params)
+)
+
+# --- Zygote Gradients ---
+SUITE["chebyshev"]["gradients"]["zygote"] = BenchmarkGroup(["vector", "matrix"])
+
+SUITE["chebyshev"]["gradients"]["zygote"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = v -> cheb_scalar_vals(v, $plan_cheb_small);
+    typical_x = copy($vals_cheb_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($vals_cheb_small);
+    grad = similar(params)
+)
+
+SUITE["chebyshev"]["gradients"]["zygote"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = v -> cheb_scalar_vals(v, $plan_cheb_medium);
+    typical_x = copy($vals_cheb_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($vals_cheb_medium);
+    grad = similar(params)
+)
+
+# --- Mooncake Gradients ---
+SUITE["chebyshev"]["gradients"]["mooncake"] = BenchmarkGroup(["vector", "matrix"])
+
+SUITE["chebyshev"]["gradients"]["mooncake"]["vector_small"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = v -> cheb_scalar_vals(v, $plan_cheb_small);
+    typical_x = copy($vals_cheb_small);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($vals_cheb_small);
+    grad = similar(params)
+)
+
+SUITE["chebyshev"]["gradients"]["mooncake"]["vector_medium"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoMooncake(; config=Mooncake.Config());
+    f = v -> cheb_scalar_vals(v, $plan_cheb_medium);
+    typical_x = copy($vals_cheb_medium);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($vals_cheb_medium);
+    grad = similar(params)
+)
+
+# --- Multidimensional (2D) Benchmarks ---
+SUITE["chebyshev"]["multidim"] = BenchmarkGroup(["forward", "gradients"])
+
+const K2D = (15, 15)
+const plan_2d_cheb = prepare_chebyshev_plan((0.0, 0.0), (1.0, 1.0), K2D)
+const vals_2d_cheb = [f_cheb(x1) * f_cheb(x2) for x1 in plan_2d_cheb.nodes[1], x2 in plan_2d_cheb.nodes[2]]
+
+SUITE["chebyshev"]["multidim"]["forward_2d"] = @benchmarkable chebyshev_decomposition($plan_2d_cheb, $vals_2d_cheb)
+
+SUITE["chebyshev"]["multidim"]["zygote_2d"] = @benchmarkable begin
+    gradient!(f, grad, prep, backend, params)
+end setup = (
+    backend = AutoZygote();
+    f = v -> cheb_scalar_vals(v, $plan_2d_cheb);
+    typical_x = copy($vals_2d_cheb);
+    prep = prepare_gradient(f, backend, typical_x);
+    params = copy($vals_2d_cheb);
+    grad = similar(params)
+)
+
+println("Chebyshev benchmarks added successfully")
