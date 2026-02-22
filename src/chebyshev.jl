@@ -75,21 +75,71 @@ function chebyshev_polynomials(x_grid::AbstractVector{T}, x_min::T, x_max::T, K:
     return T_mat
 end
 
+# Helper to apply scaling to raw FFT coefficients
+function _scale_chebyshev_coeffs!(c, ND, plan_dim, plan_K)
+    for i in 1:ND
+        d = plan_dim[i]
+        K_i = plan_K[i]
+        c ./= K_i
+        selectdim(c, d, 1) ./= 2
+        selectdim(c, d, size(c, d)) ./= 2
+    end
+    return c
+end
+
 """
     chebyshev_decomposition(plan, f_vals)
 
 Computes the Chebyshev coefficients for a function evaluated at the Chebyshev nodes.
-Supports ForwardDiff.Dual.
+Supports batched inputs (ranks higher than the plan rank) and ForwardDiff.Dual.
 """
-function chebyshev_decomposition(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{<:Dual}) where {ND, P, T}
+function chebyshev_decomposition(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray) where {ND, P, T}
+    # Case 1: Rank matches exactly (spatial/grid dimensions only)
+    if ndims(f_vals) == ND
+        return _chebyshev_decomposition_single(plan, f_vals)
+    end
+
+    # Case 2: Batched input (Rank > ND)
+    # We treat all dimensions after ND as batch dimensions.
+    grid_size = size(f_vals)[1:ND]
+    batch_size = size(f_vals)[ND+1:end]
+    f_reshaped = reshape(f_vals, grid_size..., :)
+    
+    # Pre-allocate result array with correct promoted type
+    # We use a dummy evaluation to get the correct eltype
+    dummy_c = _chebyshev_decomposition_single(plan, copy(selectdim(f_reshaped, ND+1, 1)))
+    c_reshaped = similar(f_reshaped, eltype(dummy_c), size(dummy_c)..., size(f_reshaped, ND+1))
+    
+    # Process each batch
+    for i in 1:size(f_reshaped, ND+1)
+        # We MUST use copy() to ensure contiguous memory for FFTW plan application,
+        # otherwise we hit "wrong memory alignment" errors.
+        f_slice = copy(selectdim(f_reshaped, ND+1, i))
+        selectdim(c_reshaped, ND+1, i) .= _chebyshev_decomposition_single(plan, f_slice)
+    end
+    
+    return reshape(c_reshaped, size(c_reshaped)[1:ND]..., batch_size...)
+end
+
+# Internal implementation for a single block (Rank == ND)
+function _chebyshev_decomposition_single(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{T, ND}) where {ND, P, T}
+    # FFTW plans are strictly for specific memory layout/rank.
+    # We assume f_vals is contiguous (caller ensures this via copy() if needed).
+    c = plan.fft_plan * f_vals
+    return _scale_chebyshev_coeffs!(c, ND, plan.dim, plan.K)
+end
+
+function _chebyshev_decomposition_single(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{<:Dual, ND}) where {ND, P, T}
     vals = value.(f_vals)
     c_raw_val = plan.fft_plan * vals
+    
     dual_type = eltype(f_vals)
     Tag = tagtype(dual_type)
     num_partials = length(partials(first(f_vals)))
 
     c_raw_partials = map(1:num_partials) do p
-        p_vals = map(x -> partials(x)[p], f_vals)
+        # Ensure partials slice is contiguous for FFTW
+        p_vals = [partials(x)[p] for x in f_vals]
         plan.fft_plan * p_vals
     end
 
@@ -98,43 +148,14 @@ function chebyshev_decomposition(plan::ChebyshevPlan{ND, P, T}, f_vals::Abstract
         Dual{Tag}(c_raw_val[idx], parts)
     end
 
-    for i in 1:ND
-        d = plan.dim[i]
-        K_i = plan.K[i]
-        c = c ./ K_i
-        selectdim(c, d, 1) ./= 2
-        selectdim(c, d, size(c, d)) ./= 2
-    end
-    return c
-end
-
-function chebyshev_decomposition(plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{T}) where {ND, P, T}
-    c_raw = plan.fft_plan * f_vals
-    c = c_raw
-    for i in 1:ND
-        d = plan.dim[i]
-        K_i = plan.K[i]
-        c = c ./ K_i
-        selectdim(c, d, 1) ./= 2
-        selectdim(c, d, size(c, d)) ./= 2
-    end
-    return c
-end
-
-function chebyshev_decomposition(plan::ChebyshevPlan{1, P, T}, f_vals::AbstractMatrix{<:Dual}) where {P, T}
-    return reduce(hcat, [chebyshev_decomposition(plan, f_vals[:, i]) for i in 1:size(f_vals, 2)])
-end
-
-function chebyshev_decomposition(plan::ChebyshevPlan{1, P, T}, f_vals::AbstractMatrix{T}) where {P, T}
-    return reduce(hcat, [chebyshev_decomposition(plan, f_vals[:, i]) for i in 1:size(f_vals, 2)])
+    return _scale_chebyshev_coeffs!(c, ND, plan.dim, plan.K)
 end
 
 # AD rrule for Chebyshev decomposition
-function ChainRulesCore.rrule(::typeof(chebyshev_decomposition), plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{T, N}) where {ND, P, T, N}
+function ChainRulesCore.rrule(::typeof(chebyshev_decomposition), plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{T}) where {ND, P, T}
     c = chebyshev_decomposition(plan, f_vals)
     function chebyshev_decomposition_pullback(Δc_raw)
-        Δc = unthunk(Δc_raw)
-        Δf_vals = chebyshev_decomposition(plan, Δc)
+        Δf_vals = chebyshev_decomposition(plan, unthunk(Δc_raw))
         return NoTangent(), NoTangent(), Δf_vals
     end
     return c, chebyshev_decomposition_pullback
