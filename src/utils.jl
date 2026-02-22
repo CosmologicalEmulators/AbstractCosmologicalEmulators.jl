@@ -54,7 +54,7 @@ function validate_nn_dict_structure(nn_dict::AbstractDict{String,Any})
 
     # Validate layer structure
     validate_layer_structure(nn_dict)
-    
+
     # Numerical safety validation
     validate_normalization_ranges(nn_dict)
     validate_architecture_numerical_stability(nn_dict)
@@ -202,31 +202,31 @@ end
 function validate_normalization_ranges(nn_dict::AbstractDict{String,Any})
     if haskey(nn_dict, "emulator_description")
         desc = nn_dict["emulator_description"]
-        
+
         range_keys = ["input_ranges", "minmax", "parameter_ranges", "normalization_ranges"]
         minmax_data = nothing
-        
+
         for key in range_keys
             if haskey(desc, key)
                 minmax_data = desc[key]
                 break
             end
         end
-        
+
         if minmax_data !== nothing
             validate_minmax_data(minmax_data)
         end
     end
-    
+
     return nothing
 end
 
 function validate_minmax_data(minmax_data)
     ranges = convert_minmax_format(minmax_data)
-    
+
     range_widths = @views ranges[:,2] - ranges[:,1]
     degenerate_indices = findall(abs.(range_widths) .< 1e-15)
-    
+
     if !isempty(degenerate_indices)
         throw(ArgumentError(
         "Degenerate normalization ranges detected at parameter indices: $degenerate_indices. " *
@@ -235,9 +235,9 @@ function validate_minmax_data(minmax_data)
         "Please ensure min ≠ max for all parameters."
         ))
     end
-    
+
     validate_cosmological_ranges(ranges)
-    
+
     return nothing
 end
 
@@ -251,7 +251,7 @@ function convert_minmax_format(minmax_data)
         if length(minmax_data) == 0
             throw(ArgumentError("Empty minmax data provided"))
         end
-        
+
         if isa(minmax_data[1], Vector) || isa(minmax_data[1], Array)
             ranges = Matrix{Float64}(undef, length(minmax_data), 2)
             for (i, range_pair) in enumerate(minmax_data)
@@ -283,15 +283,15 @@ end
 
 function validate_cosmological_ranges(ranges::Matrix{Float64})
     n_params = size(ranges, 1)
-    
+
     for i in 1:n_params
         min_val, max_val = ranges[i, 1], ranges[i, 2]
-        
+
         if min_val >= max_val
             throw(ArgumentError("Invalid range for parameter $i: min ($min_val) >= max ($max_val)"))
         end
     end
-    
+
     return nothing
 end
 
@@ -300,7 +300,7 @@ function validate_trained_weights(weights, nn_dict::AbstractDict{String,Any})
     if !all(finite_mask)
         nan_count = count(isnan.(weights))
         inf_count = count(isinf.(weights))
-        
+
         throw(ArgumentError(
         "Invalid trained weights detected: " *
         "NaN values: $nan_count, Inf values: $inf_count, " *
@@ -308,18 +308,18 @@ function validate_trained_weights(weights, nn_dict::AbstractDict{String,Any})
         "This indicates the emulator was not properly trained or the weights are corrupted."
         ))
     end
-    
+
     max_weight = maximum(abs.(weights))
     if max_weight > 1e6
         @warn "Large weight magnitudes detected (max absolute value: $max_weight). " *
               "This may indicate training instability, poor normalization, or gradient explosion."
     end
-    
+
     if all(abs.(weights) .< 1e-10)
         @warn "All weights are very small (< 1e-10). " *
               "This may indicate the emulator was not properly trained."
     end
-    
+
     return nothing
 end
 
@@ -466,6 +466,24 @@ The implementation is free of mutation on the inputs and uses only element-wise 
 # Notes
 The algorithm and numerical results are equivalent to the Akima spline in `DataInterpolations.jl`, but this routine is self-contained and avoids any package dependency.
 """
+struct AkimaSpline{U, T, B, C, D}
+    u::U
+    t::T
+    b::B
+    c::C
+    d::D
+end
+
+function AkimaSpline(u, t)
+    m = _akima_slopes(u, t)
+    b, c, d = _akima_coefficients(t, m)
+    return AkimaSpline(u, t, b, c, d)
+end
+
+function (spline::AkimaSpline)(t_new)
+    return _akima_eval(spline.u, spline.t, spline.b, spline.c, spline.d, t_new)
+end
+
 function akima_interpolation(u, t, t_new)
     n = length(t)
     dt = diff(t)
@@ -654,15 +672,15 @@ function _cubic_spline_coefficients(u, t)
     h[2:n] = dt
 
     # Construct Tridiagonal Matrix
-    
-    # dl: sub-diagonal, length n-1. 
+
+    # dl: sub-diagonal, length n-1.
     # [h1, h2, ..., h(n-2), 0]
     dl = zeros(eltype(t), n - 1)
     dl[1:end-1] = dt[1:end-1]
 
     # d_tmp: diagonal, length n.
     d_tmp = 2 .* (h[1:n] .+ h[2:n+1])
-    
+
     # du: super-diagonal, length n-1.
     # [0, h2, ..., h(n-1)]
     du = zeros(eltype(t), n - 1)
@@ -675,9 +693,9 @@ function _cubic_spline_coefficients(u, t)
     for i in 2:n-1
         d[i] = 6 * (u[i+1] - u[i]) / h[i+1] - 6 * (u[i] - u[i-1]) / h[i]
     end
-    
+
     z = tA \ d
-    
+
     return h, z
 end
 
@@ -687,7 +705,7 @@ function _cubic_spline_coefficients(u::AbstractMatrix, t)
     if n != length(t)
          error("Dimension mismatch: size(u, 1) must equal length(t)")
     end
-    
+
     dt = diff(t)
     h = zeros(eltype(t), n + 1)
     h[2:n] = dt
@@ -707,24 +725,24 @@ function _cubic_spline_coefficients(u::AbstractMatrix, t)
             d[i, col] = 6 * (u[i+1, col] - u[i, col]) / h[i+1] - 6 * (u[i, col] - u[i-1, col]) / h[i]
         end
     end
-    
+
     # Solve for z (Matrix)
     z = tA \ d
-    
+
     return h, z
 end
 
 function _cubic_spline_eval(u, t, h, z, tq)
     idx = _akima_find_interval(t, tq)
-    
+
     dt = tq - t[idx]
     dt_next = t[idx+1] - tq
     h_i = h[idx+1]
-    
+
     term1 = (z[idx] * dt_next^3 + z[idx+1] * dt^3) / (6 * h_i)
     term2 = (u[idx+1] / h_i - z[idx+1] * h_i / 6) * dt
     term3 = (u[idx] / h_i - z[idx] * h_i / 6) * dt_next
-    
+
     return term1 + term2 + term3
 end
 
@@ -736,7 +754,7 @@ function _cubic_spline_eval(u::AbstractMatrix, t, h, z::AbstractMatrix, tq::Abst
     n_query = length(tq)
     n_cols = size(u, 2)
     results = zeros(promote_type(eltype(u), eltype(z), eltype(tq)), n_query, n_cols)
-    
+
     for i in 1:n_query
         # Scalar evaluation for this tq[i] across all cols
         ti = tq[i]
@@ -744,7 +762,7 @@ function _cubic_spline_eval(u::AbstractMatrix, t, h, z::AbstractMatrix, tq::Abst
         dt = ti - t[idx]
         dt_next = t[idx+1] - ti
         h_i = h[idx+1]
-        
+
         # Broadcast over cols
         for col in 1:n_cols
              val = (z[idx, col] * dt_next^3 + z[idx+1, col] * dt^3) / (6 * h_i) +

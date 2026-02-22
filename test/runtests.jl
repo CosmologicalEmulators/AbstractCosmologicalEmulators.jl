@@ -51,4 +51,7 @@ using AbstractCosmologicalEmulators
 
     # Edge cases and additional coverage tests
     include("test_edge_cases.jl")
+
+    # Chebyshev optimization tests
+    include("test_chebyshev.jl")
 end
