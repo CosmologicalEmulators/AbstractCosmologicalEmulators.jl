@@ -162,16 +162,16 @@ using FiniteDifferences
     @testset "Comparison with FastChebInterp" begin
         using FastChebInterp
 
-        # 2D case
+        # 1. 2D case (existing)
         K_val = 10
         x_min, x_max = 0.0, 1.0
 
         # AbstractCosmologicalEmulators plan (multi-dim)
         plan_ace = prepare_chebyshev_plan((x_min, x_min), (x_max, x_max), (K_val, K_val))
 
-        f(x) = sin(x[1]) * cos(x[2])
+        f_2d_test(x) = sin(x[1]) * cos(x[2])
         # Grid of values at ACE nodes
-        grid = [f((x1, x2)) for x1 in plan_ace.nodes[1], x2 in plan_ace.nodes[2]]
+        grid = [f_2d_test((x1, x2)) for x1 in plan_ace.nodes[1], x2 in plan_ace.nodes[2]]
 
         # ACE decomposition
         c_ace = chebyshev_decomposition(plan_ace, grid)
@@ -183,5 +183,38 @@ using FiniteDifferences
         # to match FastChebInterp convention exactly.
         @test size(c_ace) == size(c_fc)
         @test isapprox(c_ace, c_fc, atol=1e-12)
+
+        # 2. 1D Interpolation Comparison on Fine Grid
+        @testset "1D Interpolation Fine Grid ($f_name)" for (f_name, f_1d) in [
+            ("sin", sin),
+            ("exp", exp),
+            ("poly", x -> x^3 - 2x + 1),
+            ("log", x -> log(x+1))
+        ]
+            K_1d = 30
+            x_min_1d, x_max_1d = 0.0, 10.0
+            plan_1d = prepare_chebyshev_plan(x_min_1d, x_max_1d, K_1d)
+
+            # Values at nodes
+            vals_1d = f_1d.(plan_1d.nodes[1])
+
+            # ACE coefficients
+            c_1d = chebyshev_decomposition(plan_1d, vals_1d)
+
+            # FastChebInterp plan
+            fc_plan_1d = FastChebInterp.chebinterp(vals_1d, x_min_1d, x_max_1d)
+
+            # Fine grid evaluation
+            x_fine = range(x_min_1d, x_max_1d, length=1000)
+
+            # ACE evaluation: T * c
+            T_fine = chebyshev_polynomials(x_fine, x_min_1d, x_max_1d, K_1d)
+            y_ace = T_fine * c_1d
+
+            # FastChebInterp evaluation
+            y_fc = [fc_plan_1d(x) for x in x_fine]
+
+            @test isapprox(y_ace, y_fc, rtol=1e-12)
+        end
     end
 end

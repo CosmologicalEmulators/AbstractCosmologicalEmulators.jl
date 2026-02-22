@@ -21,8 +21,9 @@ Interface with `Lux.jl` | :heavy_check_mark: | Implemented
 Support for vectorization | :heavy_check_mark: | Implemented
 AD Rules `ChainRules` | :heavy_check_mark: | Implemented
 Robust emulators initialization | :heavy_check_mark: | Implemented, needs some polishing
+Akima and cubic spline interpolation | :heavy_check_mark: | Implemented, needs some polishing
+Chebyshev interpolation | :heavy_check_mark: | Work in progress
 GPU support | :heavy_check_mark: | Implemented, needs some polishing
-Gaussian Process support | :construction: | Work in progress
 Stable API | :construction: | Work in progress
 
 ## Authors
