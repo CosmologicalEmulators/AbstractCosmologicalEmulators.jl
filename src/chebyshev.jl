@@ -121,6 +121,14 @@ function chebyshev_decomposition(plan::ChebyshevPlan{ND, P, T}, f_vals::Abstract
     return c
 end
 
+function chebyshev_decomposition(plan::ChebyshevPlan{1, P, T}, f_vals::AbstractMatrix{<:Dual}) where {P, T}
+    return reduce(hcat, [chebyshev_decomposition(plan, f_vals[:, i]) for i in 1:size(f_vals, 2)])
+end
+
+function chebyshev_decomposition(plan::ChebyshevPlan{1, P, T}, f_vals::AbstractMatrix{T}) where {P, T}
+    return reduce(hcat, [chebyshev_decomposition(plan, f_vals[:, i]) for i in 1:size(f_vals, 2)])
+end
+
 # AD rrule for Chebyshev decomposition
 function ChainRulesCore.rrule(::typeof(chebyshev_decomposition), plan::ChebyshevPlan{ND, P, T}, f_vals::AbstractArray{T, N}) where {ND, P, T, N}
     c = chebyshev_decomposition(plan, f_vals)
