@@ -1,7 +1,9 @@
 module MooncakeExt
 
 using AbstractCosmologicalEmulators
-using Mooncake: @from_chainrules, MinimalCtx
+using FFTW
+using Mooncake
+using Mooncake: @from_chainrules, MinimalCtx, NoFData, NoRData
 
 # Convert existing ChainRules rrules to Mooncake rules using @from_chainrules
 # This provides automatic differentiation support for Mooncake backend
@@ -34,5 +36,16 @@ using Mooncake: @from_chainrules, MinimalCtx
 # Cubic spline interpolation - internal functions (matrix versions)
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_coefficients), AbstractMatrix, AbstractVector}
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_eval), AbstractMatrix, Any, Any, AbstractMatrix, AbstractArray}
+
+# Chebyshev optimization
+Mooncake.tangent_type(::Type{P}) where {P<:FFTW.FFTWPlan} = P
+Mooncake.fdata_type(::Type{P})   where {P<:FFTW.FFTWPlan} = NoFData
+Mooncake.rdata_type(::Type{P})   where {P<:FFTW.FFTWPlan} = NoRData
+Mooncake.zero_tangent_internal(p::FFTW.FFTWPlan, ::IdDict{Any, Any}) = p
+Mooncake.fdata(p::FFTW.FFTWPlan) = NoFData()
+Mooncake.rdata(p::FFTW.FFTWPlan) = NoRData()
+Mooncake.increment_rdata!!(x::FFTW.FFTWPlan, ::NoRData) = x
+
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.chebyshev_decomposition), Any, Any}
 
 end # module MooncakeExt
