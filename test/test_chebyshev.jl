@@ -210,6 +210,10 @@ using FiniteDifferences
         # Zygote
         grad_zygote = DifferentiationInterface.gradient(test_f_batch, AutoZygote(), v_batch0)
         @test isapprox(grad_zygote, grad_forward, atol=1e-12)
+
+        # Mooncake
+        grad_mooncake = DifferentiationInterface.gradient(test_f_batch, AutoMooncake(; config=nothing), v_batch0)
+        @test isapprox(grad_mooncake, grad_forward, atol=1e-12)
     end
 
     @testset "Comparison with FastChebInterp" begin
