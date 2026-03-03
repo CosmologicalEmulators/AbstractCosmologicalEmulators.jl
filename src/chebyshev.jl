@@ -80,9 +80,14 @@ function _scale_chebyshev_coeffs!(c, ND, plan_dim, plan_K)
     for i in 1:ND
         d = plan_dim[i]
         K_i = plan_K[i]
-        c ./= K_i
-        selectdim(c, d, 1) ./= 2
-        selectdim(c, d, size(c, d)) ./= 2
+        n_d = size(c, d)
+        
+        # Scale endpoints by 1/(2K) and interiors by 1/K
+        selectdim(c, d, 1) ./= (2 * K_i)
+        selectdim(c, d, n_d) ./= (2 * K_i)
+        if n_d > 2
+            selectdim(c, d, 2:(n_d-1)) ./= K_i
+        end
     end
     return c
 end
