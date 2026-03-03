@@ -18,11 +18,22 @@ export validate_nn_dict_structure, validate_parameter_ranges, validate_layer_str
 export akima_interpolation, cubic_spline_interpolation, AkimaSpline
 export ChebyshevPlan, chebpoints
 export prepare_chebyshev_plan, chebyshev_polynomials, chebyshev_decomposition
+export set_fft_threads
 
 include("core.jl")
 include("initialization.jl")
 include("utils.jl")
 include("chebyshev.jl")
 include("chainrules.jl")
+
+"""
+    set_fft_threads(n::Integer)
+
+Set the number of threads used by FFTW.jl for operations in `AbstractCosmologicalEmulators`.
+Call this before calling `prepare_chebyshev_plan` to improve performance on large grids or batched evaluations.
+"""
+function set_fft_threads(n::Integer)
+    FFTW.set_num_threads(n)
+end
 
 end # module AbstractCosmologicalEmulators
