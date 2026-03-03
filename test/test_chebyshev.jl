@@ -274,4 +274,11 @@ using FiniteDifferences
             @test isapprox(y_ace, y_fc, rtol=1e-12)
         end
     end
+
+    @testset "FFTW Threads" begin
+        # Test that we can set the thread count without error
+        @test set_fft_threads(2) === nothing || typeof(set_fft_threads(2)) <: Any
+        # Reset to 1 to not affect other tests
+        set_fft_threads(1)
+    end
 end
