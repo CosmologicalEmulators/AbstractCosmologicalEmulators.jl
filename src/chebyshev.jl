@@ -45,7 +45,7 @@ function prepare_chebyshev_plan(x_mins::NTuple{N, T}, x_maxs::NTuple{N, T}, Ks::
     for i in 1:N
         @assert size_nd[dim[i]] == Ks[i] + 1 "Size along target dimension $(dim[i]) must be Ks[$i]+1"
     end
-    fft_plan = FFTW.plan_r2r(zeros(T, size_nd...), FFTW.REDFT00, dim)
+    fft_plan = FFTW.plan_r2r(zeros(T, size_nd...), FFTW.REDFT00, dim; flags=FFTW.PATIENT, timelimit=Inf)
 
     return ChebyshevPlan(fft_plan, Ks, nodes, dim)
 end
