@@ -116,30 +116,30 @@ function _Ωma(a, cosmo::w0waCDMCosmology)
     return _Ωma(a, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function r̃_z(z::Number, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    z_array, weigths_array = _transformed_weights(FastGaussQuadrature.gausslegendre, 9, 0, z)
+function r̃_z(z::Number, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    z_array, weigths_array = _transformed_weights(FastGaussQuadrature.gausslegendre, order, 0, z)
     integrand_array = 1.0 ./ E_a(_a_z(z_array), Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
     return dot(weigths_array, integrand_array)
 end
 
-function r̃_z(z::AbstractArray, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return [r̃_z(zi, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) for zi in z]
+function r̃_z(z::AbstractArray, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    return [r̃_z(zi, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order) for zi in z]
 end
 
-function r̃_z(z, cosmo::w0waCDMCosmology)
+function r̃_z(z, cosmo::w0waCDMCosmology; order=9)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
-    return r̃_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+    return r̃_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order)
 end
 
-function r_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return c_0 * r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (100 * h)
+function r_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    return c_0 * r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order) / (100 * h)
 end
 
-function r_z(z, cosmo::w0waCDMCosmology)
+function r_z(z, cosmo::w0waCDMCosmology; order=9)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
-    return r_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+    return r_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order)
 end
 
 function S_of_K(Ω::Number, r)
@@ -154,54 +154,54 @@ function S_of_K(Ω::Number, r)
     end
 end
 
-function d̃M_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return S_of_K(Ωk0, r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+function d̃M_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    return S_of_K(Ωk0, r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order))
 end
 
-function d̃M_z(z, cosmo::w0waCDMCosmology)
+function d̃M_z(z, cosmo::w0waCDMCosmology; order=9)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
-    return d̃M_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+    return d̃M_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order)
 end
 
-function dM_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return c_0 * d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (100 * h)
+function dM_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    return c_0 * d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order) / (100 * h)
 end
 
-function dM_z(z, cosmo::w0waCDMCosmology)
+function dM_z(z, cosmo::w0waCDMCosmology; order=9)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
-    return dM_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+    return dM_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order)
 end
 
-function d̃A_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) ./ (1 .+ z)
+function d̃A_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    return d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order) ./ (1 .+ z)
 end
 
-function d̃A_z(z, cosmo::w0waCDMCosmology)
+function d̃A_z(z, cosmo::w0waCDMCosmology; order=9)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
-    return d̃A_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+    return d̃A_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order)
 end
 
-function dA_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) ./ (1 .+ z)
+function dA_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order) ./ (1 .+ z)
 end
 
-function dA_z(z, cosmo::w0waCDMCosmology)
+function dA_z(z, cosmo::w0waCDMCosmology; order=9)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
-    return dA_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+    return dA_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order)
 end
 
-function dL_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) .* (1 .+ z)
+function dL_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, order=9)
+    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order) .* (1 .+ z)
 end
 
-function dL_z(z, cosmo::w0waCDMCosmology)
+function dL_z(z, cosmo::w0waCDMCosmology; order=9)
     Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
     Ωk0 = cosmo.ωk / cosmo.h^2
-    return dL_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
+    return dL_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order)
 end
 
 function _growth!(du, u, p, loga)
