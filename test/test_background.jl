@@ -337,9 +337,9 @@ if !isnothing(ext)
         end
 
         @testset "z =1200.0" begin
-            @test isapprox(r_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=100), 14405.271466533255, rtol=1e-3)
-            @test isapprox(dL_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=100), 17300731.03130642, rtol=1e-3)
-            @test isapprox(dA_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=100), 11.9943975574798, rtol=1e-3)
+            @test isapprox(r_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=120), 14405.271466533255, rtol=1e-3)
+            @test isapprox(dL_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=120), 17300731.03130642, rtol=1e-3)
+            @test isapprox(dA_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=120), 11.9943975574798, rtol=1e-3)
         end
     end
 
@@ -383,9 +383,9 @@ if !isnothing(ext)
         end
 
         @testset "z = 1200.0" begin
-            @test isapprox(r_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=100), 12906.201419127055, rtol=1e-3)
-            @test isapprox(dL_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=100), 15500347.904371575, rtol=1e-3)
-            @test isapprox(dA_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=100), 10.746212672045832, rtol=1e-3)
+            @test isapprox(r_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=120), 12906.201419127055, rtol=1e-3)
+            @test isapprox(dL_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=120), 15500347.904371575, rtol=1e-3)
+            @test isapprox(dA_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=120), 10.746212672045832, rtol=1e-3)
         end
     end
 
@@ -431,9 +431,9 @@ if !isnothing(ext)
 
         # z = 2.0 values
         @testset "z = 1200.0" begin
-            @test isapprox(r_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=100), 10695.833449050964, rtol=1e-3)
-            @test isapprox(dL_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=100), 15749661.605665019, rtol=1e-3)
-            @test isapprox(dA_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=100), 10.919058989604848, rtol=1e-3)
+            @test isapprox(r_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=120), 10695.833449050964, rtol=1e-3)
+            @test isapprox(dL_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=120), 15749661.605665019, rtol=1e-3)
+            @test isapprox(dA_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=120), 10.919058989604848, rtol=1e-3)
         end
     end
 
