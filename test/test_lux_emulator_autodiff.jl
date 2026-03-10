@@ -25,8 +25,10 @@ using Mooncake
     n_output = 10
 
     # Create a Lux neural network
+    # We use a closure for tanh to avoid internal mapping to tanh_fast
+    # which can cause issues with Mooncake in some environments
     lux_model = Chain(
-        Dense(n_input => 8, tanh),
+        Dense(n_input => 8, x -> tanh(x)),
         Dense(8 => n_output)
     )
 
