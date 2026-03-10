@@ -15,6 +15,7 @@ using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
 using FiniteDifferences
+using SciMLSensitivity
 using AbstractCosmologicalEmulators
 
 @testset "AbstractEmulators test" begin
