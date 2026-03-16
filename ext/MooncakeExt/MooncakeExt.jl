@@ -66,7 +66,7 @@ function ChainRulesCore.rrule(::typeof(AbstractCosmologicalEmulators.run_emulato
         Δy_vec = collect(vec(ChainRulesCore.unthunk(Δy)))
         
         # ForwardDiff VJP
-        vjp_input = Vector{Float64}(ForwardDiff.gradient(
+        vjp_input = convert(typeof(input), ForwardDiff.gradient(
             x -> begin
                 y_dual, _ = Lux.apply(emulator.Model, x, emulator.Parameters, emulator.States)
                 sum(y_dual .* Δy_vec)
@@ -81,6 +81,6 @@ function ChainRulesCore.rrule(::typeof(AbstractCosmologicalEmulators.run_emulato
 end
 
 # Register it for Mooncake
-Mooncake.@from_chainrules Mooncake.MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.run_emulator), Any, Any}
+Mooncake.@from_chainrules Mooncake.MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.run_emulator), Any, AbstractCosmologicalEmulators.LuxEmulator}
 
 end # module MooncakeExt
