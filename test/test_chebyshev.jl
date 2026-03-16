@@ -281,4 +281,15 @@ using FiniteDifferences
         # Reset to 1 to not affect other tests
         set_fft_threads(1)
     end
+
+    @testset "Mooncake FFTW rules" begin
+        # Generate a dummy FFTW plan to test the MooncakeExt rules directly
+        K = 10
+        plan = prepare_chebyshev_plan(0.0, 1.0, K)
+        # `plan.fft_plan` is the underlying FFTW plan
+        fft_plan = plan.fft_plan
+        
+        @test Mooncake.rdata(fft_plan) === Mooncake.NoRData()
+        @test Mooncake.increment_rdata!!(fft_plan, Mooncake.NoRData()) === fft_plan
+    end
 end

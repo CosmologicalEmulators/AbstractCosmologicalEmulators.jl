@@ -48,4 +48,39 @@ Mooncake.increment_rdata!!(x::FFTW.FFTWPlan, ::NoRData) = x
 
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.chebyshev_decomposition), Any, Any}
 
+
+using ForwardDiff
+using Lux
+using ChainRulesCore
+
+# Define ChainRulesCore.rrule for run_emulator (specifically for LuxEmulator)
+function ChainRulesCore.rrule(::typeof(AbstractCosmologicalEmulators.run_emulator), input, emulator::AbstractCosmologicalEmulators.LuxEmulator)
+    y = AbstractCosmologicalEmulators.run_emulator(input, emulator)
+    
+    function run_emulator_pullback(Δy)
+        if Δy isa ChainRulesCore.AbstractZero
+            return NoTangent(), ZeroTangent(), NoTangent()
+        end
+        
+        # Ensure Δy is a dense vector
+        Δy_vec = collect(vec(ChainRulesCore.unthunk(Δy)))
+        
+        # ForwardDiff VJP
+        vjp_input = convert(typeof(input), ForwardDiff.gradient(
+            x -> begin
+                y_dual, _ = Lux.apply(emulator.Model, x, emulator.Parameters, emulator.States)
+                sum(y_dual .* Δy_vec)
+            end,
+            input
+        ))
+        
+        return NoTangent(), vjp_input, NoTangent()
+    end
+    
+    return y, run_emulator_pullback
+end
+
+# Register it for Mooncake
+Mooncake.@from_chainrules Mooncake.MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.run_emulator), Any, AbstractCosmologicalEmulators.LuxEmulator}
+
 end # module MooncakeExt
