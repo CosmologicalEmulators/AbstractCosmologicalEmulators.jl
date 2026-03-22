@@ -3,10 +3,23 @@ using AbstractCosmologicalEmulators
 
 # Get the extension (defined at module level for use in included files)
 const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+const ext_reactant = Base.get_extension(AbstractCosmologicalEmulators, :ExtReactant)
 
 # Import from extension if available
 if !isnothing(ext)
     using .ext: AbstractCosmology, w0waCDMCosmology, E_z, E_a, r_z, D_z, f_z, dM_z, dA_z, dL_z, S_of_K, D_f_z
+end
+
+@testset "ExtReactant Extension" begin
+    if !isnothing(ext_reactant)
+        @info "Testing ExtReactant extension loading"
+        @test isdefined(ext_reactant, :r_akima_interpolation)
+        @test isdefined(ext_reactant, :r_akima_interpolation_mat)
+        @test isdefined(ext_reactant, :r_cubic_eval)
+        @test isdefined(ext_reactant, :r_cubic_eval_mat)
+    else
+        @warn "ExtReactant extension not loaded. Make sure Reactant is available."
+    end
 end
 
 # Test that main package knows nothing about cosmology
@@ -16,6 +29,10 @@ end
     @test !isdefined(AbstractCosmologicalEmulators, :D_z)
     @test !isdefined(AbstractCosmologicalEmulators, :AbstractCosmology)
     @test !isdefined(AbstractCosmologicalEmulators, :w0waCDMCosmology)
+
+    # Reactant extension methods should not be in main namespace
+    @test !isdefined(AbstractCosmologicalEmulators, :r_akima_interpolation)
+    @test !isdefined(AbstractCosmologicalEmulators, :r_cubic_eval)
 end
 
 # Test extension if dependencies are available
