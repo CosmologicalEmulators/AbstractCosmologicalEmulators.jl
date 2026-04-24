@@ -46,6 +46,17 @@ using Random
             
             # Test the wrapper
             JET.test_opt(run_emulator, (typeof(input), typeof(input), typeof(gen_emu)))
+
+            # Spline tests
+            x_nodes = collect(0.0:0.1:1.0)
+            y_vals = sin.(x_nodes)
+            x_new_scalar = 0.55
+            x_new_vec = [0.25, 0.55, 0.85]
+
+            JET.test_opt(cubic_spline_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_scalar)))
+            JET.test_opt(cubic_spline_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
+            JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_scalar)))
+            JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
         end
     end
 end
