@@ -15,7 +15,7 @@ using AbstractCosmologicalEmulators
       static(6),
       TurboDense(tanh, 64),
       TurboDense(tanh, 64),
-      TurboDense(relu, 64),
+      TurboDense(SimpleChains.relu, 64),
       TurboDense(tanh, 64),
       TurboDense(tanh, 64),
       TurboDense(identity, 40)
