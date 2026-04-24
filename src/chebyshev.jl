@@ -8,7 +8,16 @@ struct ChebyshevPlan{ND, P, T}
     K::NTuple{ND, Int}
     nodes::NTuple{ND, Vector{T}}
     dim::NTuple{ND, Int}
+
+    function ChebyshevPlan{ND, P, T}(fft_plan::P, K::NTuple{ND, Int}, nodes::NTuple{ND, Vector{T}}, dim::NTuple{ND, Int}) where {ND, P, T}
+        return new{ND, P, T}(fft_plan, K, nodes, dim)
+    end
 end
+
+function ChebyshevPlan(fft_plan, K, nodes, dim)
+    return ChebyshevPlan{length(K), typeof(fft_plan), eltype(eltype(nodes))}(fft_plan, K, nodes, dim)
+end
+
 
 """
     chebpoints(K::Int, x_min::T, x_max::T) where T
@@ -31,7 +40,7 @@ Precomputes the Chebyshev nodes and the FFT plan required to compute coefficient
 K is the polynomial degree (K+1 nodes). For N-dimensional inputs, specify the `size_nd`
 tuple and the target dimension `dim`.
 """
-function prepare_chebyshev_plan(x_mins::NTuple{N, T}, x_maxs::NTuple{N, T}, Ks::NTuple{N, Int}; size_nd::Union{Tuple, Nothing}=nothing, dim::NTuple{N, Int}=ntuple(i->i, N)) where {N, T}
+function prepare_chebyshev_plan(x_mins::NTuple{N, Any}, x_maxs::NTuple{N, Any}, Ks::NTuple{N, Int}; size_nd::Union{Tuple, Nothing}=nothing, dim::NTuple{N, Int}=ntuple(i->i, N)) where {N}
     nodes = ntuple(i -> chebpoints(Ks[i], x_mins[i], x_maxs[i]), N)
 
     if size_nd === nothing
@@ -45,6 +54,7 @@ function prepare_chebyshev_plan(x_mins::NTuple{N, T}, x_maxs::NTuple{N, T}, Ks::
     for i in 1:N
         @assert size_nd[dim[i]] == Ks[i] + 1 "Size along target dimension $(dim[i]) must be Ks[$i]+1"
     end
+    T = promote_type(eltype(eltype(x_mins)), eltype(eltype(x_maxs)))
     fft_plan = FFTW.plan_r2r(zeros(T, size_nd...), FFTW.REDFT00, dim; flags=FFTW.PATIENT, timelimit=Inf)
 
     return ChebyshevPlan(fft_plan, Ks, nodes, dim)
