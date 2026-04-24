@@ -15,13 +15,13 @@ using AbstractCosmologicalEmulators
       static(6),
       TurboDense(tanh, 64),
       TurboDense(tanh, 64),
-      TurboDense(relu, 64),
+      TurboDense(SimpleChains.relu, 64),
       TurboDense(tanh, 64),
       TurboDense(tanh, 64),
       TurboDense(identity, 40)
     )
 
-    NN_dict = JSON.parsefile(pwd()*"/testNN.json")
+    NN_dict = JSON.parsefile(joinpath(@__DIR__, "testNN.json"))
     weights = SimpleChains.init_params(mlpd)
     # Create description in the same format as init_emulator
     nn_descript = Dict{String,Any}("emulator_description" => get(NN_dict, "emulator_description", Dict()))

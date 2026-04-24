@@ -1,20 +1,20 @@
 abstract type AbstractTrainedEmulators end
 
-@kwdef mutable struct SimpleChainsEmulator <: AbstractTrainedEmulators
-    Architecture
-    Weights
-    Description::Dict = Dict()
+@kwdef mutable struct SimpleChainsEmulator{A, W, D<:Dict} <: AbstractTrainedEmulators
+    Architecture::A
+    Weights::W
+    Description::D = Dict()
 end
 
 function run_emulator(input, emulator::SimpleChainsEmulator)
     return emulator.Architecture(input, emulator.Weights)
 end
 
-@kwdef mutable struct LuxEmulator <: AbstractTrainedEmulators
-    Model
-    Parameters
-    States
-    Description::Dict = Dict()
+@kwdef mutable struct LuxEmulator{M, P, S, D<:Dict} <: AbstractTrainedEmulators
+    Model::M
+    Parameters::P
+    States::S
+    Description::D = Dict()
 end
 
 Adapt.@adapt_structure LuxEmulator
@@ -26,11 +26,11 @@ function run_emulator(input, emulator::LuxEmulator)
     return y
 end
 
-@kwdef mutable struct GenericEmulator <: AbstractTrainedEmulators
-    TrainedEmulator::AbstractTrainedEmulators
-    InMinMax::AbstractMatrix
-    OutMinMax::AbstractMatrix
-    Postprocessing::Function
+@kwdef mutable struct GenericEmulator{T<:AbstractTrainedEmulators, M1<:AbstractMatrix, M2<:AbstractMatrix, F<:Function} <: AbstractTrainedEmulators
+    TrainedEmulator::T
+    InMinMax::M1
+    OutMinMax::M2
+    Postprocessing::F
 end
 
 Adapt.@adapt_structure GenericEmulator
