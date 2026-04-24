@@ -14,7 +14,7 @@ using AbstractCosmologicalEmulators
       TurboDense(identity, 40)
     )
     
-    valid_dict = JSON.parsefile(pwd()*"/testNN.json")
+    valid_dict = JSON.parsefile(joinpath(@__DIR__, "testNN.json"))
     weights = SimpleChains.init_params(mlpd)
 
     @testset "Normalization Range Validation" begin
@@ -204,7 +204,7 @@ using AbstractCosmologicalEmulators
 
     @testset "Integration with init_emulator" begin
         # Test that init_emulator now includes numerical validation by default
-        valid_dict = JSON.parsefile(pwd()*"/testNN.json")
+        valid_dict = JSON.parsefile(joinpath(@__DIR__, "testNN.json"))
         weights = SimpleChains.init_params(mlpd)
 
         # Should work with valid data

@@ -14,7 +14,7 @@ using AbstractCosmologicalEmulators
       TurboDense(identity, 40)
     )
     
-    valid_dict = JSON.parsefile(pwd()*"/testNN.json")
+    valid_dict = JSON.parsefile(joinpath(@__DIR__, "testNN.json"))
     weights = SimpleChains.init_params(mlpd)
 
     # Test successful validation
