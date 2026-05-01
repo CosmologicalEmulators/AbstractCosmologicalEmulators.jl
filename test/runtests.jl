@@ -18,6 +18,7 @@ using FiniteDifferences
 using SciMLSensitivity
 using JET
 using Aqua
+using Reactant
 using AbstractCosmologicalEmulators
 
 @testset "AbstractEmulators test" begin
@@ -50,6 +51,9 @@ using AbstractCosmologicalEmulators
 
     # Akima interpolation tests
     include("test_akima_interpolation.jl")
+
+    # Reactant extension spline equivalence tests
+    include("test_ext_reactant.jl")
 
     # Cubic Spline interpolation tests
     include("test_cubic_spline.jl")

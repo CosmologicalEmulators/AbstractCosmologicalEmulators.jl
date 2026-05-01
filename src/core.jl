@@ -20,9 +20,8 @@ end
 Adapt.@adapt_structure LuxEmulator
 
 function run_emulator(input, emulator::LuxEmulator)
-    y, st = Lux.apply(emulator.Model, input,
-                           emulator.Parameters, emulator.States)
-    emulator.States = st
+    y, _ = Lux.apply(emulator.Model, input,
+                     emulator.Parameters, emulator.States)
     return y
 end
 
@@ -43,7 +42,7 @@ function run_emulator(input_params, auxiliary_params, emulator::GenericEmulator)
     norm_output = run_emulator(norm_input, emulator.TrainedEmulator)
 
     # 3. Denormalization
-    output = inv_maximin(Array(norm_output), emulator.OutMinMax)
+    output = inv_maximin(norm_output, emulator.OutMinMax)
 
     # 4. Postprocessing
     result = emulator.Postprocessing(input_params, output, auxiliary_params, emulator)
