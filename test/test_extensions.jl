@@ -13,10 +13,8 @@ end
 @testset "ExtReactant Extension" begin
     if !isnothing(ext_reactant)
         @info "Testing ExtReactant extension loading"
-        @test isdefined(ext_reactant, :r_akima_interpolation)
-        @test isdefined(ext_reactant, :r_akima_interpolation_mat)
-        @test isdefined(ext_reactant, :r_cubic_eval)
-        @test isdefined(ext_reactant, :r_cubic_eval_mat)
+        @test isdefined(ext_reactant, :_interval_indices)
+        @test isdefined(ext_reactant, :_pcr_tridiagonal_solve)
     else
         @warn "ExtReactant extension not loaded. Make sure Reactant is available."
     end
@@ -30,7 +28,7 @@ end
     @test !isdefined(AbstractCosmologicalEmulators, :AbstractCosmology)
     @test !isdefined(AbstractCosmologicalEmulators, :w0waCDMCosmology)
 
-    # Reactant extension methods should not be in main namespace
+    # No r_* helpers should leak into main namespace
     @test !isdefined(AbstractCosmologicalEmulators, :r_akima_interpolation)
     @test !isdefined(AbstractCosmologicalEmulators, :r_cubic_eval)
 end
