@@ -20,9 +20,8 @@ end
 Adapt.@adapt_structure LuxEmulator
 
 function run_emulator(input, emulator::LuxEmulator)
-    y, st = Lux.apply(emulator.Model, input,
-                           emulator.Parameters, emulator.States)
-    emulator.States = st
+    y, _ = Lux.apply(emulator.Model, input,
+                     emulator.Parameters, emulator.States)
     return y
 end
 

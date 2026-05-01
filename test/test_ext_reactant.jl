@@ -2,6 +2,7 @@ using Test
 using Random
 using Enzyme
 using ForwardDiff
+using Lux
 using Reactant
 using AbstractCosmologicalEmulators
 
@@ -224,6 +225,62 @@ const ext_reactant = Base.get_extension(AbstractCosmologicalEmulators, :ExtReact
             @test Array(poly_grad_R) ≈ poly_grad_ref atol=1e-10 rtol=1e-10
             @test Array(coeff_grad_R) ≈ coeff_grad_ref atol=1e-10 rtol=1e-10
             @test Array(dense_grad_R) ≈ dense_grad_ref atol=1e-10 rtol=1e-10
+        end
+    end
+end
+
+@testset "GenericEmulator with LuxEmulator — Reactant compile and gradient" begin
+    if isnothing(ext_reactant)
+        @warn "ExtReactant extension not loaded; skipping GenericEmulator Reactant tests."
+    else
+        Reactant.set_default_backend("cpu")
+
+        # Build a small Lux network: 3 → 8 → 5
+        n_in, n_hidden, n_out = 3, 8, 5
+        model = Chain(Dense(n_in => n_hidden, tanh), Dense(n_hidden => n_out))
+        ps, st = Lux.setup(Random.default_rng(), model)
+
+        lux_emu = LuxEmulator(Model=model, Parameters=ps, States=st)
+
+        InMinMax  = hcat(zeros(n_in),  ones(n_in))
+        OutMinMax = hcat(zeros(n_out), ones(n_out))
+
+        # Trivial postprocessing: return NN output unchanged.
+        # This is the simplest traceable postprocessing possible.
+        trivial_post = (params, output, aux, emu) -> output
+
+        gen_emu = GenericEmulator(
+            TrainedEmulator = lux_emu,
+            InMinMax        = InMinMax,
+            OutMinMax       = OutMinMax,
+            Postprocessing  = trivial_post,
+        )
+
+        input_params = Float64[0.3, 0.6, 0.9]
+        ref_output   = run_emulator(input_params, gen_emu)
+
+        inputR = Reactant.to_rarray(input_params)
+
+        @testset "forward compile" begin
+            f_compiled = Reactant.@compile sync=true run_emulator(inputR, gen_emu)
+            outR = f_compiled(inputR, gen_emu)
+            Reactant.synchronize(outR)
+            @test Array(outR) ≈ ref_output atol=1e-10 rtol=1e-10
+        end
+
+        @testset "Enzyme gradient through GenericEmulator" begin
+            loss(x) = sum(run_emulator(x, gen_emu))
+
+            # ForwardDiff reference
+            grad_ref = ForwardDiff.gradient(loss, input_params)
+
+            # Reactant + Enzyme compiled gradient
+            grad_fun(x) = Enzyme.gradient(Reverse, loss, x)[1]
+            f_grad = Reactant.@compile sync=true grad_fun(inputR)
+            gradR  = f_grad(inputR)
+            Reactant.synchronize(gradR)
+
+            @test Array(gradR) ≈ grad_ref atol=1e-8 rtol=1e-8
         end
     end
 end
