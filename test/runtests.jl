@@ -16,10 +16,15 @@ using LinearAlgebra
 using FastGaussQuadrature
 using FiniteDifferences
 using SciMLSensitivity
+using JET
+using Aqua
 using Reactant
 using AbstractCosmologicalEmulators
 
 @testset "AbstractEmulators test" begin
+    # Aqua.jl quality assurance tests
+    include("test_aqua.jl")
+
     # Extension tests
     include("test_extensions.jl")
 

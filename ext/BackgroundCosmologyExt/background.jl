@@ -1,15 +1,17 @@
 # Define w0waCDMCosmology type
-@kwdef mutable struct w0waCDMCosmology <: AbstractCosmology
-    ln10Aₛ::Number = 3.0
-    nₛ::Number = 0.96
-    h::Number = 0.67
-    ωb::Number = 0.022
-    ωc::Number = 0.12
-    ωk::Number = 0.0
-    mν::Number = 0.0
-    w0::Number = -1.0
-    wa::Number = 0.0
+@kwdef mutable struct w0waCDMCosmology{T1, T2, T3, T4, T5, T6, T7, T8, T9} <: AbstractCosmology
+    ln10Aₛ::T1 = 3.0
+    nₛ::T2 = 0.96
+    h::T3 = 0.67
+    ωb::T4 = 0.022
+    ωc::T5 = 0.12
+    ωk::T6 = 0.0
+    mν::T7 = 0.0
+    w0::T8 = -1.0
+    wa::T9 = 0.0
 end
+
+_call_interpolant(interp::Ref, y::T) where {T} = interp[](y)::T
 
 function _F(y)
     f(x, y) = x^2 * √(x^2 + y^2) / (1 + exp(x))
@@ -33,28 +35,37 @@ end
 
 function _ΩνE2(a, Ωγ0, mν; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
     Γν = (4 / 11)^(1 / 3) * (Neff / 3)^(1 / 4)
-    return 15 / π^4 * Γν^4 * Ωγ0 / a^4 * F_interpolant[](_get_y(mν, a))
+    y = _get_y(mν, a)
+    val = _call_interpolant(F_interpolant, y)
+    return 15 / π^4 * Γν^4 * Ωγ0 / a^4 * val
 end
 
 function _ΩνE2(a, Ωγ0, mν::AbstractVector; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
     Γν = (4 / 11)^(1 / 3) * (Neff / 3)^(1 / 4)
-    sum_interpolant = sum(mymν -> F_interpolant[](_get_y(mymν, a)), mν)
+    sum_interpolant = sum(mymν -> begin
+        y = _get_y(mymν, a)
+        _call_interpolant(F_interpolant, y)
+    end, mν)
     return 15 / π^4 * Γν^4 * Ωγ0 / a^4 * sum_interpolant
 end
 
 function _dΩνE2da(a, Ωγ0, mν; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
     Γν = (4 / 11)^(1 / 3) * (Neff / 3)^(1 / 4)
-    return 15 / π^4 * Γν^4 * Ωγ0 * (-4 * F_interpolant[](_get_y(mν, a)) / a^5 +
-                                    dFdy_interpolant[](_get_y(mν, a)) / a^4 * (mν / kB / Tν))
+    y = _get_y(mν, a)
+    val_F = _call_interpolant(F_interpolant, y)
+    val_dFdy = _call_interpolant(dFdy_interpolant, y)
+    return 15 / π^4 * Γν^4 * Ωγ0 * (-4 * val_F / a^5 +
+                                    val_dFdy / a^4 * (mν / kB / Tν))
 end
 
 function _dΩνE2da(a, Ωγ0, mν::AbstractVector; kB=8.617342e-5, Tν=0.71611 * 2.7255, Neff=3.044)
     Γν = (4 / 11)^(1 / 3) * (Neff / 3)^(1 / 4)
-    sum_interpolant = 0.0
-    for mymν in mν
-        sum_interpolant += -4 * F_interpolant[](_get_y(mymν, a)) / a^5 +
-                           dFdy_interpolant[](_get_y(mymν, a)) / a^4 * (mymν / kB / Tν)
-    end
+    sum_interpolant = sum(mymν -> begin
+        y = _get_y(mymν, a)
+        val_F = _call_interpolant(F_interpolant, y)
+        val_dFdy = _call_interpolant(dFdy_interpolant, y)
+        -4 * val_F / a^5 + val_dFdy / a^4 * (mymν / kB / Tν)
+    end, mν)
     return 15 / π^4 * Γν^4 * Ωγ0 * sum_interpolant
 end
 
@@ -74,11 +85,19 @@ function _dρDEda(a, w0, wa)
     return 3 * (-(1 + w0 + wa) / a + wa) * _ρDE_a(a, w0, wa)
 end
 
+function _E_a_scalar(a::Number, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa)
+    return sqrt(Ωγ0 * a^-4 + Ωcb0 * a^-3 + Ωk0 * a^-2 + ΩΛ0 * _ρDE_a(a, w0, wa) + _ΩνE2(a, Ωγ0, mν))
+end
+
 function E_a(a, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     Ωγ0 = 2.469e-5 / h^2
-    Ων0 = _ΩνE2(1.0, Ωγ0, mν)
+    Ων0 = _ΩνE2(1.0, Ωγ0, mν)::promote_type(Float64, typeof(Ωγ0), typeof(mν) <: AbstractVector ? eltype(mν) : typeof(mν))
     ΩΛ0 = 1.0 - (Ωγ0 + Ωcb0 + Ων0 + Ωk0)
-    return @. sqrt(Ωγ0 * a^-4 + Ωcb0 * a^-3 + Ωk0 * a^-2 + ΩΛ0 * _ρDE_a(a, w0, wa) + _ΩνE2(a, Ωγ0, mν))
+    if a isa AbstractArray
+        return _E_a_scalar.(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, Ref(mν), w0, wa)
+    else
+        return _E_a_scalar(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa)
+    end
 end
 
 function E_a(a, cosmo::w0waCDMCosmology)
@@ -98,16 +117,24 @@ function E_z(z, cosmo::w0waCDMCosmology)
     return E_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0)
 end
 
-function _dlogEdloga(a, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    Ωγ0 = 2.469e-5 / h^2
-    Ων0 = _ΩνE2(1.0, Ωγ0, mν)
-    ΩΛ0 = 1.0 - (Ωγ0 + Ωcb0 + Ων0 + Ωk0)
-    return a * 0.5 / (E_a(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)^2) *
+function _dlogEdloga_scalar(a::Number, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa)
+    return a * 0.5 / (_E_a_scalar(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa)^2) *
            (-3(Ωcb0)a^-4 - 4Ωγ0 * a^-5 - 2Ωk0 * a^-3 + ΩΛ0 * _dρDEda(a, w0, wa) + _dΩνE2da(a, Ωγ0, mν))
 end
 
+function _dlogEdloga(a, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+    Ωγ0 = 2.469e-5 / h^2
+    Ων0 = _ΩνE2(1.0, Ωγ0, mν)::promote_type(Float64, typeof(Ωγ0), typeof(mν) <: AbstractVector ? eltype(mν) : typeof(mν))
+    ΩΛ0 = 1.0 - (Ωγ0 + Ωcb0 + Ων0 + Ωk0)
+    if a isa AbstractArray
+        return _dlogEdloga_scalar.(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, Ref(mν), w0, wa)
+    else
+        return _dlogEdloga_scalar(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa)
+    end
+end
+
 function _Ωma(a, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-    return Ωcb0 * a^-3 / (E_a(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))^2
+    return Ωcb0 .* a.^-3 ./ (E_a(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)).^2
 end
 
 function _Ωma(a, cosmo::w0waCDMCosmology)
@@ -222,16 +249,18 @@ end
 function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     amin = 1 / 139
     loga = vcat(log.(_a_z.(z)))
-    u₀ = [amin, amin]
+    
+    T = promote_type(eltype(z), typeof(Ωcb0), typeof(h), typeof(mν), typeof(w0), typeof(wa), typeof(Ωk0))
+    u₀ = T[amin, amin]
 
-    logaspan = (log(amin), log(1.01))#to ensure we cover the relevant range
+    logaspan = (T(log(amin)), T(log(1.01)))#to ensure we cover the relevant range
 
-    p = [Ωcb0, mν, h, w0, wa, Ωk0]
+    p = T[Ωcb0, mν, h, w0, wa, Ωk0]
 
-    prob = ODEProblem(_growth!, u₀, logaspan, p)
+    prob = ODEProblem{true}(_growth!, u₀, logaspan, p)
 
-    sol = solve(prob, Tsit5(), reltol=1e-5; saveat=loga)[1:2, :]
-    return sol
+    sol = solve(prob, Tsit5(), reltol=1e-5; saveat=loga)
+    return Array(sol)[1:2, :]::Matrix{T}
 end
 
 function D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
