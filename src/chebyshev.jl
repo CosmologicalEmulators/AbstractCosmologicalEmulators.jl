@@ -5,7 +5,6 @@ A plan for computing the Chebyshev coefficients of a function evaluated at Cheby
 """
 struct ChebyshevPlan{ND, P, T}
     fft_plan::P
-    transform_mats::NTuple{ND, Matrix{T}}
     K::NTuple{ND, Int}
     nodes::NTuple{ND, Vector{T}}
     dim::NTuple{ND, Int}
@@ -57,29 +56,12 @@ function prepare_chebyshev_plan(x_mins::NTuple{N, Any}, x_maxs::NTuple{N, Any}, 
     end
     T = promote_type(eltype(eltype(x_mins)), eltype(eltype(x_maxs)))
     fft_plan = FFTW.plan_r2r(zeros(T, size_nd...), FFTW.REDFT00, dim; flags=FFTW.PATIENT, timelimit=Inf)
-    transform_mats = ntuple(i -> _chebyshev_transform_matrix(T, Ks[i]), N)
 
-    return ChebyshevPlan(fft_plan, transform_mats, Ks, nodes, dim)
+    return ChebyshevPlan(fft_plan, Ks, nodes, dim)
 end
 
 function prepare_chebyshev_plan(x_min::T, x_max::T, K::Int; size_nd::Union{Tuple, Nothing}=nothing, dim::Int=1) where T
     return prepare_chebyshev_plan((x_min,), (x_max,), (K,); size_nd=size_nd, dim=(dim,))
-end
-
-function _chebyshev_transform_matrix(::Type{T}, K::Int) where {T}
-    n = K + 1
-    invK  = inv(T(K))
-    inv2K = inv(T(2 * K))
-    M = zeros(T, n, n)
-    for k in 0:K
-        s = (k == 0 || k == K) ? inv2K : invK
-        M[k + 1, 1] = s
-        M[k + 1, end] = s * (-one(T))^k
-        for j in 1:(K - 1)
-            M[k + 1, j + 1] = s * 2 * cos(T(π) * (k * j) / K)
-        end
-    end
-    return M
 end
 
 """
@@ -129,16 +111,6 @@ function _move_dim_to_front_perm(d::Int, N::Int)
     return (d, ntuple(i -> i < d ? i : i + 1, N - 1)...)
 end
 
-function _apply_chebyshev_transform_dense(A::AbstractArray, d::Int, M)
-    perm = _move_dim_to_front_perm(d, ndims(A))
-    A_perm = permutedims(A, perm)
-    n = size(A_perm, 1)
-    A2 = reshape(A_perm, n, :)
-    C2 = M * A2
-    C_perm = reshape(C2, size(A_perm))
-    return permutedims(C_perm, invperm(perm))
-end
-
 # DCT-I via even-extension FFT.  Equivalent to FFTW.REDFT00, but fully traceable
 # by Reactant.  Permutes d to the front, flattens batch dims, applies the
 # even-extension trick along dim 1, then restores the original layout.
@@ -162,14 +134,6 @@ function _apply_chebyshev_transform_fft(A::AbstractArray, d::Int, K::Int)
 
     C_perm = reshape(C2, size(A_perm))
     return permutedims(C_perm, invperm(perm))
-end
-
-function _chebyshev_decomposition_single_dense(plan::ChebyshevPlan{ND}, f_vals::AbstractArray) where {ND}
-    c = f_vals
-    for i in 1:ND
-        c = _apply_chebyshev_transform_dense(c, plan.dim[i], plan.transform_mats[i])
-    end
-    return c
 end
 
 function _chebyshev_decomposition_single_fft(plan::ChebyshevPlan{ND}, f_vals::AbstractArray) where {ND}

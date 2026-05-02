@@ -176,55 +176,43 @@ const ext_reactant = Base.get_extension(AbstractCosmologicalEmulators, :ExtReact
             poly_ref = AbstractCosmologicalEmulators.chebyshev_polynomials(x_grid, 0.0, 1.0, K)
             coeff_ref = AbstractCosmologicalEmulators.chebyshev_decomposition(plan, vals)
             coeff_mat_ref = AbstractCosmologicalEmulators.chebyshev_decomposition(plan, vals_mat)
-            coeff_dense_ref = AbstractCosmologicalEmulators._chebyshev_decomposition_single_dense(plan, vals)
 
             poly_compiled = Reactant.@compile sync=true AbstractCosmologicalEmulators.chebyshev_polynomials(xR, 0.0, 1.0, K)
             coeff_compiled = Reactant.@compile sync=true AbstractCosmologicalEmulators.chebyshev_decomposition(plan, valsR)
             coeff_mat_compiled = Reactant.@compile sync=true AbstractCosmologicalEmulators.chebyshev_decomposition(plan, vals_mat_R)
-            coeff_dense_compiled = Reactant.@compile sync=true AbstractCosmologicalEmulators._chebyshev_decomposition_single_dense(plan, valsR)
 
             poly_R = poly_compiled(xR, 0.0, 1.0, K)
             coeff_R = coeff_compiled(plan, valsR)
             coeff_mat_R = coeff_mat_compiled(plan, vals_mat_R)
-            coeff_dense_R = coeff_dense_compiled(plan, valsR)
 
             Reactant.synchronize(poly_R)
             Reactant.synchronize(coeff_R)
             Reactant.synchronize(coeff_mat_R)
-            Reactant.synchronize(coeff_dense_R)
 
             @test Array(poly_R) ≈ poly_ref atol=1e-12 rtol=1e-12
             @test Array(coeff_R) ≈ coeff_ref atol=1e-12 rtol=1e-12
             @test Array(coeff_mat_R) ≈ coeff_mat_ref atol=1e-12 rtol=1e-12
-            @test Array(coeff_dense_R) ≈ coeff_dense_ref atol=1e-12 rtol=1e-12
 
             loss_poly(x) = sum(AbstractCosmologicalEmulators.chebyshev_polynomials(x, 0.0, 1.0, K))
             loss_coeff(v) = sum(AbstractCosmologicalEmulators.chebyshev_decomposition(plan, v))
-            loss_dense(v) = sum(AbstractCosmologicalEmulators._chebyshev_decomposition_single_dense(plan, v))
 
             poly_grad_ref = ForwardDiff.gradient(loss_poly, x_grid)
             coeff_grad_ref = ForwardDiff.gradient(loss_coeff, vals)
-            dense_grad_ref = ForwardDiff.gradient(loss_dense, vals)
 
             poly_grad_fun(x) = Enzyme.gradient(Reverse, loss_poly, x)[1]
             coeff_grad_fun(v) = Enzyme.gradient(Reverse, loss_coeff, v)[1]
-            dense_grad_fun(v) = Enzyme.gradient(Reverse, loss_dense, v)[1]
 
             poly_grad_compiled = Reactant.@compile sync=true poly_grad_fun(xR)
             coeff_grad_compiled = Reactant.@compile sync=true coeff_grad_fun(valsR)
-            dense_grad_compiled = Reactant.@compile sync=true dense_grad_fun(valsR)
 
             poly_grad_R = poly_grad_compiled(xR)
             coeff_grad_R = coeff_grad_compiled(valsR)
-            dense_grad_R = dense_grad_compiled(valsR)
 
             Reactant.synchronize(poly_grad_R)
             Reactant.synchronize(coeff_grad_R)
-            Reactant.synchronize(dense_grad_R)
 
             @test Array(poly_grad_R) ≈ poly_grad_ref atol=1e-10 rtol=1e-10
             @test Array(coeff_grad_R) ≈ coeff_grad_ref atol=1e-10 rtol=1e-10
-            @test Array(dense_grad_R) ≈ dense_grad_ref atol=1e-10 rtol=1e-10
         end
     end
 end
@@ -235,49 +223,76 @@ end
     else
         Reactant.set_default_backend("cpu")
 
-        # Build a small Lux network: 3 → 8 → 5
-        n_in, n_hidden, n_out = 3, 8, 5
-        model = Chain(Dense(n_in => n_hidden, tanh), Dense(n_hidden => n_out))
+        # Realistic emulator architecture: 8 inputs, 5 hidden tanh layers x 64
+        # neurons, 400 outputs. With Float64 weights (Lux.setup defaults to
+        # Float32) so the host BLAS path doesn't take the slow mixed-precision
+        # fallback. This exact configuration previously broke with
+        # `StackOverflowError` at compile time when host arrays were
+        # constant-folded into MLIR; `to_reactant` puts the weights/states/
+        # min-max matrices on the Reactant device so they enter the compiled
+        # function as traced inputs.
+        n_in, n_out = 8, 400
+        Random.seed!(1234)
+        model = Chain(
+            Dense(n_in => 64, tanh),
+            Dense(64 => 64, tanh),
+            Dense(64 => 64, tanh),
+            Dense(64 => 64, tanh),
+            Dense(64 => 64, tanh),
+            Dense(64 => n_out),
+        )
         ps, st = Lux.setup(Random.default_rng(), model)
+        ps = Lux.f64(ps)
+        st = Lux.f64(st)
 
         lux_emu = LuxEmulator(Model=model, Parameters=ps, States=st)
 
         InMinMax  = hcat(zeros(n_in),  ones(n_in))
         OutMinMax = hcat(zeros(n_out), ones(n_out))
 
-        # Trivial postprocessing: return NN output unchanged.
-        # This is the simplest traceable postprocessing possible.
+        # Trivial postprocessing: return NN output unchanged. The simplest
+        # traceable postprocessing possible.
         trivial_post = (params, output, aux, emu) -> output
 
-        gen_emu = GenericEmulator(
+        gen_emu_host = GenericEmulator(
             TrainedEmulator = lux_emu,
             InMinMax        = InMinMax,
             OutMinMax       = OutMinMax,
             Postprocessing  = trivial_post,
         )
 
-        input_params = Float64[0.3, 0.6, 0.9]
-        ref_output   = run_emulator(input_params, gen_emu)
+        # Move weights/states/min-max onto the Reactant device. Without this,
+        # `Reactant.@compile` constant-folds them into MLIR and blows the
+        # type-inference stack at this output width.
+        gen_emu_dev = to_reactant(gen_emu_host)
+
+        input_params = rand(Float64, n_in)
+        ref_output   = run_emulator(input_params, gen_emu_host)
 
         inputR = Reactant.to_rarray(input_params)
 
         @testset "forward compile" begin
-            f_compiled = Reactant.@compile sync=true run_emulator(inputR, gen_emu)
-            outR = f_compiled(inputR, gen_emu)
+            # Pass the emulator as a `@compile` argument (not via closure
+            # capture); Reactant rejects closures over `ConcretePJRTArray`.
+            f_compiled = Reactant.@compile sync=true run_emulator(inputR, gen_emu_dev)
+            outR = f_compiled(inputR, gen_emu_dev)
             Reactant.synchronize(outR)
             @test Array(outR) ≈ ref_output atol=1e-10 rtol=1e-10
         end
 
         @testset "Enzyme gradient through GenericEmulator" begin
-            loss(x) = sum(run_emulator(x, gen_emu))
+            # Loss takes the emulator as an argument so gen_emu_dev enters
+            # the compiled function as a traced input.
+            loss(x, emu) = sum(run_emulator(x, emu))
 
-            # ForwardDiff reference
-            grad_ref = ForwardDiff.gradient(loss, input_params)
+            # ForwardDiff reference (host emulator).
+            grad_ref = ForwardDiff.gradient(x -> loss(x, gen_emu_host), input_params)
 
-            # Reactant + Enzyme compiled gradient
-            grad_fun(x) = Enzyme.gradient(Reverse, loss, x)[1]
-            f_grad = Reactant.@compile sync=true grad_fun(inputR)
-            gradR  = f_grad(inputR)
+            # Reactant + Enzyme compiled gradient. `Const(emu)` keeps Enzyme
+            # from differentiating w.r.t. the network weights.
+            grad_fun(x, emu) = Enzyme.gradient(Reverse, loss, x, Const(emu))[1]
+            f_grad = Reactant.@compile sync=true grad_fun(inputR, gen_emu_dev)
+            gradR  = f_grad(inputR, gen_emu_dev)
             Reactant.synchronize(gradR)
 
             @test Array(gradR) ≈ grad_ref atol=1e-8 rtol=1e-8
