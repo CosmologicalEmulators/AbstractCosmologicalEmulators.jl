@@ -8,6 +8,24 @@ using AbstractCosmologicalEmulators
 
 const ext_reactant = Base.get_extension(AbstractCosmologicalEmulators, :ExtReactant)
 
+@testset "to_reactant dispatch coverage" begin
+    if isnothing(ext_reactant)
+        @warn "ExtReactant extension not loaded; skipping to_reactant dispatch tests."
+    else
+        # Cover base fallback in src/AbstractCosmologicalEmulators.jl
+        sentinel = (a=1, b=2)
+        @test to_reactant(sentinel) === sentinel
+
+        # Cover ExtReactant pass-through for SimpleChainsEmulator
+        sc = SimpleChainsEmulator(
+            Architecture = (x, w) -> x,
+            Weights = nothing,
+            Description = Dict("kind" => "dummy"),
+        )
+        @test to_reactant(sc) === sc
+    end
+end
+
 @testset "ExtReactant spline equivalence" begin
     if isnothing(ext_reactant)
         @warn "ExtReactant extension not loaded; skipping ExtReactant tests."
@@ -252,7 +270,7 @@ end
 
         # Trivial postprocessing: return NN output unchanged. The simplest
         # traceable postprocessing possible.
-        trivial_post = (params, output, aux, emu) -> output
+        trivial_post = (params, output, emu) -> output
 
         gen_emu_host = GenericEmulator(
             TrainedEmulator = lux_emu,

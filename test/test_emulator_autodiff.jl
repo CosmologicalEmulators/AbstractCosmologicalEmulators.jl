@@ -38,7 +38,7 @@ using Mooncake
     OutMinMax = hcat(zeros(Float64, n_output), ones(Float64, n_output))
 
     # Define postprocessing function
-    postprocessing = (params, output, aux, emu) -> output  # Identity postprocessing
+    postprocessing = (params, output, emu) -> output  # Identity postprocessing
 
     # Create LuxEmulator
     lux_emu = LuxEmulator(
@@ -214,10 +214,10 @@ using Mooncake
         end
     end
 
-    @testset "Emulator with Auxiliary Parameters" begin
-        # Define postprocessing that uses auxiliary params
-        custom_postprocess = (params, output, aux, emu) -> begin
-            growth_factor = isempty(aux) ? 1.0 : aux[1]
+    @testset "Emulator with Custom Postprocessing" begin
+        # Define postprocessing that uses input params
+        custom_postprocess = (params, output, emu) -> begin
+            growth_factor = params[1]
             return output .* growth_factor^2
         end
 
@@ -228,26 +228,24 @@ using Mooncake
             Postprocessing = custom_postprocess
         )
 
-        aux_params = [0.8]  # Growth factor
-
-        @testset "ForwardDiff with auxiliary params" begin
-            function loss_aux(params)
-                result = run_emulator(params, aux_params, gen_emu_aux)
+        @testset "ForwardDiff with custom postprocessing" begin
+            function loss_custom(params)
+                result = run_emulator(params, gen_emu_aux)
                 return sum(result .^ 2)
             end
 
-            grad_aux = ForwardDiff.gradient(loss_aux, test_params)
-            @test all(isfinite.(grad_aux))
+            grad_custom = ForwardDiff.gradient(loss_custom, test_params)
+            @test all(isfinite.(grad_custom))
         end
 
-        @testset "Zygote with auxiliary params" begin
-            function loss_aux(params)
-                result = run_emulator(params, aux_params, gen_emu_aux)
+        @testset "Zygote with custom postprocessing" begin
+            function loss_custom(params)
+                result = run_emulator(params, gen_emu_aux)
                 return sum(result .^ 2)
             end
 
-            grad_aux = Zygote.gradient(loss_aux, test_params)[1]
-            @test all(isfinite.(grad_aux))
+            grad_custom = Zygote.gradient(loss_custom, test_params)[1]
+            @test all(isfinite.(grad_custom))
         end
     end
 end
