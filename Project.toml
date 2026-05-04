@@ -1,6 +1,6 @@
 name = "AbstractCosmologicalEmulators"
 uuid = "c83c1981-e5c4-4837-9eb8-c9b1572acfc6"
-version = "0.9.5"
+version = "0.9.6"
 authors = ["Marco Bonici <bonici.marco@gmail.com>"]
 
 [deps]
@@ -13,7 +13,6 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
-Polyester = "f517fe37-dbe3-4b94-8317-1923a5111588"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 
 [weakdeps]
@@ -41,6 +40,7 @@ BenchmarkTools = "1.6.3"
 ChainRulesCore = "1.26"
 DataInterpolations = "6, 8"
 DifferentiationInterface = "0.7.16"
+Enzyme = "0.13"
 FFTW = "1"
 FastChebInterp = "1.3"
 FastGaussQuadrature = "1"
@@ -55,7 +55,6 @@ Mooncake = "0.4, 0.5"
 NPZ = "0.4"
 OrdinaryDiffEqTsit5 = "1"
 Random = "1.10"
-Polyester = "0.7.19"
 Reactant = "0.2"
 SciMLSensitivity = "7.90"
 SimpleChains = "0.4"
@@ -90,4 +89,4 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [targets]
-test = ["ADTypes", "Aqua", "BenchmarkTools", "DataInterpolations", "DifferentiationInterface", "FastChebInterp", "FastGaussQuadrature", "FiniteDifferences", "ForwardDiff", "Integrals", "JET", "JSON", "LinearAlgebra", "Lux", "Mooncake", "NPZ", "OrdinaryDiffEqTsit5", "Random", "Reactant", "SciMLSensitivity", "SimpleChains", "Test", "Zygote"]
+test = ["ADTypes", "Aqua", "BenchmarkTools", "DataInterpolations", "DifferentiationInterface", "Enzyme", "FastChebInterp", "FastGaussQuadrature", "FiniteDifferences", "ForwardDiff", "Integrals", "JET", "JSON", "LinearAlgebra", "Lux", "Mooncake", "NPZ", "OrdinaryDiffEqTsit5", "Random", "Reactant", "SciMLSensitivity", "SimpleChains", "Test", "Zygote"]

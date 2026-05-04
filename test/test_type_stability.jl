@@ -40,12 +40,12 @@ using Random
 
             inminmax = Float32[0.0 1.0; 0.0 1.0]
             outminmax = Float32[0.0 1.0; 0.0 1.0]
-            postproc(input, output, aux, emu) = output
+            postproc(input, output, emu) = output
 
             gen_emu = AbstractCosmologicalEmulators.GenericEmulator(TrainedEmulator=emu, InMinMax=inminmax, OutMinMax=outminmax, Postprocessing=postproc)
             
             # Test the wrapper
-            JET.test_opt(run_emulator, (typeof(input), typeof(input), typeof(gen_emu)))
+            JET.test_opt(run_emulator, (typeof(input), typeof(gen_emu)))
 
             # Spline tests
             x_nodes = collect(0.0:0.1:1.0)

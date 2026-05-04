@@ -34,7 +34,7 @@ end
 
 Adapt.@adapt_structure GenericEmulator
 
-function run_emulator(input_params, auxiliary_params, emulator::GenericEmulator)
+function run_emulator(input_params, emulator::GenericEmulator)
     # 1. Normalization
     norm_input = maximin(input_params, emulator.InMinMax)
 
@@ -45,11 +45,7 @@ function run_emulator(input_params, auxiliary_params, emulator::GenericEmulator)
     output = inv_maximin(norm_output, emulator.OutMinMax)
 
     # 4. Postprocessing
-    result = emulator.Postprocessing(input_params, output, auxiliary_params, emulator)
+    result = emulator.Postprocessing(input_params, output, emulator)
 
     return result
-end
-
-function run_emulator(input_params, emulator::GenericEmulator)
-    return run_emulator(input_params, Float64[], emulator)
 end

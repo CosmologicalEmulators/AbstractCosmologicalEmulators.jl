@@ -27,7 +27,7 @@ using Mooncake
     OutMinMax = hcat(zeros(n_output), ones(n_output))
 
     # Define postprocessing function
-    postprocessing = (params, output, aux, emu) -> output  # Identity postprocessing
+    postprocessing = (params, output, emu) -> output  # Identity postprocessing
 
     # Create SimpleChainsEmulator
     sc_emu = SimpleChainsEmulator(Architecture=mlpd, Weights=weights)
@@ -54,23 +54,17 @@ using Mooncake
             Postprocessing = postprocessing
         )
 
-        # Test evaluation without auxiliary params
+        # Test evaluation
         input_params = [0.5, 0.5, 0.5]
         result = run_emulator(input_params, gen_emu)
         @test length(result) == n_output
         @test all(isfinite.(result))
-
-        # Test evaluation with auxiliary params
-        aux_params = [1.0, 2.0]
-        result_aux = run_emulator(input_params, aux_params, gen_emu)
-        @test length(result_aux) == n_output
-        @test all(isfinite.(result_aux))
     end
 
     @testset "GenericEmulator with Custom Postprocessing" begin
         # Define custom postprocessing (scale outputs)
-        custom_postprocess = (params, output, aux, emu) -> begin
-            growth_factor = isempty(aux) ? 1.0 : aux[1]
+        custom_postprocess = (params, output, emu) -> begin
+            growth_factor = params[1]
             return output .* growth_factor^2
         end
 
@@ -82,19 +76,19 @@ using Mooncake
         )
 
         input_params = [0.5, 0.5, 0.5]
-        aux_params = [2.0]  # Growth factor = 2.0
-
-        result = run_emulator(input_params, aux_params, gen_emu)
+        result = run_emulator(input_params, gen_emu)
         @test length(result) == n_output
         @test all(isfinite.(result))
 
-        # Without auxiliary params (should use default factor = 1.0)
-        result_no_aux = run_emulator(input_params, gen_emu)
-        @test length(result_no_aux) == n_output
-
         # Verify scaling works
-        result_baseline = run_emulator(input_params, [1.0], gen_emu)
-        @test isapprox(result, result_baseline .* 4.0)  # 2^2 = 4
+        identity_emu = GenericEmulator(
+            TrainedEmulator = sc_emu,
+            InMinMax = InMinMax,
+            OutMinMax = OutMinMax,
+            Postprocessing = (params, output, emu) -> output,
+        )
+        result_baseline = run_emulator(input_params, identity_emu)
+        @test isapprox(result, result_baseline .* input_params[1]^2)
     end
 end
 
@@ -145,7 +139,7 @@ end
 
         # Create postprocessing.jl
         open(joinpath(test_dir, "postprocessing.jl"), "w") do f
-            write(f, "(params, output, aux, emu) -> output")
+            write(f, "(params, output, emu) -> output")
         end
 
         @testset "Load GenericEmulator" begin
@@ -231,7 +225,7 @@ end
             NPZ.npzwrite(outminmax_file, test_outminmax)
 
             open(postprocessing_file, "w") do f
-                write(f, "(params, output, aux, emu) -> output")
+                write(f, "(params, output, emu) -> output")
             end
 
             # Load the emulator (this will trigger JSON.Object → Dict conversion)
