@@ -1227,6 +1227,120 @@ if !isnothing(ext)
             end
         end
     end
+
+    # =========================================================================
+    # Code-review follow-up tests (audit 2025-Q4)
+    #
+    # These testsets verify two specific claims raised during the architectural
+    # audit:
+    #   (a) `_growth_solver` and friends are type-stable on the scalar-mν path
+    #       (the only path actually exercised by user code today).
+    #   (b) The neutrino-density helpers `_ΩνE2` / `_dΩνE2da` produce gradients
+    #       that agree with central finite differences via both ForwardDiff
+    #       (using two distinct Akima interpolants for value vs derivative).
+    # =========================================================================
+    @testset "Audit: _growth_solver type stability (scalar mν)" begin
+        # The default w0waCDMCosmology uses scalar mν=0.0; this is the typical
+        # call signature. We verify type stability via Base.return_types and a
+        # @inferred guard. Vector-mν is NOT tested here because:
+        #   - `promote_type(Float64, Vector{Float64}) === Any`
+        #   - the resulting `T[Ωcb0, mν, h, ...]` constructor errors out
+        #     (a known limitation; tracked separately).
+        z_scalar = 0.5
+        z_vector = [0.1, 0.5, 1.0]
+        Ωcb0 = 0.27
+        h = 0.67
+
+        # Return type should be concrete Matrix{Float64}, not Any/abstract
+        T_scalar = Base.return_types(ext._growth_solver, (Float64, Float64, Float64))
+        @test length(T_scalar) == 1
+        @test T_scalar[1] === Matrix{Float64}
+
+        T_vector = Base.return_types(ext._growth_solver, (Vector{Float64}, Float64, Float64))
+        @test length(T_vector) == 1
+        @test T_vector[1] === Matrix{Float64}
+
+        # @inferred enforces concrete return type at runtime
+        @test (@inferred Matrix{Float64} ext._growth_solver(z_scalar, Ωcb0, h)) isa Matrix{Float64}
+        @test (@inferred Matrix{Float64} ext._growth_solver(z_vector, Ωcb0, h)) isa Matrix{Float64}
+
+        # Inner kernels exercised inside the ODE RHS
+        @test Base.return_types(ext._dlogEdloga, (Float64, Float64, Float64))[1] === Float64
+        @test Base.return_types(ext._ΩνE2, (Float64, Float64, Float64))[1] === Float64
+        @test Base.return_types(ext._ΩνE2, (Float64, Float64, Vector{Float64}))[1] === Float64
+    end
+
+    @testset "Audit: neutrino-density AD correctness (_ΩνE2, _dΩνE2da)" begin
+        # _ΩνE2 reads from the F_interpolant (Akima through the F integral),
+        # while _dΩνE2da reads from a *separate* dFdy_interpolant (Akima through
+        # the dFdy integral). The audit asked us to verify that AD through
+        # _ΩνE2 agrees with finite differences, AND that the analytical
+        # _dΩνE2da matches a finite difference of _ΩνE2 to within the joint
+        # interpolant accuracy (~1e-5).
+        a = 0.5
+        Ωγ0 = 5.5e-5
+        mν_scalar = 0.06
+        mν_vector = [0.06, 0.0, 0.0]
+
+        # ---- Scalar mν, derivative w.r.t. a ----
+        v_scalar = ext._ΩνE2(a, Ωγ0, mν_scalar)
+        @test isfinite(v_scalar) && v_scalar > 0
+
+        fd_a    = central_fdm(5, 1)(x -> ext._ΩνE2(x, Ωγ0, mν_scalar), a)
+        fwd_a   = ForwardDiff.derivative(x -> ext._ΩνE2(x, Ωγ0, mν_scalar), a)
+        zyg_a   = Zygote.gradient(x -> ext._ΩνE2(x, Ωγ0, mν_scalar), a)[1]
+        @test isapprox(fwd_a, fd_a; rtol=1e-8)
+        @test isapprox(zyg_a, fd_a; rtol=1e-8)
+
+        # ---- Scalar mν, derivative w.r.t. mν ----
+        fd_m  = central_fdm(5, 1)(m -> ext._ΩνE2(a, Ωγ0, m), mν_scalar)
+        fwd_m = ForwardDiff.derivative(m -> ext._ΩνE2(a, Ωγ0, m), mν_scalar)
+        zyg_m = Zygote.gradient(m -> ext._ΩνE2(a, Ωγ0, m), mν_scalar)[1]
+        @test isapprox(fwd_m, fd_m; rtol=1e-8)
+        @test isapprox(zyg_m, fd_m; rtol=1e-8)
+
+        # ---- Vector mν, derivative w.r.t. a ----
+        v_vector = ext._ΩνE2(a, Ωγ0, mν_vector)
+        @test isfinite(v_vector) && v_vector > 0
+
+        fd_av  = central_fdm(5, 1)(x -> ext._ΩνE2(x, Ωγ0, mν_vector), a)
+        fwd_av = ForwardDiff.derivative(x -> ext._ΩνE2(x, Ωγ0, mν_vector), a)
+        zyg_av = Zygote.gradient(x -> ext._ΩνE2(x, Ωγ0, mν_vector), a)[1]
+        @test isapprox(fwd_av, fd_av; rtol=1e-8)
+        @test isapprox(zyg_av, fd_av; rtol=1e-8)
+
+        # ---- Vector mν, gradient w.r.t. each component ----
+        # NOTE: FiniteDifferences.grad perturbs each component bidirectionally.
+        # If any component is exactly 0.0, the negative perturbation drives the
+        # neutrino integrand argument `y` below the F_interpolant grid lower
+        # bound, raising an `extrapolation_left = None` error from
+        # DataInterpolations. We therefore use strictly-positive components
+        # for the FD baseline; ForwardDiff and Zygote are tested at the
+        # original mν_vector (which has zeros) to confirm AD does not blow up.
+        mν_vector_fd = [0.06, 0.05, 0.04]
+        fd_mv  = grad(central_fdm(5, 1), m -> ext._ΩνE2(a, Ωγ0, m), mν_vector_fd)[1]
+        fwd_mv_fd = ForwardDiff.gradient(m -> ext._ΩνE2(a, Ωγ0, m), mν_vector_fd)
+        zyg_mv_fd = Zygote.gradient(m -> ext._ΩνE2(a, Ωγ0, m), mν_vector_fd)[1]
+        @test all(isapprox.(fwd_mv_fd, fd_mv; rtol=1e-7))
+        @test all(isapprox.(zyg_mv_fd, fd_mv; rtol=1e-7))
+
+        # AD with zero-mass species (interpolant-boundary case): FwdDiff and
+        # Zygote both rely on AbstractDifferentiation/ChainRules and should
+        # produce identical gradients (no FD bidirectional perturbation).
+        fwd_mv_z = ForwardDiff.gradient(m -> ext._ΩνE2(a, Ωγ0, m), mν_vector)
+        zyg_mv_z = Zygote.gradient(m -> ext._ΩνE2(a, Ωγ0, m), mν_vector)[1]
+        @test all(isapprox.(fwd_mv_z, zyg_mv_z; rtol=1e-12))
+
+        # ---- Analytical _dΩνE2da vs FD-of-_ΩνE2 (cross-interpolant check) ----
+        # The two routines route through *different* Akima interpolants
+        # (F_interpolant vs dFdy_interpolant), so we only require agreement
+        # at the level of Akima truncation error (~1e-5).
+        analytical_s = ext._dΩνE2da(a, Ωγ0, mν_scalar)
+        @test isapprox(analytical_s, fd_a; rtol=1e-5)
+
+        analytical_v = ext._dΩνE2da(a, Ωγ0, mν_vector)
+        @test isapprox(analytical_v, fd_av; rtol=1e-5)
+    end
 else
     @warn "BackgroundCosmologyExt extension not loaded, skipping background cosmology tests"
 end
