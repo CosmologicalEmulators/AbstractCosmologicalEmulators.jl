@@ -314,10 +314,11 @@ function _cubic_spline_eval(
     dt = tq .- t[idx]
     dt_next = t[idx .+ 1] .- tq
     h_i = h[idx .+ 1]
+    six = convert(eltype(h_i), 6)
 
-    term1 = (z[idx] .* (dt_next .^ 3) .+ z[idx .+ 1] .* (dt .^ 3)) ./ (6 .* h_i)
-    term2 = (u[idx .+ 1] ./ h_i .- z[idx .+ 1] .* h_i ./ 6) .* dt
-    term3 = (u[idx] ./ h_i .- z[idx] .* h_i ./ 6) .* dt_next
+    term1 = (z[idx] .* (dt_next .^ 3) .+ z[idx .+ 1] .* (dt .^ 3)) ./ (six .* h_i)
+    term2 = (u[idx .+ 1] ./ h_i .- z[idx .+ 1] .* h_i ./ six) .* dt
+    term3 = (u[idx] ./ h_i .- z[idx] .* h_i ./ six) .* dt_next
 
     return term1 .+ term2 .+ term3
 end
@@ -340,10 +341,11 @@ function _cubic_spline_eval(
     wdt = reshape(dt, :, 1)
     wdt_next = reshape(dt_next, :, 1)
     wh = reshape(h_i, :, 1)
+    six = convert(eltype(wh), 6)
 
-    term1 = (z[idx, :] .* (wdt_next .^ 3) .+ z[idx .+ 1, :] .* (wdt .^ 3)) ./ (6 .* wh)
-    term2 = (u[idx .+ 1, :] ./ wh .- z[idx .+ 1, :] .* wh ./ 6) .* wdt
-    term3 = (u[idx, :] ./ wh .- z[idx, :] .* wh ./ 6) .* wdt_next
+    term1 = (z[idx, :] .* (wdt_next .^ 3) .+ z[idx .+ 1, :] .* (wdt .^ 3)) ./ (six .* wh)
+    term2 = (u[idx .+ 1, :] ./ wh .- z[idx .+ 1, :] .* wh ./ six) .* wdt
+    term3 = (u[idx, :] ./ wh .- z[idx, :] .* wh ./ six) .* wdt_next
 
     return term1 .+ term2 .+ term3
 end
