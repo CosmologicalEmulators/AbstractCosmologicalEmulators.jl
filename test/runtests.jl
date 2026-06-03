@@ -7,6 +7,7 @@ using SimpleChains
 using ForwardDiff
 using Zygote
 using DifferentiationInterface
+using Enzyme
 import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
 using Mooncake
 using OrdinaryDiffEqTsit5

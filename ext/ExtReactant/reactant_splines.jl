@@ -1,10 +1,14 @@
 const TracedVec = Reactant.TracedRArray{T,1} where {T}
 const TracedMat = Reactant.TracedRArray{T,2} where {T}
-const MaybeTracedVec = Union{AbstractVector,TracedVec}
+const ConcreteVec = Reactant.ConcretePJRTArray{T,1} where {T}
+const ConcreteMat = Reactant.ConcretePJRTArray{T,2} where {T}
+const DeviceVec = Union{TracedVec,ConcreteVec}
+const DeviceMat = Union{TracedMat,ConcreteMat}
+const HostOrDeviceVec = Union{AbstractVector,DeviceVec}
 
 # Vectorized interval indices for query array.
 # Returns indices clamped to [1, n-1].
-function _interval_indices(t::MaybeTracedVec, tq::MaybeTracedVec)
+function _interval_indices(t::HostOrDeviceVec, tq::HostOrDeviceVec)
     n = length(t)
     cmp = reshape(t, :, 1) .<= reshape(tq, 1, :)
     idx = vec(sum(cmp; dims=1))
@@ -14,7 +18,7 @@ end
 # -----------------------------------------------------------------------------
 # Akima spline (traced vector + matrix dispatch)
 # -----------------------------------------------------------------------------
-function _akima_slopes(u::TracedVec, t::MaybeTracedVec)
+function _akima_slopes(u::DeviceVec, t::HostOrDeviceVec)
     q = diff(u) ./ diff(t)
 
     m2 = 2 .* q[1:1] .- q[2:2]
@@ -25,7 +29,7 @@ function _akima_slopes(u::TracedVec, t::MaybeTracedVec)
     return vcat(m1, m2, q, m_endm1, m_end)
 end
 
-function _akima_slopes(u::TracedMat, t::MaybeTracedVec)
+function _akima_slopes(u::DeviceMat, t::HostOrDeviceVec)
     q = diff(u; dims=1) ./ reshape(diff(t), :, 1)
 
     m2 = 2 .* q[1:1, :] .- q[2:2, :]
@@ -36,7 +40,7 @@ function _akima_slopes(u::TracedMat, t::MaybeTracedVec)
     return vcat(m1, m2, q, m_endm1, m_end)
 end
 
-function _akima_coefficients(t::MaybeTracedVec, m::TracedVec)
+function _akima_coefficients(t::HostOrDeviceVec, m::DeviceVec)
     n = length(t)
     dt = diff(t)
 
@@ -56,7 +60,7 @@ function _akima_coefficients(t::MaybeTracedVec, m::TracedVec)
     return b, c, d
 end
 
-function _akima_coefficients(t::MaybeTracedVec, m::TracedMat)
+function _akima_coefficients(t::HostOrDeviceVec, m::DeviceMat)
     n = length(t)
     dt = diff(t)
 
@@ -77,12 +81,12 @@ function _akima_coefficients(t::MaybeTracedVec, m::TracedMat)
 end
 
 function _akima_eval(
-    u::TracedVec,
-    t::MaybeTracedVec,
+    u::DeviceVec,
+    t::HostOrDeviceVec,
     b::AbstractVector,
     c::AbstractVector,
     d::AbstractVector,
-    tq::MaybeTracedVec,
+    tq::HostOrDeviceVec,
 )
     idx = _interval_indices(t, tq)
     wj = tq .- t[idx]
@@ -90,12 +94,12 @@ function _akima_eval(
 end
 
 function _akima_eval(
-    u::TracedMat,
-    t::MaybeTracedVec,
+    u::DeviceMat,
+    t::HostOrDeviceVec,
     b::AbstractMatrix,
     c::AbstractMatrix,
     d::AbstractMatrix,
-    tq::MaybeTracedVec,
+    tq::HostOrDeviceVec,
 )
     idx = _interval_indices(t, tq)
     wj = tq .- t[idx]
@@ -103,13 +107,13 @@ function _akima_eval(
     return ((d[idx, :] .* w .+ c[idx, :]) .* w .+ b[idx, :]) .* w .+ u[idx, :]
 end
 
-function akima_interpolation(u::TracedVec, t::MaybeTracedVec, t_new::MaybeTracedVec)
+function akima_interpolation(u::DeviceVec, t::HostOrDeviceVec, t_new::HostOrDeviceVec)
     m = _akima_slopes(u, t)
     b, c, d = _akima_coefficients(t, m)
     return _akima_eval(u, t, b, c, d, t_new)
 end
 
-function akima_interpolation(u::TracedMat, t::MaybeTracedVec, t_new::MaybeTracedVec)
+function akima_interpolation(u::DeviceMat, t::HostOrDeviceVec, t_new::HostOrDeviceVec)
     m = _akima_slopes(u, t)
     b, c, d = _akima_coefficients(t, m)
     return _akima_eval(u, t, b, c, d, t_new)
@@ -242,7 +246,7 @@ end
 # -----------------------------------------------------------------------------
 # Cubic spline coefficients/eval/interpolation (traced dispatch)
 # -----------------------------------------------------------------------------
-function _cubic_spline_coefficients(u::TracedVec, t::MaybeTracedVec)
+function _cubic_spline_coefficients(u::DeviceVec, t::HostOrDeviceVec)
     n = length(t)
     dt = diff(t)
 
@@ -262,7 +266,7 @@ function _cubic_spline_coefficients(u::TracedVec, t::MaybeTracedVec)
     return h, z
 end
 
-function _cubic_spline_coefficients(u::TracedMat, t::MaybeTracedVec)
+function _cubic_spline_coefficients(u::DeviceMat, t::HostOrDeviceVec)
     n = length(t)
     dt = diff(t)
 
@@ -287,11 +291,11 @@ function _cubic_spline_coefficients(u::TracedMat, t::MaybeTracedVec)
 end
 
 function _cubic_spline_eval(
-    u::TracedVec,
-    t::MaybeTracedVec,
+    u::DeviceVec,
+    t::HostOrDeviceVec,
     h::AbstractVector,
     z::AbstractVector,
-    tq::MaybeTracedVec,
+    tq::HostOrDeviceVec,
 )
     idx = _interval_indices(t, tq)
     dt = tq .- t[idx]
@@ -306,11 +310,11 @@ function _cubic_spline_eval(
 end
 
 function _cubic_spline_eval(
-    u::TracedMat,
-    t::MaybeTracedVec,
+    u::DeviceMat,
+    t::HostOrDeviceVec,
     h::AbstractVector,
     z::AbstractMatrix,
-    tq::MaybeTracedVec,
+    tq::HostOrDeviceVec,
 )
     idx = _interval_indices(t, tq)
     dt = tq .- t[idx]
@@ -328,12 +332,12 @@ function _cubic_spline_eval(
     return term1 .+ term2 .+ term3
 end
 
-function cubic_spline_interpolation(u::TracedVec, t::MaybeTracedVec, t_new::MaybeTracedVec)
+function cubic_spline_interpolation(u::DeviceVec, t::HostOrDeviceVec, t_new::HostOrDeviceVec)
     h, z = _cubic_spline_coefficients(u, t)
     return _cubic_spline_eval(u, t, h, z, t_new)
 end
 
-function cubic_spline_interpolation(u::TracedMat, t::MaybeTracedVec, t_new::MaybeTracedVec)
+function cubic_spline_interpolation(u::DeviceMat, t::HostOrDeviceVec, t_new::HostOrDeviceVec)
     h, z = _cubic_spline_coefficients(u, t)
     return _cubic_spline_eval(u, t, h, z, t_new)
 end
