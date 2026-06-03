@@ -178,6 +178,59 @@ end
             end
         end
 
+        @testset "Reactant Akima fallback is finite for flat and linear data" begin
+            Reactant.set_default_backend("cpu")
+
+            t_edge = collect(range(0.0, 1.0, length=12))
+            tq_edge = collect(range(0.0, 1.0, length=25))
+
+            cases = (
+                ("constant", fill(3.0, length(t_edge)), true),
+                ("linear", (@. 2.0 * t_edge - 0.7), true),
+                ("plateau_piecewise_linear", vcat(fill(0.0, 4), collect(range(0.1, 1.0, length=4)), fill(1.0, 4)), false),
+            )
+
+            loss_akima_u(u_, t_, tq_) = sum(AbstractCosmologicalEmulators.akima_interpolation(u_, t_, tq_))
+            enzyme_grad_first(f, x, y, z) = Enzyme.gradient(Reverse, f, x, Const(y), Const(z))[1]
+
+            for (name, u_edge, compare_gradients) in cases
+                uR = Reactant.to_rarray(u_edge)
+                tR = Reactant.to_rarray(t_edge)
+                tqR = Reactant.to_rarray(tq_edge)
+
+                y_ref = AbstractCosmologicalEmulators.akima_interpolation(u_edge, t_edge, tq_edge)
+                f = Reactant.@compile sync=true AbstractCosmologicalEmulators.akima_interpolation(uR, tR, tqR)
+                yR = f(uR, tR, tqR)
+                Reactant.synchronize(yR)
+
+                @test all(isfinite, Array(yR))
+                @test Array(yR) ≈ y_ref atol=1e-12 rtol=1e-12
+
+                grad_fun(u_, t_, tq_) = enzyme_grad_first(loss_akima_u, u_, t_, tq_)
+                g_compiled = Reactant.@compile sync=true grad_fun(uR, tR, tqR)
+                gR = g_compiled(uR, tR, tqR)
+                Reactant.synchronize(gR)
+
+                @test all(isfinite, Array(gR))
+                if compare_gradients
+                    grad_ref = ForwardDiff.gradient(x -> loss_akima_u(x, t_edge, tq_edge), copy(u_edge))
+                    @test Array(gR) ≈ grad_ref atol=1e-9 rtol=1e-9
+                end
+            end
+
+            U_edge = hcat(fill(3.0, length(t_edge)), (@. 2.0 * t_edge - 0.7))
+            UR = Reactant.to_rarray(U_edge)
+            tR = Reactant.to_rarray(t_edge)
+            tqR = Reactant.to_rarray(tq_edge)
+            Y_ref = AbstractCosmologicalEmulators.akima_interpolation(U_edge, t_edge, tq_edge)
+            F = Reactant.@compile sync=true AbstractCosmologicalEmulators.akima_interpolation(UR, tR, tqR)
+            YR = F(UR, tR, tqR)
+            Reactant.synchronize(YR)
+
+            @test all(isfinite, Array(YR))
+            @test Array(YR) ≈ Y_ref atol=1e-12 rtol=1e-12
+        end
+
         @testset "Reactant chebyshev values and gradients" begin
             Reactant.set_default_backend("cpu")
 

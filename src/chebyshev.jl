@@ -74,13 +74,13 @@ function chebyshev_polynomials(x_grid::AbstractVector, x_min::Real, x_max::Real,
     T0 = one.(z)
     K == 0 && return hcat(T0)
 
-    cols = Vector{Any}(undef, K + 1)
+    cols = Vector{typeof(z)}(undef, K + 1)
     cols[1] = T0
     cols[2] = z
     for k in 3:(K + 1)
         cols[k] = @. 2 * z * cols[k - 1] - cols[k - 2]
     end
-    return hcat(cols...)
+    return reduce(hcat, cols)
 end
 
 # Helper to apply scaling to raw FFT coefficients.

@@ -51,8 +51,10 @@ function _akima_coefficients(t::HostOrDeviceVec, m::DeviceVec)
     f12 = f1 .+ f2
 
     eps_akima = eps(eltype(m)) * 100
-    weighted = (f1 .* m[2:n+1] .+ f2 .* m[3:n+2]) ./ f12
-    b = ifelse.(f12 .> eps_akima, weighted, b)
+    mask = f12 .> eps_akima
+    safe_f12 = ifelse.(mask, f12, one(eltype(m)))
+    weighted = (f1 .* m[2:n+1] .+ f2 .* m[3:n+2]) ./ safe_f12
+    b = ifelse.(mask, weighted, b)
 
     c = (3 .* m[3:end-2] .- 2 .* b[1:end-1] .- b[2:end]) ./ dt
     d = (b[1:end-1] .+ b[2:end] .- 2 .* m[3:end-2]) ./ (dt .^ 2)
@@ -71,8 +73,10 @@ function _akima_coefficients(t::HostOrDeviceVec, m::DeviceMat)
     f12 = f1 .+ f2
 
     eps_akima = eps(eltype(m)) * 100
-    weighted = (f1 .* m[2:n+1, :] .+ f2 .* m[3:n+2, :]) ./ f12
-    b = ifelse.(f12 .> eps_akima, weighted, b)
+    mask = f12 .> eps_akima
+    safe_f12 = ifelse.(mask, f12, one(eltype(m)))
+    weighted = (f1 .* m[2:n+1, :] .+ f2 .* m[3:n+2, :]) ./ safe_f12
+    b = ifelse.(mask, weighted, b)
 
     c = (3 .* m[3:end-2, :] .- 2 .* b[1:end-1, :] .- b[2:end, :]) ./ reshape(dt, :, 1)
     d = (b[1:end-1, :] .+ b[2:end, :] .- 2 .* m[3:end-2, :]) ./ reshape(dt .^ 2, :, 1)
@@ -290,6 +294,12 @@ function _cubic_spline_coefficients(u::DeviceMat, t::HostOrDeviceVec)
     return h, z
 end
 
+function _device_if_concrete(x, ref::Reactant.ConcretePJRTArray)
+    return x isa Reactant.ConcretePJRTArray ? x : Reactant.to_rarray(x)
+end
+
+_device_if_concrete(x, ref) = x
+
 function _cubic_spline_eval(
     u::DeviceVec,
     t::HostOrDeviceVec,
@@ -297,6 +307,9 @@ function _cubic_spline_eval(
     z::AbstractVector,
     tq::HostOrDeviceVec,
 )
+    h = _device_if_concrete(h, u)
+    z = _device_if_concrete(z, u)
+
     idx = _interval_indices(t, tq)
     dt = tq .- t[idx]
     dt_next = t[idx .+ 1] .- tq
@@ -316,6 +329,9 @@ function _cubic_spline_eval(
     z::AbstractMatrix,
     tq::HostOrDeviceVec,
 )
+    h = _device_if_concrete(h, u)
+    z = _device_if_concrete(z, u)
+
     idx = _interval_indices(t, tq)
     dt = tq .- t[idx]
     dt_next = t[idx .+ 1] .- tq

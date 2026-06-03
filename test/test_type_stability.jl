@@ -57,6 +57,14 @@ using Random
             JET.test_opt(cubic_spline_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
             JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_scalar)))
             JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
+
+            # Chebyshev polynomial staging should remain concretely typed.
+            # In particular, this catches regressions such as Vector{Any}
+            # temporaries inside chebyshev_polynomials.
+            x_cheb64 = collect(range(0.0, 1.0, length=16))
+            x_cheb32 = Float32.(x_cheb64)
+            JET.test_opt(chebyshev_polynomials, (typeof(x_cheb64), Float64, Float64, Int))
+            JET.test_opt(chebyshev_polynomials, (typeof(x_cheb32), Float32, Float32, Int))
         end
     end
 end
