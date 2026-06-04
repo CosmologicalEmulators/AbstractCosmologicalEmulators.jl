@@ -315,12 +315,42 @@ function _cubic_spline_eval(
     dt_next = t[idx .+ 1] .- tq
     h_i = h[idx .+ 1]
     six = convert(eltype(h_i), 6)
+    # Reactant.jl on Julia 1.10 fails to materialize the fused broadcast
+    # trees below for ConcretePJRTArray because nested Broadcasted nodes can
+    # leave the broadcast eltype non-concrete.  Materialize each stage so the
+    # following operations are simple ConcretePJRTArray broadcasts.
+    six_h_i = six .* h_i
 
-    term1 = (z[idx] .* (dt_next .^ 3) .+ z[idx .+ 1] .* (dt .^ 3)) ./ (six .* h_i)
-    term2 = (u[idx .+ 1] ./ h_i .- z[idx .+ 1] .* h_i ./ six) .* dt
-    term3 = (u[idx] ./ h_i .- z[idx] .* h_i ./ six) .* dt_next
+    idx_next = idx .+ 1
+    u_i = u[idx]
+    u_next = u[idx_next]
+    z_i = z[idx]
+    z_next = z[idx_next]
 
-    return term1 .+ term2 .+ term3
+    dt2 = dt .* dt
+    dt3 = dt2 .* dt
+    dt_next2 = dt_next .* dt_next
+    dt_next3 = dt_next2 .* dt_next
+
+    term1_left = z_i .* dt_next3
+    term1_right = z_next .* dt3
+    term1_num = term1_left .+ term1_right
+    term1 = term1_num ./ six_h_i
+
+    term2_a = u_next ./ h_i
+    term2_b = z_next .* h_i
+    term2_c = term2_b ./ six
+    term2_inner = term2_a .- term2_c
+    term2 = term2_inner .* dt
+
+    term3_a = u_i ./ h_i
+    term3_b = z_i .* h_i
+    term3_c = term3_b ./ six
+    term3_inner = term3_a .- term3_c
+    term3 = term3_inner .* dt_next
+
+    term12 = term1 .+ term2
+    return term12 .+ term3
 end
 
 function _cubic_spline_eval(
@@ -342,12 +372,40 @@ function _cubic_spline_eval(
     wdt_next = reshape(dt_next, :, 1)
     wh = reshape(h_i, :, 1)
     six = convert(eltype(wh), 6)
+    # See vector method above: avoid nested ConcretePJRTArray broadcasts on
+    # Julia 1.10/Reactant.
+    six_wh = six .* wh
 
-    term1 = (z[idx, :] .* (wdt_next .^ 3) .+ z[idx .+ 1, :] .* (wdt .^ 3)) ./ (six .* wh)
-    term2 = (u[idx .+ 1, :] ./ wh .- z[idx .+ 1, :] .* wh ./ six) .* wdt
-    term3 = (u[idx, :] ./ wh .- z[idx, :] .* wh ./ six) .* wdt_next
+    idx_next = idx .+ 1
+    u_i = u[idx, :]
+    u_next = u[idx_next, :]
+    z_i = z[idx, :]
+    z_next = z[idx_next, :]
 
-    return term1 .+ term2 .+ term3
+    wdt2 = wdt .* wdt
+    wdt3 = wdt2 .* wdt
+    wdt_next2 = wdt_next .* wdt_next
+    wdt_next3 = wdt_next2 .* wdt_next
+
+    term1_left = z_i .* wdt_next3
+    term1_right = z_next .* wdt3
+    term1_num = term1_left .+ term1_right
+    term1 = term1_num ./ six_wh
+
+    term2_a = u_next ./ wh
+    term2_b = z_next .* wh
+    term2_c = term2_b ./ six
+    term2_inner = term2_a .- term2_c
+    term2 = term2_inner .* wdt
+
+    term3_a = u_i ./ wh
+    term3_b = z_i .* wh
+    term3_c = term3_b ./ six
+    term3_inner = term3_a .- term3_c
+    term3 = term3_inner .* wdt_next
+
+    term12 = term1 .+ term2
+    return term12 .+ term3
 end
 
 function cubic_spline_interpolation(u::DeviceVec, t::HostOrDeviceVec, t_new::HostOrDeviceVec)
