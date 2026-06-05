@@ -171,7 +171,7 @@ function init_emulator(NN_dict::AbstractDict{String,Any}, weight, ::Type{SimpleC
 end
 
 function load_trained_emulator(path::String;
-                               backend=SimpleChainsEmulator,
+                               backend=LuxEmulator,
                                weights_file="weights.npy",
                                inminmax_file="inminmax.npy",
                                outminmax_file="outminmax.npy",

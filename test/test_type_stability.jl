@@ -35,8 +35,15 @@ using Random
             emu = LuxEmulator(Model=model, Parameters=ps, States=st)
             input = Float32[0.5, 0.5]
 
-            # Fails the test if run_emulator is type unstable!
-            JET.test_opt(run_emulator, (typeof(input), typeof(emu)))
+            # Fails the test if our run_emulator wrapper is type unstable.
+            # Limit reports to this package: Lux/LuxLib may route dense layers
+            # through LoopVectorization/Polyester internals with runtime
+            # dispatch that is outside ACE's control.
+            JET.test_opt(
+                run_emulator,
+                (typeof(input), typeof(emu));
+                target_modules=(AbstractCosmologicalEmulators,),
+            )
 
             inminmax = Float32[0.0 1.0; 0.0 1.0]
             outminmax = Float32[0.0 1.0; 0.0 1.0]
@@ -45,7 +52,11 @@ using Random
             gen_emu = AbstractCosmologicalEmulators.GenericEmulator(TrainedEmulator=emu, InMinMax=inminmax, OutMinMax=outminmax, Postprocessing=postproc)
             
             # Test the wrapper
-            JET.test_opt(run_emulator, (typeof(input), typeof(gen_emu)))
+            JET.test_opt(
+                run_emulator,
+                (typeof(input), typeof(gen_emu));
+                target_modules=(AbstractCosmologicalEmulators,),
+            )
 
             # Spline tests
             x_nodes = collect(0.0:0.1:1.0)

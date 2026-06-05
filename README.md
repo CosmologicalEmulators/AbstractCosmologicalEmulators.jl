@@ -11,7 +11,7 @@
 `AbstractCosmologicalEmulators.jl` is the central `Julia` package within the [CosmologicalEmulators](https://github.com/CosmologicalEmulators) GitHub organization. It defines the common emulator interfaces, data structures, interpolation utilities, and extension hooks used by the other packages hosted by the organization.
 
 
-At the moment, the neural-network emulator backends supported here are based on [`SimpleChains.jl`](https://github.com/PumasAI/SimpleChains.jl) and [`Lux.jl`](https://github.com/LuxDL/Lux.jl). If you want to include a new NN/GP framework, feel free to open a PR and/or get in touch with us.
+At the moment, the neural-network emulator backends supported here are based on [`SimpleChains.jl`](https://github.com/PumasAI/SimpleChains.jl) and [`Lux.jl`](https://github.com/LuxDL/Lux.jl). `load_trained_emulator` uses the `LuxEmulator` backend by default, as it is the supported backend for Reactant/XLA workflows. If you want to include a new NN/GP framework, feel free to open a PR and/or get in touch with us.
 
 
 ## Features

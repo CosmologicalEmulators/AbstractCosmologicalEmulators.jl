@@ -147,6 +147,7 @@ end
             loaded_emu = load_trained_emulator(test_dir)
 
             @test isa(loaded_emu, GenericEmulator)
+            @test isa(loaded_emu.TrainedEmulator, LuxEmulator)
             @test loaded_emu.InMinMax == InMinMax
             @test loaded_emu.OutMinMax == OutMinMax
 
