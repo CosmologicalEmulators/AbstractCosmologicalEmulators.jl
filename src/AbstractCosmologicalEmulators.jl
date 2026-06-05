@@ -11,6 +11,7 @@ using LinearAlgebra
 using FFTW
 using ForwardDiff
 using ForwardDiff: Dual, value, partials, tagtype, Partials
+using Artifacts
 
 export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator, GenericEmulator
 export maximin, inv_maximin, run_emulator, get_emulator_description, init_emulator
@@ -26,6 +27,28 @@ include("initialization.jl")
 include("utils.jl")
 include("chebyshev.jl")
 include("chainrules.jl")
+
+const trained_emulators = Dict{String,GenericEmulator}()
+
+function init()
+    empty!(trained_emulators)
+
+    trained_emulators["ACE_mnuw0wacdm_sigma8_basis"] = load_trained_emulator(
+        joinpath(
+            artifact"ACE_mnuw0wacdm_sigma8_basis",
+            "trained_ace_mnuw0wacdm_sigma8_basis_300303",
+        ),
+    )
+
+    trained_emulators["ACE_mnuw0wacdm_ln10As_basis"] = load_trained_emulator(
+        joinpath(
+            artifact"ACE_mnuw0wacdm_ln10As_basis",
+            "trained_ace_mnuw0wacdm_ln10As_basis_300303",
+        ),
+    )
+
+    return nothing
+end
 
 """
     to_reactant(emu)

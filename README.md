@@ -69,6 +69,22 @@ Reactant caveats:
 - Call `to_reactant` on large `LuxEmulator` / `GenericEmulator` objects before compiling. This moves parameters, states, and normalization arrays to Reactant device arrays so they are passed as device inputs instead of being embedded as large MLIR constants.
 
 
+## Official emulator artifacts
+
+The package ships an `Artifacts.toml` with the official `300303` mnuw0waCDM emulator pair. Load them into the package-level emulator registry with:
+
+```julia
+using AbstractCosmologicalEmulators
+
+AbstractCosmologicalEmulators.init()
+
+emu_sigma8 = AbstractCosmologicalEmulators.trained_emulators["ACE_mnuw0wacdm_sigma8_basis"]
+emu_ln10As = AbstractCosmologicalEmulators.trained_emulators["ACE_mnuw0wacdm_ln10As_basis"]
+```
+
+Both artifacts are loaded with the `LuxEmulator` backend by default.
+
+
 ## Running tests
 
 Run the full package test suite through Julia's package manager so that test-only dependencies listed in `[extras]` and `[targets]` are available:
