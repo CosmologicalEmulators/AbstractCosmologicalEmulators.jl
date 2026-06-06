@@ -3,7 +3,6 @@
 
 [ACE_mnuw0wacdm_sigma8_basis]
 git-tree-sha1 = "7012e03a7106952a1198f2382f0c327ee8a4b895"
-lazy = true
 description = "ACE emulator for mnuw0waCDM cosmology with sigma8 basis (300303 training samples)"
 author = "Marco Bonici"
 doi = "10.5281/zenodo.20563171"
@@ -14,7 +13,6 @@ doi = "10.5281/zenodo.20563171"
 
 [ACE_mnuw0wacdm_ln10As_basis]
 git-tree-sha1 = "9e53d889e2491046a21c91dcc67eaa63237cb2cc"
-lazy = true
 description = "ACE emulator for mnuw0waCDM cosmology with ln10As basis (300303 training samples)"
 author = "Marco Bonici"
 doi = "10.5281/zenodo.20563171"
