@@ -55,11 +55,12 @@ end
 
 Move emulator weights/state arrays onto the active Reactant device so that
 they enter `Reactant.@compile`d functions as traced inputs rather than being
-constant-folded into MLIR. Implementation lives in the `ExtReactant`
-extension; loading `Reactant` will activate it. Without `Reactant` loaded,
-this is a no-op identity.
+constant-folded into MLIR.
+
+Methods are provided by the `ExtReactant` extension. Load `Reactant` to
+activate them.
 """
-to_reactant(emu) = emu
+function to_reactant end
 
 """
     set_fft_threads(n::Integer)

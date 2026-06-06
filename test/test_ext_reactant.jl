@@ -12,17 +12,18 @@ const ext_reactant = Base.get_extension(AbstractCosmologicalEmulators, :ExtReact
     if isnothing(ext_reactant)
         @warn "ExtReactant extension not loaded; skipping to_reactant dispatch tests."
     else
-        # Cover base fallback in src/AbstractCosmologicalEmulators.jl
+        # There is no identity fallback: unsupported values should not be
+        # silently returned unchanged.
         sentinel = (a=1, b=2)
-        @test to_reactant(sentinel) === sentinel
+        @test_throws MethodError to_reactant(sentinel)
 
-        # Cover ExtReactant pass-through for SimpleChainsEmulator
+        # SimpleChains is host-side and not XLA-traceable.
         sc = SimpleChainsEmulator(
             Architecture = (x, w) -> x,
             Weights = nothing,
             Description = Dict("kind" => "dummy"),
         )
-        @test to_reactant(sc) === sc
+        @test_throws ArgumentError to_reactant(sc)
     end
 end
 

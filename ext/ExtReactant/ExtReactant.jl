@@ -52,14 +52,11 @@ Supported types:
 - `LuxEmulator`         — `Parameters`/`States` are recursively converted via `Adapt`.
 - `GenericEmulator`     — wraps the inner emulator and converts `InMinMax` /
                           `OutMinMax` to Reactant arrays as well.
-- `SimpleChainsEmulator` — passed through unchanged (SimpleChains is not
-                          XLA-traceable; conversion would not help).
+- `SimpleChainsEmulator` — unsupported; `SimpleChains` is not XLA-traceable.
 
 Use this once per emulator you intend to run under Reactant; the returned
 emulator is structurally identical, only the numeric payloads live on device.
 """
-function to_reactant end
-
 function to_reactant(emu::LuxEmulator)
     return LuxEmulator(
         Model       = emu.Model,
@@ -78,7 +75,12 @@ function to_reactant(emu::GenericEmulator)
     )
 end
 
-# SimpleChains is opaque (AVX assembly); leave it untouched.
-to_reactant(emu::SimpleChainsEmulator) = emu
+function to_reactant(::SimpleChainsEmulator)
+    throw(ArgumentError(
+        "to_reactant is not supported for SimpleChainsEmulator. " *
+        "SimpleChains is a host-side backend and is not XLA-traceable; " *
+        "use LuxEmulator for Reactant workflows."
+    ))
+end
 
 end # module ExtReactant

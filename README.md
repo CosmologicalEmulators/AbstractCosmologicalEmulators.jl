@@ -63,7 +63,7 @@ The Reactant spline methods accept both traced arrays produced during compilatio
 
 Reactant caveats:
 
-- `LuxEmulator` is the supported neural-network backend for Reactant/XLA workflows. `SimpleChainsEmulator` is currently treated as a host-side emulator and is not expected to be XLA traceable.
+- `LuxEmulator` is the supported neural-network backend for Reactant/XLA workflows. `to_reactant` raises an error for `SimpleChainsEmulator`, which is a host-side backend and is not XLA traceable.
 - `BackgroundCosmologyExt` is a host-side extension and is not currently Reactant-compatible.
 - `GenericEmulator.Postprocessing` functions used inside `Reactant.@compile` must themselves be Reactant-traceable. Avoid arbitrary Julia control flow, mutation patterns, I/O, or package calls that Reactant cannot lower.
 - Call `to_reactant` on large `LuxEmulator` / `GenericEmulator` objects before compiling. This moves parameters, states, and normalization arrays to Reactant device arrays so they are passed as device inputs instead of being embedded as large MLIR constants.
