@@ -162,6 +162,54 @@ end
             @test all(isfinite.(result))
         end
 
+        @testset "Registered Postprocessing" begin
+            input_params = [0.5, 0.5, 0.5]
+
+            nn_dict["postprocessing_name"] = "identity"
+            open(joinpath(test_dir, "nn_setup.json"), "w") do f
+                JSON.print(f, nn_dict)
+            end
+
+            baseline_emu = load_trained_emulator(test_dir)
+            baseline = run_emulator(input_params, baseline_emu)
+
+            AbstractCosmologicalEmulators.BUILTIN_POSTPROCESSING["test_scale_by_two"] = (params, output, emu) -> 2 .* output
+            nn_dict["postprocessing_name"] = "test_scale_by_two"
+
+            open(joinpath(test_dir, "nn_setup.json"), "w") do f
+                JSON.print(f, nn_dict)
+            end
+
+            loaded_emu = load_trained_emulator(test_dir)
+            result = run_emulator(input_params, loaded_emu)
+
+            @test result ≈ 2 .* baseline
+        end
+
+        @testset "Missing Postprocessing File Falls Back To Identity" begin
+            input_params = [0.5, 0.5, 0.5]
+
+            nn_dict["postprocessing_name"] = "identity"
+            open(joinpath(test_dir, "nn_setup.json"), "w") do f
+                JSON.print(f, nn_dict)
+            end
+
+            baseline_emu = load_trained_emulator(test_dir)
+            baseline = run_emulator(input_params, baseline_emu)
+
+            delete!(nn_dict, "postprocessing_name")
+            open(joinpath(test_dir, "nn_setup.json"), "w") do f
+                JSON.print(f, nn_dict)
+            end
+
+            rm(joinpath(test_dir, "postprocessing.jl"))
+
+            loaded_emu = load_trained_emulator(test_dir)
+            result = run_emulator(input_params, loaded_emu)
+
+            @test result ≈ baseline
+        end
+
     finally
         # Cleanup
         rm(test_dir, recursive=true, force=true)

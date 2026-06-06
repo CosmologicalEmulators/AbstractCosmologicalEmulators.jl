@@ -249,9 +249,21 @@ end
 function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     amin = 1 / 139
     loga = vcat(log.(_a_z.(z)))
-    perm = sortperm(loga)
-    inv_perm = invperm(perm)
-    sorted_loga = loga[perm]
+
+    if issorted(loga)
+        sorted_loga = loga
+        restore_growth_order = identity
+    elseif issorted(loga; rev=true)
+        sorted_loga = reverse(loga)
+        restore_growth_order = sol -> reverse(sol; dims=2)
+    else
+        perm, inv_perm = ignore_derivatives() do
+            perm = sortperm(loga)
+            return perm, invperm(perm)
+        end
+        sorted_loga = loga[perm]
+        restore_growth_order = sol -> sol[:, inv_perm]
+    end
     
     T = promote_type(eltype(z), typeof(Ωcb0), typeof(h), typeof(mν), typeof(w0), typeof(wa), typeof(Ωk0))
     u₀ = T[amin, amin]
@@ -263,7 +275,7 @@ function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     prob = ODEProblem{true}(_growth!, u₀, logaspan, p)
 
     sol = solve(prob, Tsit5(), reltol=1e-5; saveat=sorted_loga)
-    return Array(sol)[1:2, inv_perm]::Matrix{T}
+    return restore_growth_order(Array(sol)[1:2, :])::Matrix{T}
 end
 
 function D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
