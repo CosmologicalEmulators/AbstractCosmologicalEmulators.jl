@@ -1158,6 +1158,19 @@ if !isnothing(ext)
             D_z_vectorized_cosmo = D_z(z_array, vec_cosmo)
 
             @test all(isapprox.(D_z_manual_cosmo, D_z_vectorized_cosmo, rtol=1e-12))
+
+            # Regression test: vectorized growth must preserve the caller's input order,
+            # not the ODE solver's internal chronological/saveat order.
+            z_unsorted = [2.0, 0.0, 5.0, 0.5, 1.0]
+            D_z_manual_unsorted = [D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_unsorted]
+            D_z_vectorized_unsorted = D_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(D_z_manual_unsorted, D_z_vectorized_unsorted, rtol=1e-12))
+
+            D_z_manual_unsorted_cosmo = [D_z(z, vec_cosmo) for z in z_unsorted]
+            D_z_vectorized_unsorted_cosmo = D_z(z_unsorted, vec_cosmo)
+
+            @test all(isapprox.(D_z_manual_unsorted_cosmo, D_z_vectorized_unsorted_cosmo, rtol=1e-12))
         end
 
         @testset "f_z vectorization" begin
@@ -1174,6 +1187,19 @@ if !isnothing(ext)
             f_z_vectorized_cosmo = f_z(z_array, vec_cosmo)
 
             @test all(isapprox.(f_z_manual_cosmo, f_z_vectorized_cosmo, rtol=1e-12))
+
+            # Regression test: vectorized growth must preserve the caller's input order,
+            # not the ODE solver's internal chronological/saveat order.
+            z_unsorted = [2.0, 0.0, 5.0, 0.5, 1.0]
+            f_z_manual_unsorted = [f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_unsorted]
+            f_z_vectorized_unsorted = f_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(f_z_manual_unsorted, f_z_vectorized_unsorted, rtol=1e-12))
+
+            f_z_manual_unsorted_cosmo = [f_z(z, vec_cosmo) for z in z_unsorted]
+            f_z_vectorized_unsorted_cosmo = f_z(z_unsorted, vec_cosmo)
+
+            @test all(isapprox.(f_z_manual_unsorted_cosmo, f_z_vectorized_unsorted_cosmo, rtol=1e-12))
         end
 
         @testset "D_f_z vectorization" begin
@@ -1213,6 +1239,35 @@ if !isnothing(ext)
             @test length(f_manual_cosmo) == length(f_vectorized_cosmo)
             @test all(isapprox.(D_manual_cosmo, D_vectorized_cosmo, rtol=1e-12))
             @test all(isapprox.(f_manual_cosmo, f_vectorized_cosmo, rtol=1e-12))
+
+            # Regression test: vectorized growth must preserve the caller's input order,
+            # not the ODE solver's internal chronological/saveat order.
+            z_unsorted = [2.0, 0.0, 5.0, 0.5, 1.0]
+            D_manual_unsorted = []
+            f_manual_unsorted = []
+            for z in z_unsorted
+                D_val, f_val = D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+                push!(D_manual_unsorted, D_val)
+                push!(f_manual_unsorted, f_val)
+            end
+
+            D_vectorized_unsorted, f_vectorized_unsorted = D_f_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+
+            @test all(isapprox.(D_manual_unsorted, D_vectorized_unsorted, rtol=1e-12))
+            @test all(isapprox.(f_manual_unsorted, f_vectorized_unsorted, rtol=1e-12))
+
+            D_manual_unsorted_cosmo = []
+            f_manual_unsorted_cosmo = []
+            for z in z_unsorted
+                D_val, f_val = D_f_z(z, vec_cosmo)
+                push!(D_manual_unsorted_cosmo, D_val)
+                push!(f_manual_unsorted_cosmo, f_val)
+            end
+
+            D_vectorized_unsorted_cosmo, f_vectorized_unsorted_cosmo = D_f_z(z_unsorted, vec_cosmo)
+
+            @test all(isapprox.(D_manual_unsorted_cosmo, D_vectorized_unsorted_cosmo, rtol=1e-12))
+            @test all(isapprox.(f_manual_unsorted_cosmo, f_vectorized_unsorted_cosmo, rtol=1e-12))
         end
 
         @testset "S_of_K vectorization" begin

@@ -249,6 +249,9 @@ end
 function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     amin = 1 / 139
     loga = vcat(log.(_a_z.(z)))
+    perm = sortperm(loga)
+    inv_perm = invperm(perm)
+    sorted_loga = loga[perm]
     
     T = promote_type(eltype(z), typeof(Ωcb0), typeof(h), typeof(mν), typeof(w0), typeof(wa), typeof(Ωk0))
     u₀ = T[amin, amin]
@@ -259,8 +262,8 @@ function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
 
     prob = ODEProblem{true}(_growth!, u₀, logaspan, p)
 
-    sol = solve(prob, Tsit5(), reltol=1e-5; saveat=loga)
-    return Array(sol)[1:2, :]::Matrix{T}
+    sol = solve(prob, Tsit5(), reltol=1e-5; saveat=sorted_loga)
+    return Array(sol)[1:2, inv_perm]::Matrix{T}
 end
 
 function D_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
@@ -270,7 +273,7 @@ end
 
 function D_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
-    return reverse(sol[1, 1:end])
+    return sol[1, 1:end]
 end
 
 function D_z(z, cosmo::w0waCDMCosmology)
@@ -284,7 +287,7 @@ function f_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     D = sol[1, 1:end]
     D_prime = sol[2, 1:end]#if wanna have normalized_version, 1:end
     result = @. 1 / D * D_prime
-    return reverse(result)
+    return result
 end
 
 function f_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
@@ -313,7 +316,7 @@ function D_f_z(z::AbstractVector, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
     D = sol[1, 1:end]
     D_prime = sol[2, 1:end]
     f = @. 1 / D * D_prime
-    return reverse(D), reverse(f)
+    return D, f
 end
 
 function D_f_z(z, cosmo::w0waCDMCosmology)
