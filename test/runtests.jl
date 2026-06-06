@@ -29,6 +29,9 @@ using AbstractCosmologicalEmulators
     # Extension tests
     include("test_extensions.jl")
 
+    # Official artifact tests
+    include("test_official_artifacts.jl")
+
     # Core functionality tests
     include("test_core_functionality.jl")
 

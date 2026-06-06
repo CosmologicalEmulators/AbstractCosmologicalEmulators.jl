@@ -30,7 +30,7 @@ include("chainrules.jl")
 
 const trained_emulators = Dict{String,GenericEmulator}()
 
-function init()
+function __init__()
     empty!(trained_emulators)
 
     trained_emulators["ACE_mnuw0wacdm_sigma8_basis"] = load_trained_emulator(

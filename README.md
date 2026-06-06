@@ -71,12 +71,10 @@ Reactant caveats:
 
 ## Official emulator artifacts
 
-The package ships an `Artifacts.toml` with the official `300303` mnuw0waCDM emulator pair. Load them into the package-level emulator registry with:
+The package ships an `Artifacts.toml` with the official `300303` mnuw0waCDM emulator pair. They are loaded automatically into the package-level emulator registry when the package is loaded:
 
 ```julia
 using AbstractCosmologicalEmulators
-
-AbstractCosmologicalEmulators.init()
 
 emu_sigma8 = AbstractCosmologicalEmulators.trained_emulators["ACE_mnuw0wacdm_sigma8_basis"]
 emu_ln10As = AbstractCosmologicalEmulators.trained_emulators["ACE_mnuw0wacdm_ln10As_basis"]
