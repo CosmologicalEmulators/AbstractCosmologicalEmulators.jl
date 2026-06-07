@@ -11,9 +11,11 @@ using LinearAlgebra
 using FFTW
 using ForwardDiff
 using ForwardDiff: Dual, value, partials, tagtype, Partials
+using Artifacts
 
-export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator
+export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator, GenericEmulator
 export maximin, inv_maximin, run_emulator, get_emulator_description, init_emulator
+export to_reactant
 export validate_nn_dict_structure, validate_parameter_ranges, validate_layer_structure, safe_dict_access
 export akima_interpolation, cubic_spline_interpolation, AkimaSpline
 export ChebyshevPlan, chebpoints
@@ -25,6 +27,40 @@ include("initialization.jl")
 include("utils.jl")
 include("chebyshev.jl")
 include("chainrules.jl")
+
+const trained_emulators = Dict{String,GenericEmulator}()
+
+function __init__()
+    empty!(trained_emulators)
+
+    trained_emulators["ACE_mnuw0wacdm_sigma8_basis"] = load_trained_emulator(
+        joinpath(
+            artifact"ACE_mnuw0wacdm_sigma8_basis",
+            "trained_ace_mnuw0wacdm_sigma8_basis_300303",
+        ),
+    )
+
+    trained_emulators["ACE_mnuw0wacdm_ln10As_basis"] = load_trained_emulator(
+        joinpath(
+            artifact"ACE_mnuw0wacdm_ln10As_basis",
+            "trained_ace_mnuw0wacdm_ln10As_basis_300303",
+        ),
+    )
+
+    return nothing
+end
+
+"""
+    to_reactant(emu)
+
+Move emulator weights/state arrays onto the active Reactant device so that
+they enter `Reactant.@compile`d functions as traced inputs rather than being
+constant-folded into MLIR.
+
+Methods are provided by the `ExtReactant` extension. Load `Reactant` to
+activate them.
+"""
+function to_reactant end
 
 """
     set_fft_threads(n::Integer)

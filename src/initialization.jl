@@ -170,8 +170,51 @@ function init_emulator(NN_dict::AbstractDict{String,Any}, weight, ::Type{SimpleC
     return _init_simplechainsemulator(NN_dict, weight)
 end
 
+const BUILTIN_POSTPROCESSING = Dict{String,Function}()
+
+postprocess_identity(input_params, output, emulator) = output
+
+BUILTIN_POSTPROCESSING["identity"] = postprocess_identity
+
+function _postprocessing_name(nn_dict::AbstractDict)
+    postprocess_name = get(nn_dict, "postprocessing_name", nothing)
+
+    if isnothing(postprocess_name) && haskey(nn_dict, "emulator_description")
+        postprocess_name = get(nn_dict["emulator_description"], "postprocessing_name", nothing)
+    end
+
+    return postprocess_name
+end
+
+function _load_postprocessing(path::AbstractString, nn_dict::AbstractDict, postprocessing_file::AbstractString)
+    postprocess_name = _postprocessing_name(nn_dict)
+
+    if !isnothing(postprocess_name)
+        name = String(postprocess_name)
+        if haskey(BUILTIN_POSTPROCESSING, name)
+            return BUILTIN_POSTPROCESSING[name]
+        else
+            throw(ArgumentError(
+                "Postprocessing function '$name' was requested in the configuration, " *
+                "but it is not registered in BUILTIN_POSTPROCESSING. " *
+                "Please add BUILTIN_POSTPROCESSING[\"$name\"] = func before loading the emulator."
+            ))
+        end
+    end
+
+    postprocessing_path = joinpath(path, postprocessing_file)
+
+    if isfile(postprocessing_path)
+        # Load postprocessing function in an isolated scope to prevent namespace pollution
+        # and avoid duplicate method definition warnings when loading multiple emulators.
+        return eval(Meta.parse("let; " * read(postprocessing_path, String) * " end"))
+    else
+        return BUILTIN_POSTPROCESSING["identity"]
+    end
+end
+
 function load_trained_emulator(path::String;
-                               backend=SimpleChainsEmulator,
+                               backend=LuxEmulator,
                                weights_file="weights.npy",
                                inminmax_file="inminmax.npy",
                                outminmax_file="outminmax.npy",
@@ -188,9 +231,7 @@ function load_trained_emulator(path::String;
     inminmax = NPZ.npzread(joinpath(path, inminmax_file))
     outminmax = NPZ.npzread(joinpath(path, outminmax_file))
 
-    # Load postprocessing function in an isolated scope to prevent namespace pollution
-    # and avoid duplicate method definition warnings when loading multiple emulators
-    postprocessing = eval(Meta.parse("let; " * read(joinpath(path, postprocessing_file), String) * " end"))
+    postprocessing = _load_postprocessing(path, nn_dict, postprocessing_file)
 
     # Construct GenericEmulator
     return GenericEmulator(

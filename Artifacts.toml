@@ -1,0 +1,22 @@
+# AbstractCosmologicalEmulators.jl Artifacts Configuration
+# Official mnuw0waCDM emulator artifacts.
+
+[ACE_mnuw0wacdm_sigma8_basis]
+git-tree-sha1 = "677213c0fd48b3b89536855585fecd6bbdd1fc11"
+description = "ACE emulator for mnuw0waCDM cosmology with sigma8 basis (300303 training samples)"
+author = "Marco Bonici"
+doi = "10.5281/zenodo.20564773"
+
+    [[ACE_mnuw0wacdm_sigma8_basis.download]]
+    url = "https://zenodo.org/api/records/20564773/files/trained_ace_mnuw0wacdm_sigma8_basis_300303.tar.xz/content"
+    sha256 = "24d98eaf1092c2e45c73b6bede77495a8988c52bbc94b9f97eb5bfc28e49c395"
+
+[ACE_mnuw0wacdm_ln10As_basis]
+git-tree-sha1 = "855e668ebfe5df1430f7b99f6d82adbe445a7896"
+description = "ACE emulator for mnuw0waCDM cosmology with ln10As basis (300303 training samples)"
+author = "Marco Bonici"
+doi = "10.5281/zenodo.20564773"
+
+    [[ACE_mnuw0wacdm_ln10As_basis.download]]
+    url = "https://zenodo.org/api/records/20564773/files/trained_ace_mnuw0wacdm_ln10As_basis_300303.tar.xz/content"
+    sha256 = "aded6b5807b428c1930f1897d77ed2273e9bbade36c9384067d6dae15681e905"

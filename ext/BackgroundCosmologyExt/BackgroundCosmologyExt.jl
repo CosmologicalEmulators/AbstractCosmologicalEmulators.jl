@@ -1,5 +1,30 @@
 module BackgroundCosmologyExt
 
+# =============================================================================
+# REACTANT COMPATIBILITY NOTICE
+# =============================================================================
+# This extension is *not* designed to be compiled with `Reactant.@compile`.
+# The reasons are structural and currently unfixable from our side:
+#
+# 1. SciML stack: `OrdinaryDiffEqTsit5.solve(...)` (used by `_growth_solver`)
+#    and `Integrals.solve(prob, QuadGKJL())` (used by `_F`, `_dFdy`) rely on
+#    runtime dispatch, FunctionWrappers, and other dynamic features that
+#    Reactant cannot trace into MLIR at present. Reactant does not yet
+#    support compilation of SciML solvers.
+#
+# 2. Global interpolants: the neutrino lookup tables `F_interpolant` and
+#    `dFdy_interpolant` below are stored in module-level `Ref`s and built at
+#    `__init__`. Reactant tracing would constant-fold them as host arrays,
+#    and the indirection through `Ref{AkimaInterpolation}` produces runtime
+#    dispatch that MLIR cannot lower.
+#
+# Consequence: `E_z`, `D_z`, `f_z`, `r_z`, `dM_z`, `dA_z`, `dL_z` should be
+# called on plain Julia hosts, not on Reactant traced arrays. They remain
+# fully ForwardDiff/Zygote/Mooncake-differentiable on the host.
+# Network/spline kernels in the main package retain Reactant compatibility
+# via `ExtReactant`.
+# =============================================================================
+
 using AbstractCosmologicalEmulators
 using OrdinaryDiffEqTsit5
 using DataInterpolations

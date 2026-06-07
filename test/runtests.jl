@@ -7,6 +7,7 @@ using SimpleChains
 using ForwardDiff
 using Zygote
 using DifferentiationInterface
+using Enzyme
 import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
 using Mooncake
 using OrdinaryDiffEqTsit5
@@ -18,6 +19,7 @@ using FiniteDifferences
 using SciMLSensitivity
 using JET
 using Aqua
+using Reactant
 using AbstractCosmologicalEmulators
 
 @testset "AbstractEmulators test" begin
@@ -26,6 +28,9 @@ using AbstractCosmologicalEmulators
 
     # Extension tests
     include("test_extensions.jl")
+
+    # Official artifact tests
+    include("test_official_artifacts.jl")
 
     # Core functionality tests
     include("test_core_functionality.jl")
@@ -50,6 +55,9 @@ using AbstractCosmologicalEmulators
 
     # Akima interpolation tests
     include("test_akima_interpolation.jl")
+
+    # Reactant extension spline equivalence tests
+    include("test_ext_reactant.jl")
 
     # Cubic Spline interpolation tests
     include("test_cubic_spline.jl")

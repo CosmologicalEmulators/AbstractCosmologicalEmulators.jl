@@ -124,7 +124,7 @@ using Mooncake
         )
 
         # Define postprocessing
-        postprocessing = (params, output, aux, emu) -> output
+        postprocessing = (params, output, emu) -> output
 
         # Create GenericEmulator with Lux backend
         gen_emu = GenericEmulator(

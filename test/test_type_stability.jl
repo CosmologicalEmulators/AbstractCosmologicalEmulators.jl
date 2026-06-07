@@ -35,17 +35,28 @@ using Random
             emu = LuxEmulator(Model=model, Parameters=ps, States=st)
             input = Float32[0.5, 0.5]
 
-            # Fails the test if run_emulator is type unstable!
-            JET.test_opt(run_emulator, (typeof(input), typeof(emu)))
+            # Fails the test if our run_emulator wrapper is type unstable.
+            # Limit reports to this package: Lux/LuxLib may route dense layers
+            # through LoopVectorization/Polyester internals with runtime
+            # dispatch that is outside ACE's control.
+            JET.test_opt(
+                run_emulator,
+                (typeof(input), typeof(emu));
+                target_modules=(AbstractCosmologicalEmulators,),
+            )
 
             inminmax = Float32[0.0 1.0; 0.0 1.0]
             outminmax = Float32[0.0 1.0; 0.0 1.0]
-            postproc(input, output, aux, emu) = output
+            postproc(input, output, emu) = output
 
             gen_emu = AbstractCosmologicalEmulators.GenericEmulator(TrainedEmulator=emu, InMinMax=inminmax, OutMinMax=outminmax, Postprocessing=postproc)
             
             # Test the wrapper
-            JET.test_opt(run_emulator, (typeof(input), typeof(input), typeof(gen_emu)))
+            JET.test_opt(
+                run_emulator,
+                (typeof(input), typeof(gen_emu));
+                target_modules=(AbstractCosmologicalEmulators,),
+            )
 
             # Spline tests
             x_nodes = collect(0.0:0.1:1.0)
@@ -57,6 +68,14 @@ using Random
             JET.test_opt(cubic_spline_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
             JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_scalar)))
             JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
+
+            # Chebyshev polynomial staging should remain concretely typed.
+            # In particular, this catches regressions such as Vector{Any}
+            # temporaries inside chebyshev_polynomials.
+            x_cheb64 = collect(range(0.0, 1.0, length=16))
+            x_cheb32 = Float32.(x_cheb64)
+            JET.test_opt(chebyshev_polynomials, (typeof(x_cheb64), Float64, Float64, Int))
+            JET.test_opt(chebyshev_polynomials, (typeof(x_cheb32), Float32, Float32, Int))
         end
     end
 end
