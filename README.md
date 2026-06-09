@@ -32,6 +32,7 @@ The package is designed to be usable in differentiable cosmology pipelines. The 
 - [`ForwardDiff.jl`](https://github.com/JuliaDiff/ForwardDiff.jl)
 - [`Zygote.jl`](https://github.com/FluxML/Zygote.jl)
 - [`Mooncake.jl`](https://github.com/chalk-lab/Mooncake.jl)
+- [`Enzyme.jl`](https://github.com/EnzymeAd/Enzyme.jl) (through `Reactant.jl`, see next section)
 
 The Akima interpolation implementation includes custom `ChainRulesCore` rules, and the package test suite checks gradients/Jacobians for both standalone interpolation utilities and emulator calls.
 
@@ -59,7 +60,7 @@ compiled = Reactant.@compile emu_dev(x)
 y = compiled(x)
 ```
 
-The Reactant spline methods accept both traced arrays produced during compilation and concrete PJRT device arrays created by `Reactant.to_rarray` / `to_reactant`. This is important when emulator parameters live on device while the compiled inputs are traced.
+The `Reactant` spline methods accept both traced arrays produced during compilation and concrete PJRT device arrays created by `Reactant.to_rarray` / `to_reactant`. This is important when emulator parameters live on device while the compiled inputs are traced. Code that is compiled by `Reactant` can run on hardware accelerators (GPU and TPU) and can also be differentiated by `Enzyme`.
 
 Reactant caveats:
 
