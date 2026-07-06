@@ -114,4 +114,4 @@ Stable API | :construction: | Work in progress
 ## Authors
 
 - [Marco Bonici](https://www.marcobonici.com), PostDoctoral Researcher at Waterloo Centre for Astrophysics
-- [Marius Millea](https://cosmicmar.com), Researcher at UC Davis and Berkeley Center for Cosmological Physics
+- Sofia Chiarenza, PhD Student at Waterloo Centre for Astrophysics

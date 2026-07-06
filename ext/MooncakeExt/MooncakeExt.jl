@@ -69,7 +69,7 @@ function ChainRulesCore.rrule(::typeof(AbstractCosmologicalEmulators.run_emulato
         vjp_input = convert(typeof(input), ForwardDiff.gradient(
             x -> begin
                 y_dual, _ = Lux.apply(emulator.Model, x, emulator.Parameters, emulator.States)
-                sum(y_dual .* Δy_vec)
+                sum(vec(y_dual) .* Δy_vec)
             end,
             input
         ))

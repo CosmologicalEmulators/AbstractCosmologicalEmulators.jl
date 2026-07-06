@@ -101,6 +101,38 @@ using Mooncake
 
                 println("✅ Mooncake gradient (LuxEmulator): SUCCESS")
             end
+
+            @testset "Gradient computation with batched matrix input" begin
+                batched_input = Float32[
+                    0.1 0.4
+                    0.2 0.5
+                    0.3 0.6
+                ]
+
+                function batched_loss(input)
+                    result = run_emulator(input, lux_emu)
+                    return sum(result .^ 2)
+                end
+
+                result = run_emulator(batched_input, lux_emu)
+                @test size(result) == (n_output, size(batched_input, 2))
+
+                grad_mk = DifferentiationInterface.gradient(
+                    batched_loss,
+                    AutoMooncake(; config=Mooncake.Config()),
+                    batched_input
+                )
+
+                @test size(grad_mk) == size(batched_input)
+                @test all(isfinite.(grad_mk))
+
+                # Regression test for the matrix-output pullback: the Mooncake rule
+                # should compute the same input VJP as direct ForwardDiff/Zygote.
+                grad_fd = ForwardDiff.gradient(batched_loss, batched_input)
+                grad_zy = Zygote.gradient(batched_loss, batched_input)[1]
+                @test grad_mk ≈ grad_fd rtol=1e-6
+                @test grad_mk ≈ grad_zy rtol=1e-6
+            end
         end
     end
 
