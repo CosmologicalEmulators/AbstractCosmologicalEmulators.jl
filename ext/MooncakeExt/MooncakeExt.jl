@@ -38,10 +38,10 @@ using Mooncake: @from_chainrules, MinimalCtx, NoFData, NoRData
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_eval), AbstractMatrix, Any, Any, AbstractMatrix, AbstractArray}
 
 # Chebyshev optimization
-Mooncake.tangent_type(::Type{P}) where {P<:FFTW.FFTWPlan} = P
+Mooncake.tangent_type(::Type{P}) where {P<:FFTW.FFTWPlan} = Mooncake.NoTangent
 Mooncake.fdata_type(::Type{P})   where {P<:FFTW.FFTWPlan} = NoFData
 Mooncake.rdata_type(::Type{P})   where {P<:FFTW.FFTWPlan} = NoRData
-Mooncake.zero_tangent_internal(p::FFTW.FFTWPlan, ::IdDict{Any, Any}) = p
+Mooncake.zero_tangent_internal(p::FFTW.FFTWPlan, ::IdDict{Any, Any}) = Mooncake.NoTangent()
 Mooncake.fdata(p::FFTW.FFTWPlan) = NoFData()
 Mooncake.rdata(p::FFTW.FFTWPlan) = NoRData()
 Mooncake.increment_rdata!!(x::FFTW.FFTWPlan, ::NoRData) = x
