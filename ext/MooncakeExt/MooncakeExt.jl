@@ -42,6 +42,7 @@ Mooncake.tangent_type(::Type{P}) where {P<:FFTW.FFTWPlan} = Mooncake.NoTangent
 Mooncake.fdata_type(::Type{P})   where {P<:FFTW.FFTWPlan} = NoFData
 Mooncake.rdata_type(::Type{P})   where {P<:FFTW.FFTWPlan} = NoRData
 Mooncake.zero_tangent_internal(p::FFTW.FFTWPlan, ::IdDict{Any, Any}) = Mooncake.NoTangent()
+Mooncake.set_to_zero_internal!!(c::Union{Mooncake.NoCache, Vector{UInt64}}, p::FFTW.FFTWPlan) = Mooncake.NoTangent()
 Mooncake.fdata(p::FFTW.FFTWPlan) = NoFData()
 Mooncake.rdata(p::FFTW.FFTWPlan) = NoRData()
 Mooncake.increment_rdata!!(x::FFTW.FFTWPlan, ::NoRData) = x
