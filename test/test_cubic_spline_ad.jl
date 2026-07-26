@@ -124,4 +124,52 @@ import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
         @test grad_fd ≈ grad_zy atol=1e-10
         @test grad_fd ≈ grad_mc atol=1e-10
     end
+
+    @testset "Prepared CubicSpline" begin
+        t = [0.0, 0.04, 0.17, 0.6, 1.2, 2.1, 3.0]
+        t_query = collect(range(0.05, 2.95, length=17))
+        u = @. sin(1.7 * t) + 0.1 * t
+
+        pure_loss(u_in) = sum(cubic_spline_interpolation(u_in, t, t_query))
+        struct_loss(u_in) = sum(AbstractCosmologicalEmulators.CubicSpline(u_in, t)(t_query))
+
+        for backend in (
+            AutoForwardDiff(),
+            AutoZygote(),
+            AutoMooncake(; config=Mooncake.Config()),
+        )
+            pure_gradient = DifferentiationInterface.gradient(pure_loss, backend, u)
+            struct_gradient = DifferentiationInterface.gradient(struct_loss, backend, u)
+            @test struct_gradient ≈ pure_gradient atol=1e-10 rtol=1e-10
+        end
+
+        spline = AbstractCosmologicalEmulators.CubicSpline(u, t)
+        query_loss(tq) = sum(spline(tq))
+        query_gradient_fd = DifferentiationInterface.gradient(
+            query_loss,
+            AutoForwardDiff(),
+            t_query,
+        )
+        query_gradient_mc = DifferentiationInterface.gradient(
+            query_loss,
+            AutoMooncake(; config=Mooncake.Config()),
+            t_query,
+        )
+        @test query_gradient_mc ≈ query_gradient_fd atol=1e-10 rtol=1e-10
+
+        U = hcat(u, @. cos(0.8 * t))
+        pure_matrix_loss(U_in) = sum(cubic_spline_interpolation(U_in, t, t_query))
+        struct_matrix_loss(U_in) = sum(AbstractCosmologicalEmulators.CubicSpline(U_in, t)(t_query))
+        matrix_gradient_fd = DifferentiationInterface.gradient(
+            pure_matrix_loss,
+            AutoForwardDiff(),
+            U,
+        )
+        matrix_gradient_mc = DifferentiationInterface.gradient(
+            struct_matrix_loss,
+            AutoMooncake(; config=Mooncake.Config()),
+            U,
+        )
+        @test matrix_gradient_mc ≈ matrix_gradient_fd atol=1e-10 rtol=1e-10
+    end
 end

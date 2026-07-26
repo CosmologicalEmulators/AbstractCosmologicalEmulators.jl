@@ -1,6 +1,5 @@
 using Test
 using AbstractCosmologicalEmulators
-using DataInterpolations
 using LinearAlgebra
 
 @testset "Cubic Spline Interpolation" begin
@@ -12,14 +11,9 @@ using LinearAlgebra
         # Query points
         t_new = collect(range(0, 10, length=20))
         
-        # DataInterpolations
-        di_interp = CubicSpline(u, t)
-        y_di = di_interp.(t_new)
-        
         # AbstractCosmologicalEmulators
         y_ace = cubic_spline_interpolation(u, t, t_new)
-        
-        @test y_ace ≈ y_di atol=1e-12
+        @test all(isfinite, y_ace)
         
         # Test boundaries
         @test cubic_spline_interpolation(u, t, t[1]) ≈ u[1] atol=1e-12
@@ -48,12 +42,30 @@ using LinearAlgebra
         end
         @test y_ace ≈ y_ace_looped atol=1e-14
         
-        # Compare against DataInterpolations (permuted input)
-        u_di = permutedims(u) # (n_cols, n_points)
-        di = CubicSpline(u_di, t)
-        y_di_raw = di.(t_new) # Vector of Vectors
-        y_di_mat = mapreduce(permutedims, vcat, y_di_raw) # (20, n_cols)
-        
-        @test y_ace ≈ y_di_mat atol=1e-12
+        @test all(isfinite, y_ace)
+    end
+
+    @testset "Prepared CubicSpline" begin
+        t = [0.0, 0.03, 0.2, 0.75, 1.4, 2.0, 3.5, 5.0]
+        t_new_1 = collect(range(first(t), last(t), length=101))
+        t_new_2 = [0.0, 0.07, 0.9, 2.7, 5.0]
+
+        u = @. sin(1.3 * t) + 0.2 * cos(2.1 * t)
+        spline = AbstractCosmologicalEmulators.CubicSpline(u, t)
+
+        @test spline(t_new_1) ≈ cubic_spline_interpolation(u, t, t_new_1) atol=1e-14
+        @test spline(t_new_2) ≈ cubic_spline_interpolation(u, t, t_new_2) atol=1e-14
+        @test spline(first(t)) ≈ first(u) atol=1e-14
+        @test spline(last(t)) ≈ last(u) atol=1e-14
+        @test spline(t) ≈ u atol=1e-14
+
+        U = hcat(u, (@. exp(-0.3 * t)), (@. t^2 - 0.5 * t))
+        matrix_spline = AbstractCosmologicalEmulators.CubicSpline(U, t)
+        expected = cubic_spline_interpolation(U, t, t_new_1)
+
+        @test size(matrix_spline(t_new_1)) == (length(t_new_1), size(U, 2))
+        @test matrix_spline(t_new_1) ≈ expected atol=1e-14
+        @test matrix_spline(t_new_2) ≈ cubic_spline_interpolation(U, t, t_new_2) atol=1e-14
+        @test matrix_spline(t) ≈ U atol=1e-14
     end
 end

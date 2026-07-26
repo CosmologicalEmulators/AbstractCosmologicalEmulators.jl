@@ -1,7 +1,6 @@
 using Test
 using OrdinaryDiffEqTsit5
 using Integrals
-using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
 using ForwardDiff
@@ -583,8 +582,8 @@ if !isnothing(ext)
         @test isdefined(ext, :dFdy_interpolant)
         @test !isnothing(ext.F_interpolant[])
         @test !isnothing(ext.dFdy_interpolant[])
-        @test isa(ext.F_interpolant[], AkimaInterpolation)
-        @test isa(ext.dFdy_interpolant[], AkimaInterpolation)
+        @test isa(ext.F_interpolant[], AkimaSpline)
+        @test isa(ext.dFdy_interpolant[], AkimaSpline)
     end
 
     @testset "Type stability tests" begin
@@ -1369,7 +1368,7 @@ if !isnothing(ext)
         # If any component is exactly 0.0, the negative perturbation drives the
         # neutrino integrand argument `y` below the F_interpolant grid lower
         # bound, raising an `extrapolation_left = None` error from
-        # DataInterpolations. We therefore use strictly-positive components
+        # the lookup grid. We therefore use strictly-positive components
         # for the FD baseline; ForwardDiff and Zygote are tested at the
         # original mν_vector (which has zeros) to confirm AD does not blow up.
         mν_vector_fd = [0.06, 0.05, 0.04]
