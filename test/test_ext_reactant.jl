@@ -139,6 +139,34 @@ end
             @test Array(y_dynamic_2_R) ≈ AbstractCosmologicalEmulators.CubicSpline(u2, t)(tq) atol=1e-8 rtol=1e-8
             @test !isapprox(Array(y_dynamic_2_R), Array(y_dynamic_R); atol=1e-8, rtol=1e-8)
 
+            # Prepared AkimaSpline stores values and coefficients while the
+            # query grid remains a runtime input. Test both vector and matrix
+            # values, then construct it inside the compiled function to prove
+            # that the struct itself is Reactant-traceable.
+            akima_spline_ref = AbstractCosmologicalEmulators.AkimaSpline(u, t)
+            akima_spline_ref_m = AbstractCosmologicalEmulators.AkimaSpline(U, t)
+            akima_spline_R = AbstractCosmologicalEmulators.AkimaSpline(uR, tR)
+            akima_spline_m_R = AbstractCosmologicalEmulators.AkimaSpline(UR, tR)
+            compiled_akima_spline = Reactant.@compile sync=true akima_spline_R(tqR)
+            compiled_akima_spline_m = Reactant.@compile sync=true akima_spline_m_R(tqR)
+            y_akima_spline_R = compiled_akima_spline(tqR)
+            y_akima_spline_m_R = compiled_akima_spline_m(tqR)
+            Reactant.synchronize(y_akima_spline_R)
+            Reactant.synchronize(y_akima_spline_m_R)
+            @test Array(y_akima_spline_R) ≈ akima_spline_ref(tq) atol=1e-8 rtol=1e-8
+            @test Array(y_akima_spline_m_R) ≈ akima_spline_ref_m(tq) atol=1e-8 rtol=1e-8
+
+            akima_struct_eval(u_, t_, tq_) =
+                AbstractCosmologicalEmulators.AkimaSpline(u_, t_)(tq_)
+            dynamic_akima = Reactant.@compile sync=true akima_struct_eval(uR, tR, tqR)
+            y_dynamic_akima_R = dynamic_akima(uR, tR, tqR)
+            y_dynamic_akima_2_R = dynamic_akima(u2R, tR, tqR)
+            Reactant.synchronize(y_dynamic_akima_R)
+            Reactant.synchronize(y_dynamic_akima_2_R)
+            @test Array(y_dynamic_akima_R) ≈ akima_spline_ref(tq) atol=1e-8 rtol=1e-8
+            @test Array(y_dynamic_akima_2_R) ≈ AbstractCosmologicalEmulators.AkimaSpline(u2, t)(tq) atol=1e-8 rtol=1e-8
+            @test !isapprox(Array(y_dynamic_akima_2_R), Array(y_dynamic_akima_R); atol=1e-8, rtol=1e-8)
+
             # Fixed-grid plans are compiled once and reused with changing u.
             akima_plan = AbstractCosmologicalEmulators.AkimaSplinePlan(t, tq)
             cubic_plan = AbstractCosmologicalEmulators.CubicSplinePlan(t, tq)
