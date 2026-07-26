@@ -18,6 +18,7 @@ using FiniteDifferences
 using SciMLSensitivity
 using JET
 using Aqua
+using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 

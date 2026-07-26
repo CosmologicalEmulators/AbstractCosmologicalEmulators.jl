@@ -474,6 +474,8 @@ struct AkimaSpline{U, T, B, C, D}
     d::D
 end
 
+Adapt.@adapt_structure AkimaSpline
+
 function AkimaSpline(u, t)
     m = _akima_slopes(u, t)
     b, c, d = _akima_coefficients(t, m)
@@ -890,6 +892,13 @@ For fixed knots, the natural-spline second derivatives are a linear function
 of `u`. The plan precomputes that linear operator together with all target-grid
 interval indices and evaluation weights. Calling the plan therefore requires
 only a matrix-vector or matrix-matrix product and indexed arithmetic.
+
+The second-derivative operator is dense, so plan construction and storage scale
+quadratically with the number of source knots. Applying a completed plan costs
+`O(n_knots^2 + n_query)` for one value vector and `O(n_knots^2 * n_series +
+n_query * n_series)` for a matrix of independent series. This representation
+is intended for moderate, repeatedly reused grids and accelerator/JIT
+execution.
 """
 struct CubicSplinePlan{T, TQ, Z, I, VL, VR, CL, CR}
     t::T
@@ -905,7 +914,7 @@ end
 Adapt.@adapt_structure CubicSplinePlan
 
 function CubicSplinePlan(t, t_new::AbstractVector)
-    T = float(eltype(t))
+    T = float(promote_type(eltype(t), eltype(t_new)))
     knots = T.(t)
     query = T.(t_new)
     n = length(knots)

@@ -1,5 +1,6 @@
 using Test
 using AbstractCosmologicalEmulators
+import DataInterpolations
 using LinearAlgebra
 
 @testset "Cubic Spline Interpolation" begin
@@ -13,7 +14,9 @@ using LinearAlgebra
         
         # AbstractCosmologicalEmulators
         y_ace = cubic_spline_interpolation(u, t, t_new)
-        @test all(isfinite, y_ace)
+        y_reference = DataInterpolations.CubicSpline(u, t).(t_new)
+
+        @test y_ace ≈ y_reference atol=1e-12
         
         # Test boundaries
         @test cubic_spline_interpolation(u, t, t[1]) ≈ u[1] atol=1e-12
@@ -41,7 +44,14 @@ using LinearAlgebra
             y_ace_looped[:, i] = cubic_spline_interpolation(u[:, i], t, t_new)
         end
         @test y_ace ≈ y_ace_looped atol=1e-14
-        
+
+        # Compare against the independent DataInterpolations implementation.
+        u_reference = permutedims(u)
+        reference_spline = DataInterpolations.CubicSpline(u_reference, t)
+        y_reference = mapreduce(permutedims, vcat, reference_spline.(t_new))
+
+        @test y_ace ≈ y_reference atol=1e-12
+
         @test all(isfinite, y_ace)
     end
 
