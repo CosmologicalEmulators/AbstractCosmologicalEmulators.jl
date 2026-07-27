@@ -7,7 +7,7 @@ using JSON
 using OrdinaryDiffEqTsit5
 using SciMLSensitivity
 using Integrals
-using DataInterpolations
+import DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
 using ForwardDiff
@@ -42,6 +42,7 @@ const SUITE = BenchmarkGroup()
 # We'll create a group for "normalization" functions.
 SUITE["normalization"] = BenchmarkGroup(["maximin"])
 SUITE["running"] = BenchmarkGroup(["emu"])
+SUITE["cubic_spline"] = BenchmarkGroup(["interpolation"])
 
 # --- Benchmark Setup ---
 # Define the dimensions as constants for consistency.
@@ -68,6 +69,64 @@ SUITE["running"]["lux"] = @benchmarkable run_emulator(input, lx_emu) setup = (
 
 SUITE["running"]["simplechains"] = @benchmarkable run_emulator(input, sc_emu) setup = (
     input = randn(6)
+)
+
+SUITE["cubic_spline"]["construct_512"] = @benchmarkable AbstractCosmologicalEmulators.CubicSpline(u, t) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40))
+)
+
+SUITE["cubic_spline"]["pure_512_to_8999"] = @benchmarkable cubic_spline_interpolation(u, t, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_spline"]["prepared_512_to_8999"] = @benchmarkable spline(t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    spline = AbstractCosmologicalEmulators.CubicSpline(u, t)
+)
+
+SUITE["cubic_spline"]["plan_construct_512_to_8999"] = @benchmarkable CubicSplinePlan(t, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = CubicSplinePlan(t, t_new)
+)
+
+SUITE["akima_spline"] = BenchmarkGroup(["interpolation"])
+
+SUITE["akima_spline"]["pure_512_to_8999"] = @benchmarkable akima_interpolation(u, t, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["akima_spline"]["plan_construct_512_to_8999"] = @benchmarkable AkimaSplinePlan(t, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["akima_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = AkimaSplinePlan(t, t_new)
 )
 
 # --- Background Cosmology Extension Benchmarks ---

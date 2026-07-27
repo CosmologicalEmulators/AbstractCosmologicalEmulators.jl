@@ -464,7 +464,7 @@ d_j = \\frac{b_j + b_{j+1} - 2m_j}{(t_{j+1}-t_j)^2}
 The implementation is free of mutation on the inputs and uses only element-wise arithmetic, making the returned value differentiable with both `ForwardDiff.jl` (dual numbers) and `Zygote.jl` (reverse-mode AD). You can therefore embed `akima_interpolation` in optimization or machine-learning pipelines and back-propagate through the interpolation seamlessly.
 
 # Notes
-The algorithm and numerical results are equivalent to the Akima spline in `DataInterpolations.jl`, but this routine is self-contained and avoids any package dependency.
+The implementation is self-contained and has no interpolation-package dependency.
 """
 struct AkimaSpline{U, T, B, C, D}
     u::U
@@ -474,6 +474,8 @@ struct AkimaSpline{U, T, B, C, D}
     d::D
 end
 
+Adapt.@adapt_structure AkimaSpline
+
 function AkimaSpline(u, t)
     m = _akima_slopes(u, t)
     b, c, d = _akima_coefficients(t, m)
@@ -482,6 +484,64 @@ end
 
 function (spline::AkimaSpline)(t_new)
     return _akima_eval(spline.u, spline.t, spline.b, spline.c, spline.d, t_new)
+end
+
+"""
+    AkimaSplinePlan(t, t_new)
+
+Prepare the grid-dependent work for repeatedly interpolating changing values
+`u` from the fixed knots `t` onto the fixed query grid `t_new`.
+
+```julia
+plan = AkimaSplinePlan(t, t_new)
+u_new = plan(u)
+```
+
+Akima coefficients depend nonlinearly on `u`, so they are recomputed for each
+call. The plan precomputes the target interval indices and offsets, avoiding
+repeated searches when `t` and `t_new` are fixed.
+"""
+struct AkimaSplinePlan{T, TQ, I, W}
+    t::T
+    t_new::TQ
+    interval_indices::I
+    offsets::W
+end
+
+Adapt.@adapt_structure AkimaSplinePlan
+
+function AkimaSplinePlan(t, t_new::AbstractVector)
+    interval_indices = map(tq -> _akima_find_interval(t, tq), t_new)
+    offsets = t_new .- t[interval_indices]
+    return AkimaSplinePlan(t, t_new, interval_indices, offsets)
+end
+
+function _akima_plan_eval(u::AbstractVector, b, c, d, interval_indices, offsets)
+    return (
+        (d[interval_indices] .* offsets .+ c[interval_indices]) .* offsets .+
+        b[interval_indices]
+    ) .* offsets .+ u[interval_indices]
+end
+
+function _akima_plan_eval(u::AbstractMatrix, b, c, d, interval_indices, offsets)
+    w = reshape(offsets, :, 1)
+    return (
+        (d[interval_indices, :] .* w .+ c[interval_indices, :]) .* w .+
+        b[interval_indices, :]
+    ) .* w .+ u[interval_indices, :]
+end
+
+function (plan::AkimaSplinePlan)(u)
+    m = _akima_slopes(u, plan.t)
+    b, c, d = _akima_coefficients(plan.t, m)
+    return _akima_plan_eval(
+        u,
+        b,
+        c,
+        d,
+        plan.interval_indices,
+        plan.offsets,
+    )
 end
 
 function akima_interpolation(u, t, t_new)
@@ -772,6 +832,138 @@ function _cubic_spline_eval(u::AbstractMatrix, t, h, z::AbstractMatrix, tq::Abst
         end
     end
     return results
+end
+
+"""
+    CubicSpline(u, t)
+
+Prepare a natural cubic spline interpolant for repeated evaluation.
+
+The values `u` may be a vector or a matrix whose columns are independent data
+series sharing the strictly increasing knot vector `t`. The spline coefficients
+are computed once during construction. Evaluate the prepared spline by calling
+it on a scalar or vector of query points:
+
+```julia
+spline = CubicSpline(u, t)
+u_new = spline(t_new)
+```
+
+This is equivalent to `cubic_spline_interpolation(u, t, t_new)` but avoids
+recomputing the spline coefficients when evaluating the same interpolant at
+multiple target grids.
+"""
+struct CubicSpline{U, T, H, Z}
+    u::U
+    t::T
+    h::H
+    z::Z
+end
+
+Adapt.@adapt_structure CubicSpline
+
+function CubicSpline(u, t)
+    h, z = _cubic_spline_coefficients(u, t)
+    return CubicSpline(u, t, h, z)
+end
+
+function (spline::CubicSpline)(t_new)
+    return _cubic_spline_eval(
+        spline.u,
+        spline.t,
+        spline.h,
+        spline.z,
+        t_new,
+    )
+end
+
+"""
+    CubicSplinePlan(t, t_new)
+
+Prepare a natural-cubic-spline interpolation plan for fixed source knots `t`
+and fixed query points `t_new`, with changing values `u`:
+
+```julia
+plan = CubicSplinePlan(t, t_new)
+u_new = plan(u)
+```
+
+For fixed knots, the natural-spline second derivatives are a linear function
+of `u`. The plan precomputes that linear operator together with all target-grid
+interval indices and evaluation weights. Calling the plan therefore requires
+only a matrix-vector or matrix-matrix product and indexed arithmetic.
+
+The second-derivative operator is dense, so plan construction and storage scale
+quadratically with the number of source knots. Applying a completed plan costs
+`O(n_knots^2 + n_query)` for one value vector and `O(n_knots^2 * n_series +
+n_query * n_series)` for a matrix of independent series. This representation
+is intended for moderate, repeatedly reused grids and accelerator/JIT
+execution.
+"""
+struct CubicSplinePlan{T, TQ, Z, I, VL, VR, CL, CR}
+    t::T
+    t_new::TQ
+    second_derivative_operator::Z
+    interval_indices::I
+    left_value_weights::VL
+    right_value_weights::VR
+    left_curve_weights::CL
+    right_curve_weights::CR
+end
+
+Adapt.@adapt_structure CubicSplinePlan
+
+function CubicSplinePlan(t, t_new::AbstractVector)
+    T = float(promote_type(eltype(t), eltype(t_new)))
+    knots = T.(t)
+    query = T.(t_new)
+    n = length(knots)
+
+    basis = Matrix{T}(I, n, n)
+    _, second_derivative_operator = _cubic_spline_coefficients(basis, knots)
+
+    interval_indices = map(tq -> _akima_find_interval(knots, tq), query)
+    dt = query .- knots[interval_indices]
+    dt_next = knots[interval_indices .+ 1] .- query
+    h = knots[interval_indices .+ 1] .- knots[interval_indices]
+
+    left_value_weights = dt_next ./ h
+    right_value_weights = dt ./ h
+    left_curve_weights = dt_next .^ 3 ./ (6 .* h) .- h .* dt_next ./ 6
+    right_curve_weights = dt .^ 3 ./ (6 .* h) .- h .* dt ./ 6
+
+    return CubicSplinePlan(
+        knots,
+        query,
+        second_derivative_operator,
+        interval_indices,
+        left_value_weights,
+        right_value_weights,
+        left_curve_weights,
+        right_curve_weights,
+    )
+end
+
+function (plan::CubicSplinePlan)(u::AbstractVector)
+    z = plan.second_derivative_operator * u
+    idx = plan.interval_indices
+    return plan.left_value_weights .* u[idx] .+
+           plan.right_value_weights .* u[idx .+ 1] .+
+           plan.left_curve_weights .* z[idx] .+
+           plan.right_curve_weights .* z[idx .+ 1]
+end
+
+function (plan::CubicSplinePlan)(u::AbstractMatrix)
+    z = plan.second_derivative_operator * u
+    idx = plan.interval_indices
+    left_value_weights = reshape(plan.left_value_weights, :, 1)
+    right_value_weights = reshape(plan.right_value_weights, :, 1)
+    left_curve_weights = reshape(plan.left_curve_weights, :, 1)
+    right_curve_weights = reshape(plan.right_curve_weights, :, 1)
+    return left_value_weights .* u[idx, :] .+
+           right_value_weights .* u[idx .+ 1, :] .+
+           left_curve_weights .* z[idx, :] .+
+           right_curve_weights .* z[idx .+ 1, :]
 end
 
 """
