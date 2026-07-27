@@ -17,7 +17,8 @@ export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator, GenericEmula
 export maximin, inv_maximin, run_emulator, get_emulator_description, init_emulator
 export to_reactant
 export validate_nn_dict_structure, validate_parameter_ranges, validate_layer_structure, safe_dict_access
-export akima_interpolation, cubic_spline_interpolation, AkimaSpline
+export akima_interpolation, cubic_spline_interpolation
+export AkimaSpline, CubicSpline, AkimaSplinePlan, CubicSplinePlan
 export ChebyshevPlan, chebpoints
 export prepare_chebyshev_plan, chebyshev_polynomials, chebyshev_decomposition
 export set_fft_threads

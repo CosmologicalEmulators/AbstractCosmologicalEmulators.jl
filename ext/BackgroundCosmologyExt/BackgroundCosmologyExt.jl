@@ -15,7 +15,7 @@ module BackgroundCosmologyExt
 # 2. Global interpolants: the neutrino lookup tables `F_interpolant` and
 #    `dFdy_interpolant` below are stored in module-level `Ref`s and built at
 #    `__init__`. Reactant tracing would constant-fold them as host arrays,
-#    and the indirection through `Ref{AkimaInterpolation}` produces runtime
+#    and the indirection through a global `Ref` produces runtime
 #    dispatch that MLIR cannot lower.
 #
 # Consequence: `E_z`, `D_z`, `f_z`, `r_z`, `dM_z`, `dA_z`, `dL_z` should be
@@ -27,7 +27,6 @@ module BackgroundCosmologyExt
 
 using AbstractCosmologicalEmulators
 using OrdinaryDiffEqTsit5
-using DataInterpolations
 using Integrals
 using LinearAlgebra
 using FastGaussQuadrature
@@ -48,8 +47,8 @@ export S_of_K
 const c_0 = 2.99792458e5  # Speed of light in km/s
 
 # Global interpolants for neutrino calculations - will be initialized in __init__
-const F_interpolant = Ref{AkimaInterpolation}()
-const dFdy_interpolant = Ref{AkimaInterpolation}()
+const F_interpolant = Ref{AkimaSpline}()
+const dFdy_interpolant = Ref{AkimaSpline}()
 
 # Include utility functions and background cosmology functionality
 include("utils.jl")
@@ -65,12 +64,12 @@ function __init__()
     # Create F interpolant
     y_grid_F = vcat(LinRange(min_y, 100, 100), LinRange(100.1, max_y, 1000))
     F_grid = [_F(y) for y in y_grid_F]
-    F_interpolant[] = AkimaInterpolation(F_grid, y_grid_F)
+    F_interpolant[] = AkimaSpline(F_grid, y_grid_F)
 
     # Create dFdy interpolant
     y_grid_dF = vcat(LinRange(min_y, 10.0, 10000), LinRange(10.1, max_y, 10000))
     dFdy_grid = [_dFdy(y) for y in y_grid_dF]
-    dFdy_interpolant[] = AkimaInterpolation(dFdy_grid, y_grid_dF)
+    dFdy_interpolant[] = AkimaSpline(dFdy_grid, y_grid_dF)
 
 end
 

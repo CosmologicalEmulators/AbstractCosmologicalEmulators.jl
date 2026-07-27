@@ -12,13 +12,13 @@ import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
 using Mooncake
 using OrdinaryDiffEqTsit5
 using Integrals
-using DataInterpolations
 using LinearAlgebra
 using FastGaussQuadrature
 using FiniteDifferences
 using SciMLSensitivity
 using JET
 using Aqua
+using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 
@@ -62,6 +62,7 @@ using AbstractCosmologicalEmulators
     # Cubic Spline interpolation tests
     include("test_cubic_spline.jl")
     include("test_cubic_spline_ad.jl")
+    include("test_spline_plans.jl")
 
     # Edge cases and additional coverage tests
     include("test_edge_cases.jl")

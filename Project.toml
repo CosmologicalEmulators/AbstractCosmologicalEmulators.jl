@@ -1,13 +1,11 @@
 name = "AbstractCosmologicalEmulators"
 uuid = "c83c1981-e5c4-4837-9eb8-c9b1572acfc6"
-version = "0.10.3"
-authors = [
-    "Marco Bonici <bonici.marco@gmail.com>",
-    "Sofia Chiarenza <schiarenza@uwaterloo.ca>",
-]
+version = "0.11.0"
+authors = ["Marco Bonici <bonici.marco@gmail.com>", "Sofia Chiarenza <schiarenza@uwaterloo.ca>"]
 
 [deps]
 Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
@@ -15,11 +13,9 @@ JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Lux = "b2108857-7c20-44ae-9111-449ecde12c47"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
-Artifacts = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 
 [weakdeps]
-DataInterpolations = "82cc6244-b520-54b8-b5a6-8a565e85f1d0"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
@@ -28,7 +24,7 @@ Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
 SciMLSensitivity = "1ed8b502-d754-442c-8d5d-10ac956f44a1"
 
 [extensions]
-BackgroundCosmologyExt = ["DataInterpolations", "FastGaussQuadrature", "Integrals", "OrdinaryDiffEqTsit5", "SciMLSensitivity"]
+BackgroundCosmologyExt = ["FastGaussQuadrature", "Integrals", "OrdinaryDiffEqTsit5", "SciMLSensitivity"]
 ExtReactant = ["Reactant"]
 MooncakeExt = ["Mooncake"]
 
@@ -36,8 +32,9 @@ MooncakeExt = ["Mooncake"]
 ADTypes = "1.21.0"
 Adapt = "3, 4"
 Aqua = "0.8"
+Artifacts = "1.10"
 ChainRulesCore = "1.26"
-DataInterpolations = "6, 8"
+DataInterpolations = "6, 8, 9"
 DifferentiationInterface = "0.7.16"
 Enzyme = "0.13"
 FFTW = "1"
@@ -53,7 +50,6 @@ Lux = "1"
 Mooncake = "0.4, 0.5"
 NPZ = "0.4"
 OrdinaryDiffEqTsit5 = "1, 2"
-Artifacts = "1.10"
 Random = "1.10"
 Reactant = "0.2"
 SciMLSensitivity = "7.90"

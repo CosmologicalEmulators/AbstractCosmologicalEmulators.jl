@@ -8,6 +8,12 @@ using AbstractCosmologicalEmulators
 
 const ext_reactant = Base.get_extension(AbstractCosmologicalEmulators, :ExtReactant)
 
+# Julia 1.11.9 crashes in Julia's emit_bitcast/LLVM code generation while
+# GPUCompiler/Reactant compiles reusable callable spline structures. The same
+# paths pass on Julia 1.10 and 1.12. Keep the rest of the Julia 1.11 coverage.
+# See https://github.com/CosmologicalEmulators/AbstractCosmologicalEmulators.jl/actions/runs/30220428097
+const SKIP_REACTANT_REUSABLE_SPLINES = v"1.11" <= VERSION < v"1.12"
+
 @testset "to_reactant dispatch coverage" begin
     if isnothing(ext_reactant)
         @warn "ExtReactant extension not loaded; skipping to_reactant dispatch tests."
@@ -55,6 +61,8 @@ end
             y_ak_ref_m = AbstractCosmologicalEmulators.akima_interpolation(U, t, tq)
             y_cu_ref = AbstractCosmologicalEmulators.cubic_spline_interpolation(u, t, tq)
             y_cu_ref_m = AbstractCosmologicalEmulators.cubic_spline_interpolation(U, t, tq)
+            cubic_spline_ref = AbstractCosmologicalEmulators.CubicSpline(u, t)
+            cubic_spline_ref_m = AbstractCosmologicalEmulators.CubicSpline(U, t)
 
             uR = Reactant.to_rarray(u)
             UR = Reactant.to_rarray(U)
@@ -96,6 +104,111 @@ end
             y_c_eval_m_R = AbstractCosmologicalEmulators._cubic_spline_eval(UR, tR, h_m_R, z_m_R, tqR)
             @test Array(y_c_eval_v_R) ≈ AbstractCosmologicalEmulators._cubic_spline_eval(u, t, h_v, z_v, tq) atol=1e-8 rtol=1e-8
             @test Array(y_c_eval_m_R) ≈ AbstractCosmologicalEmulators._cubic_spline_eval(U, t, h_m, z_m, tq) atol=1e-8 rtol=1e-8
+
+            @testset "Reusable spline objects and plans under Reactant" begin
+                if SKIP_REACTANT_REUSABLE_SPLINES
+                    @test_skip false
+                else
+                    # Prepared CubicSpline with device-resident, dynamically traced fields.
+                    cubic_spline_R = AbstractCosmologicalEmulators.CubicSpline(uR, tR)
+                    cubic_spline_m_R = AbstractCosmologicalEmulators.CubicSpline(UR, tR)
+                    @test Array(cubic_spline_R.h) ≈ cubic_spline_ref.h atol=1e-8 rtol=1e-8
+                    @test Array(cubic_spline_R.z) ≈ cubic_spline_ref.z atol=1e-8 rtol=1e-8
+                    @test Array(cubic_spline_m_R.h) ≈ cubic_spline_ref_m.h atol=1e-8 rtol=1e-8
+                    @test Array(cubic_spline_m_R.z) ≈ cubic_spline_ref_m.z atol=1e-8 rtol=1e-8
+
+                    prepared_cubic = Reactant.@compile sync=true cubic_spline_R(tqR)
+                    prepared_cubic_m = Reactant.@compile sync=true cubic_spline_m_R(tqR)
+                    y_prepared_R = prepared_cubic(tqR)
+                    y_prepared_m_R = prepared_cubic_m(tqR)
+                    Reactant.synchronize(y_prepared_R)
+                    Reactant.synchronize(y_prepared_m_R)
+                    @test Array(y_prepared_R) ≈ cubic_spline_ref(tq) atol=1e-8 rtol=1e-8
+                    @test Array(y_prepared_m_R) ≈ cubic_spline_ref_m(tq) atol=1e-8 rtol=1e-8
+
+                    # Construct the spline inside the compiled function so u and t are
+                    # traced inputs. Reuse that function with different values to prove
+                    # that the result is not constant-folded.
+                    cubic_struct_eval(u_, t_, tq_) =
+                        AbstractCosmologicalEmulators.CubicSpline(u_, t_)(tq_)
+                    cubic_struct_eval_m(U_, t_, tq_) =
+                        AbstractCosmologicalEmulators.CubicSpline(U_, t_)(tq_)
+                    dynamic_cubic = Reactant.@compile sync=true cubic_struct_eval(uR, tR, tqR)
+                    dynamic_cubic_m = Reactant.@compile sync=true cubic_struct_eval_m(UR, tR, tqR)
+                    y_dynamic_R = dynamic_cubic(uR, tR, tqR)
+                    y_dynamic_m_R = dynamic_cubic_m(UR, tR, tqR)
+                    Reactant.synchronize(y_dynamic_R)
+                    Reactant.synchronize(y_dynamic_m_R)
+                    @test Array(y_dynamic_R) ≈ cubic_spline_ref(tq) atol=1e-8 rtol=1e-8
+                    @test Array(y_dynamic_m_R) ≈ cubic_spline_ref_m(tq) atol=1e-8 rtol=1e-8
+
+                    u2 = @. 0.7 * cos(3pi * t) - 0.2 * sin(5pi * t)
+                    u2R = Reactant.to_rarray(u2)
+                    y_dynamic_2_R = dynamic_cubic(u2R, tR, tqR)
+                    Reactant.synchronize(y_dynamic_2_R)
+                    @test Array(y_dynamic_2_R) ≈ AbstractCosmologicalEmulators.CubicSpline(u2, t)(tq) atol=1e-8 rtol=1e-8
+                    @test !isapprox(Array(y_dynamic_2_R), Array(y_dynamic_R); atol=1e-8, rtol=1e-8)
+
+                    # Prepared AkimaSpline stores values and coefficients while the
+                    # query grid remains a runtime input. Test both vector and matrix
+                    # values, then construct it inside the compiled function to prove
+                    # that the struct itself is Reactant-traceable.
+                    akima_spline_ref = AbstractCosmologicalEmulators.AkimaSpline(u, t)
+                    akima_spline_ref_m = AbstractCosmologicalEmulators.AkimaSpline(U, t)
+                    akima_spline_R = AbstractCosmologicalEmulators.AkimaSpline(uR, tR)
+                    akima_spline_m_R = AbstractCosmologicalEmulators.AkimaSpline(UR, tR)
+                    compiled_akima_spline = Reactant.@compile sync=true akima_spline_R(tqR)
+                    compiled_akima_spline_m = Reactant.@compile sync=true akima_spline_m_R(tqR)
+                    y_akima_spline_R = compiled_akima_spline(tqR)
+                    y_akima_spline_m_R = compiled_akima_spline_m(tqR)
+                    Reactant.synchronize(y_akima_spline_R)
+                    Reactant.synchronize(y_akima_spline_m_R)
+                    @test Array(y_akima_spline_R) ≈ akima_spline_ref(tq) atol=1e-8 rtol=1e-8
+                    @test Array(y_akima_spline_m_R) ≈ akima_spline_ref_m(tq) atol=1e-8 rtol=1e-8
+
+                    akima_struct_eval(u_, t_, tq_) =
+                        AbstractCosmologicalEmulators.AkimaSpline(u_, t_)(tq_)
+                    dynamic_akima = Reactant.@compile sync=true akima_struct_eval(uR, tR, tqR)
+                    y_dynamic_akima_R = dynamic_akima(uR, tR, tqR)
+                    y_dynamic_akima_2_R = dynamic_akima(u2R, tR, tqR)
+                    Reactant.synchronize(y_dynamic_akima_R)
+                    Reactant.synchronize(y_dynamic_akima_2_R)
+                    @test Array(y_dynamic_akima_R) ≈ akima_spline_ref(tq) atol=1e-8 rtol=1e-8
+                    @test Array(y_dynamic_akima_2_R) ≈ AbstractCosmologicalEmulators.AkimaSpline(u2, t)(tq) atol=1e-8 rtol=1e-8
+                    @test !isapprox(Array(y_dynamic_akima_2_R), Array(y_dynamic_akima_R); atol=1e-8, rtol=1e-8)
+
+                    # Fixed-grid plans are compiled once and reused with changing u.
+                    akima_plan = AbstractCosmologicalEmulators.AkimaSplinePlan(t, tq)
+                    cubic_plan = AbstractCosmologicalEmulators.CubicSplinePlan(t, tq)
+                    compiled_akima_plan = Reactant.@compile sync=true akima_plan(uR)
+                    compiled_cubic_plan = Reactant.@compile sync=true cubic_plan(uR)
+                    compiled_akima_plan_m = Reactant.@compile sync=true akima_plan(UR)
+                    compiled_cubic_plan_m = Reactant.@compile sync=true cubic_plan(UR)
+
+                    y_akima_plan_R = compiled_akima_plan(uR)
+                    y_cubic_plan_R = compiled_cubic_plan(uR)
+                    y_akima_plan_m_R = compiled_akima_plan_m(UR)
+                    y_cubic_plan_m_R = compiled_cubic_plan_m(UR)
+                    Reactant.synchronize(y_akima_plan_R)
+                    Reactant.synchronize(y_cubic_plan_R)
+                    Reactant.synchronize(y_akima_plan_m_R)
+                    Reactant.synchronize(y_cubic_plan_m_R)
+
+                    @test Array(y_akima_plan_R) ≈ akima_plan(u) atol=1e-8 rtol=1e-8
+                    @test Array(y_cubic_plan_R) ≈ cubic_plan(u) atol=1e-8 rtol=1e-8
+                    @test Array(y_akima_plan_m_R) ≈ akima_plan(U) atol=1e-8 rtol=1e-8
+                    @test Array(y_cubic_plan_m_R) ≈ cubic_plan(U) atol=1e-8 rtol=1e-8
+
+                    y_akima_plan_2_R = compiled_akima_plan(u2R)
+                    y_cubic_plan_2_R = compiled_cubic_plan(u2R)
+                    Reactant.synchronize(y_akima_plan_2_R)
+                    Reactant.synchronize(y_cubic_plan_2_R)
+                    @test Array(y_akima_plan_2_R) ≈ akima_plan(u2) atol=1e-8 rtol=1e-8
+                    @test Array(y_cubic_plan_2_R) ≈ cubic_plan(u2) atol=1e-8 rtol=1e-8
+                    @test !isapprox(Array(y_akima_plan_2_R), Array(y_akima_plan_R); atol=1e-8, rtol=1e-8)
+                    @test !isapprox(Array(y_cubic_plan_2_R), Array(y_cubic_plan_R); atol=1e-8, rtol=1e-8)
+                end
+            end
 
             # Akima vector, fully traced inputs
             f_ak_v = Reactant.@compile sync=true AbstractCosmologicalEmulators.akima_interpolation(uR, tR, tqR)
@@ -146,6 +259,7 @@ end
             loss_cubic_u(u, t, tq) = sum(AbstractCosmologicalEmulators.cubic_spline_interpolation(u, t, tq))
             loss_cubic_t(t, u, tq) = sum(AbstractCosmologicalEmulators.cubic_spline_interpolation(u, t, tq))
             loss_cubic_tq(tq, u, t) = sum(AbstractCosmologicalEmulators.cubic_spline_interpolation(u, t, tq))
+            loss_cubic_struct_u(u, t, tq) = sum(AbstractCosmologicalEmulators.CubicSpline(u, t)(tq))
 
             enzyme_grad_first(f, x, y, z) = Enzyme.gradient(Reverse, f, x, Const(y), Const(z))[1]
 
@@ -176,6 +290,40 @@ end
                 @test Array(grad_u_R) ≈ grad_u_ref atol=atol rtol=atol
                 @test Array(grad_t_R) ≈ grad_t_ref atol=atol rtol=atol
                 @test Array(grad_tq_R) ≈ grad_tq_ref atol=atol rtol=atol
+            end
+
+            @testset "Reusable spline object and plan gradients" begin
+                if SKIP_REACTANT_REUSABLE_SPLINES
+                    @test_skip false
+                else
+                    grad_struct_ref = ForwardDiff.gradient(
+                        x -> loss_cubic_struct_u(x, t, tq),
+                        copy(u),
+                    )
+                    grad_struct_fun(u_, t_, tq_) = enzyme_grad_first(
+                        loss_cubic_struct_u,
+                        u_,
+                        t_,
+                        tq_,
+                    )
+                    grad_struct_compiled = Reactant.@compile sync=true grad_struct_fun(uR, tR, tqR)
+                    grad_struct_R = grad_struct_compiled(uR, tR, tqR)
+                    Reactant.synchronize(grad_struct_R)
+                    @test Array(grad_struct_R) ≈ grad_struct_ref atol=1e-8 rtol=1e-8
+
+                    for plan in (
+                        AbstractCosmologicalEmulators.AkimaSplinePlan(t, tq),
+                        AbstractCosmologicalEmulators.CubicSplinePlan(t, tq),
+                    )
+                        plan_loss = u_ -> sum(plan(u_))
+                        plan_grad_ref = ForwardDiff.gradient(plan_loss, copy(u))
+                        plan_grad_fun = u_ -> Enzyme.gradient(Reverse, plan_loss, u_)[1]
+                        plan_grad_compiled = Reactant.@compile sync=true plan_grad_fun(uR)
+                        plan_grad_R = plan_grad_compiled(uR)
+                        Reactant.synchronize(plan_grad_R)
+                        @test Array(plan_grad_R) ≈ plan_grad_ref atol=1e-8 rtol=1e-8
+                    end
+                end
             end
         end
 

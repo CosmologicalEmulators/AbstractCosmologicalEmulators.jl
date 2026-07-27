@@ -1,5 +1,4 @@
 using Test
-using DataInterpolations
 using FastGaussQuadrature
 using Integrals
 using OrdinaryDiffEqTsit5
