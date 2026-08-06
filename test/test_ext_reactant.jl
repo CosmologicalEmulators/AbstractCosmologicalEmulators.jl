@@ -292,7 +292,88 @@ end
                 @test Array(grad_tq_R) ≈ grad_tq_ref atol=atol rtol=atol
             end
 
-            @testset "Reusable spline object and plan gradients" begin
+        @testset "Cubic B-Spline _evaluate_stencil" begin
+            # 1D Case
+            x_sites = collect(0.0:1.0:7.0)
+            basis = CubicBSplineBasis(domain=(first(x_sites), last(x_sites)), internal_knots=x_sites[3:end-2])
+            stencil = basis_stencil(basis, [2.5, 3.5, 4.5])
+
+            # Deterministic coefficient vectors for reproducibility
+            c_vec = collect(Float64, 1:length(x_sites))
+            c_vec2 = collect(Float64, length(x_sites):-1:1)
+
+            ref_out = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_vec)
+            ref_out2 = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_vec2)
+
+            function f_stencil(c)
+                AbstractCosmologicalEmulators._evaluate_stencil(stencil, c)
+            end
+
+            c_vec_R = Reactant.to_rarray(c_vec)
+            c_vec2_R = Reactant.to_rarray(c_vec2)
+            f_stencil_R = Reactant.@compile sync=true f_stencil(c_vec_R)
+
+            out_R = f_stencil_R(c_vec_R)
+            Reactant.synchronize(out_R)
+            @test Array(out_R) ≈ ref_out
+
+            # Verify dynamic coefficients
+            out2_R = f_stencil_R(c_vec2_R)
+            Reactant.synchronize(out2_R)
+            @test Array(out2_R) ≈ ref_out2
+            @test !isapprox(Array(out2_R), Array(out_R))
+
+            # 2D Case - Matrix (3 series), deterministic
+            c_mat = hcat(c_vec, c_vec .^ 2, sin.(c_vec))
+            c_mat2 = hcat(c_vec2, c_vec2 .^ 2, cos.(c_vec2))
+            ref_out_mat = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_mat)
+            ref_out_mat2 = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_mat2)
+
+            c_mat_R = Reactant.to_rarray(c_mat)
+            c_mat2_R = Reactant.to_rarray(c_mat2)
+            f_stencil_mat_R = Reactant.@compile sync=true f_stencil(c_mat_R)
+
+            out_mat_R = f_stencil_mat_R(c_mat_R)
+            Reactant.synchronize(out_mat_R)
+            @test Array(out_mat_R) ≈ ref_out_mat
+
+            out_mat2_R = f_stencil_mat_R(c_mat2_R)
+            Reactant.synchronize(out_mat2_R)
+            @test Array(out_mat2_R) ≈ ref_out_mat2
+            @test !isapprox(Array(out_mat2_R), Array(out_mat_R))
+        end
+
+        @testset "Cubic B-Spline structural adaptation" begin
+            x_sites = collect(0.0:1.0:7.0)
+            u_sites = sin.(x_sites)
+            xq_sites = [2.5, 3.5, 4.5]
+            basis = CubicBSplineBasis(domain=(first(x_sites), last(x_sites)), internal_knots=x_sites[3:end-2])
+            stencil = basis_stencil(basis, xq_sites)
+            fact = AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, x_sites)
+            spl = CubicBSpline(u_sites, x_sites)
+            plan = CubicBSplinePlan(x_sites, xq_sites)
+
+            # Adapt individual array fields and verify they convert
+            kv_adapted = Reactant.to_rarray(knot_vector(basis))
+            @test size(kv_adapted) == size(knot_vector(basis))
+
+            idx_adapted = Reactant.to_rarray(stencil.indices)
+            @test size(idx_adapted) == size(stencil.indices)
+
+            w_adapted = Reactant.to_rarray(stencil.weights)
+            @test size(w_adapted) == size(stencil.weights)
+
+            bands_adapted = Reactant.to_rarray(fact.bands)
+            @test size(bands_adapted) == size(fact.bands)
+
+            coeff_adapted = Reactant.to_rarray(spl.coefficients)
+            @test size(coeff_adapted) == size(spl.coefficients)
+
+            plan_bands_adapted = Reactant.to_rarray(plan.factorization.bands)
+            @test size(plan_bands_adapted) == size(plan.factorization.bands)
+        end
+
+        @testset "Reusable spline object and plan gradients" begin
                 if SKIP_REACTANT_REUSABLE_SPLINES
                     @test_skip false
                 else

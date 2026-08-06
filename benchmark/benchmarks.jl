@@ -106,6 +106,131 @@ SUITE["cubic_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
     plan = CubicSplinePlan(t, t_new)
 )
 
+SUITE["cubic_b_spline"] = BenchmarkGroup(["b_spline"])
+
+SUITE["cubic_b_spline"]["basis_row_search"] = @benchmarkable AbstractCosmologicalEmulators.basis_row(basis, xq) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    xq = 4500.0
+)
+
+SUITE["cubic_b_spline"]["basis_row_preselected"] = @benchmarkable AbstractCosmologicalEmulators._cubic_basis_values(basis.knot_vector, span, xq) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    xq = 4500.0;
+    span = AbstractCosmologicalEmulators._find_cubic_span(basis.knot_vector, xq)
+)
+
+SUITE["cubic_b_spline"]["basis_stencil_512_to_8999"] = @benchmarkable AbstractCosmologicalEmulators.basis_stencil(basis, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["factorization_512"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, t) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2])
+)
+
+SUITE["cubic_b_spline"]["solve_vector_512"] = @benchmarkable AbstractCosmologicalEmulators.solve(fact, u) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    fact = AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, t);
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40))
+)
+
+SUITE["cubic_b_spline"]["solve_matrix_512x10"] = @benchmarkable AbstractCosmologicalEmulators.solve(fact, U) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    fact = AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, t);
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    U = repeat(u, 1, 10)
+)
+
+SUITE["cubic_b_spline"]["construct_512"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSpline(u, t) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40))
+)
+
+SUITE["cubic_b_spline"]["eval_scalar"] = @benchmarkable spline_obj(xq) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    spline_obj = AbstractCosmologicalEmulators.CubicBSpline(u, t);
+    xq = 4500.0
+)
+
+SUITE["cubic_b_spline"]["eval_vector_8999"] = @benchmarkable spline_obj(t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    spline_obj = AbstractCosmologicalEmulators.CubicBSpline(u, t);
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_construct_512_to_8999"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new)
+)
+
+SUITE["cubic_b_spline"]["plan_construct_128"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new) setup = (
+    k = 0:127;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 127) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_apply_128"] = @benchmarkable plan(u) setup = (
+    k = 0:127;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 127) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new)
+)
+
+SUITE["cubic_b_spline"]["plan_construct_3000"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new) setup = (
+    k = 0:2999;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 2999) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_apply_3000"] = @benchmarkable plan(u) setup = (
+    k = 0:2999;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 2999) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new)
+)
+
+# Compile Reactant in setup to measure pure steady-state execution time
+using Reactant
+SUITE["cubic_b_spline"]["reactant_stencil"] = @benchmarkable compiled_f(c_R) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    stencil = AbstractCosmologicalEmulators.basis_stencil(basis, t_new);
+    f(c) = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c);
+    c_R = Reactant.to_rarray(u);
+    compiled_f = Reactant.@compile sync=true f(c_R)
+)
+
 SUITE["akima_spline"] = BenchmarkGroup(["interpolation"])
 
 SUITE["akima_spline"]["pure_512_to_8999"] = @benchmarkable akima_interpolation(u, t, t_new) setup = (

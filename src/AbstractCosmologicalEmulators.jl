@@ -19,6 +19,9 @@ export to_reactant
 export validate_nn_dict_structure, validate_parameter_ranges, validate_layer_structure, safe_dict_access
 export akima_interpolation, cubic_spline_interpolation
 export AkimaSpline, CubicSpline, AkimaSplinePlan, CubicSplinePlan
+export CubicBSplineBasis, CubicBSpline, CubicBSplinePlan
+export knot_vector, internal_knots, nbasis, bspline_domain, basis_support
+export basis_row, basis_stencil, basis_matrix, bspline_basis, bspline_coefficients
 export ChebyshevPlan, chebpoints
 export prepare_chebyshev_plan, chebyshev_polynomials, chebyshev_decomposition
 export set_fft_threads
@@ -27,6 +30,7 @@ include("core.jl")
 include("initialization.jl")
 include("utils.jl")
 include("chebyshev.jl")
+include("cubic_b_spline.jl")
 include("chainrules.jl")
 
 const trained_emulators = Dict{String,GenericEmulator}()

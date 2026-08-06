@@ -64,6 +64,14 @@ using AbstractCosmologicalEmulators
     include("test_cubic_spline_ad.jl")
     include("test_spline_plans.jl")
 
+    # Cubic B-Spline interpolation tests
+    include("test_cubic_b_spline_basis.jl")
+    include("test_cubic_b_spline_solver.jl")
+    include("test_cubic_b_spline.jl")
+    include("test_cubic_b_spline_plan.jl")
+    include("test_cubic_b_spline_ad.jl")
+    include("test_reference_scipy.jl")
+
     # Edge cases and additional coverage tests
     include("test_edge_cases.jl")
 

@@ -1,0 +1,221 @@
+using AbstractCosmologicalEmulators
+using Test
+using ForwardDiff
+using Zygote
+using DifferentiationInterface
+using Enzyme
+import ADTypes: AutoForwardDiff, AutoZygote, AutoMooncake
+using Mooncake
+using LinearAlgebra
+using ChainRulesCore
+
+@testset "Cubic B-Spline AD" begin
+    # Shared fixtures for all testsets below.
+    x = collect(0.0:1.0:5.0)
+    xq = [0.5, 1.5, 2.5, 3.5, 4.5]
+    u = @. x^3 - 2x^2 + 3
+
+    # -----------------------------------------------------------------
+    @testset "Plan gradient (ForwardDiff vs Zygote vs Mooncake)" begin
+        plan = CubicBSplinePlan(x, xq)
+
+        loss_plan(u_in) = sum(abs2, plan(u_in))
+
+        grad_fd = ForwardDiff.gradient(loss_plan, u)
+        grad_zy = Zygote.gradient(loss_plan, u)[1]
+        grad_mc = DifferentiationInterface.gradient(
+            loss_plan, AutoMooncake(; config=Mooncake.Config()), u)
+
+        @test grad_zy ≈ grad_fd atol=1e-9
+        @test grad_mc ≈ grad_fd atol=1e-9
+    end
+
+    # -----------------------------------------------------------------
+    @testset "Direct spline gradient (ForwardDiff vs Zygote vs Mooncake)" begin
+        loss_direct(u_in) = sum(abs2, CubicBSpline(u_in, x)(xq))
+
+        grad_fd = ForwardDiff.gradient(loss_direct, u)
+        grad_zy = Zygote.gradient(loss_direct, u)[1]
+        grad_mc = DifferentiationInterface.gradient(
+            loss_direct, AutoMooncake(; config=Mooncake.Config()), u)
+
+        @test grad_zy ≈ grad_fd atol=1e-9
+        @test grad_mc ≈ grad_fd atol=1e-9
+    end
+
+    # -----------------------------------------------------------------
+    @testset "ForwardDiff Query-Coordinate Derivatives" begin
+        # Note: cubic B-splines with simple knots are C² at those knots;
+        # double knots give C¹, triple knots give C⁰.
+        # This test uses simple knots, so derivatives exist everywhere in the interior.
+        x_knots = collect(0.0:1.0:5.0)
+        u_vals = x_knots.^3 .- 2 .* x_knots.^2 .+ 3
+        spline = CubicBSpline(u_vals, x_knots)
+
+        # Test a point away from knots
+        xq_test = 2.5
+
+        # Finite-difference reference
+        eps_fd = 1e-5
+        val_plus = spline(xq_test + eps_fd)
+        val_minus = spline(xq_test - eps_fd)
+        grad_fd_ref = (val_plus - val_minus) / (2 * eps_fd)
+
+        # ForwardDiff derivative
+        grad_fwd = ForwardDiff.derivative(spline, xq_test)
+
+        @test grad_fwd ≈ grad_fd_ref atol=1e-5
+
+        # Test vector query gradient
+        xq_vec = [1.5, 2.5, 3.5]
+        loss_xq(xq_v) = sum(spline(xq_v))
+        grad_xq_fwd = ForwardDiff.gradient(loss_xq, xq_vec)
+
+        grad_xq_ref = similar(xq_vec)
+        for i in eachindex(xq_vec)
+            v_plus = copy(xq_vec)
+            v_plus[i] += eps_fd
+            v_minus = copy(xq_vec)
+            v_minus[i] -= eps_fd
+            grad_xq_ref[i] = (loss_xq(v_plus) - loss_xq(v_minus)) / (2 * eps_fd)
+        end
+
+        @test grad_xq_fwd ≈ grad_xq_ref atol=1e-5
+    end
+
+    # -----------------------------------------------------------------
+    @testset "Zero-gradient propagation" begin
+        # When the output is multiplied by zero the resulting gradient should be zero.
+        function f_constant(u_in)
+            spline = CubicBSpline(u_in, x)
+            return spline(2.5) * 0.0
+        end
+        grad_zygote_zero = Zygote.gradient(f_constant, u)[1]
+        @test all(iszero, grad_zygote_zero)
+
+        plan = CubicBSplinePlan(x, xq)
+        function f_plan_constant(u_in)
+            sum(plan(u_in)) * 0.0
+        end
+        grad_plan_zero = Zygote.gradient(f_plan_constant, u)[1]
+        @test all(iszero, grad_plan_zero)
+    end
+
+    # -----------------------------------------------------------------
+    @testset "Direct ZeroTangent pullback dispatch" begin
+        # Test that custom rrules correctly propagate ZeroTangent objects
+        # through the pullback, returning the correct tangent types at
+        # each tuple position.
+
+        basis = CubicBSplineBasis(domain=(0.0, 5.0), internal_knots=x[3:end-2])
+        stencil = basis_stencil(basis, xq)
+        fact = AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, x)
+        c_vec = AbstractCosmologicalEmulators.solve(fact, u)
+
+        # --- _evaluate_stencil: vector ---
+        _, pb_stencil_vec = ChainRulesCore.rrule(
+            AbstractCosmologicalEmulators._evaluate_stencil, stencil, c_vec)
+        tangents_sv = pb_stencil_vec(ZeroTangent())
+        @test tangents_sv[1] isa NoTangent           # function slot
+        @test tangents_sv[2] isa NoTangent           # stencil (structural)
+        @test tangents_sv[3] isa ZeroTangent         # coefficients
+
+        # --- _evaluate_stencil: matrix ---
+        U3 = hcat(u, x.^2, sin.(x))
+        c_mat = AbstractCosmologicalEmulators.solve(fact, U3)
+        _, pb_stencil_mat = ChainRulesCore.rrule(
+            AbstractCosmologicalEmulators._evaluate_stencil, stencil, c_mat)
+        tangents_sm = pb_stencil_mat(ZeroTangent())
+        @test tangents_sm[1] isa NoTangent
+        @test tangents_sm[2] isa NoTangent
+        @test tangents_sm[3] isa ZeroTangent
+
+        # --- solve ---
+        _, pb_solve = ChainRulesCore.rrule(
+            AbstractCosmologicalEmulators.solve, fact, u)
+        tangents_solv = pb_solve(ZeroTangent())
+        @test tangents_solv[1] isa NoTangent         # function slot
+        @test tangents_solv[2] isa NoTangent         # factorization (structural)
+        @test tangents_solv[3] isa ZeroTangent       # ordinates
+
+        # --- _evaluate_spline: vector ---
+        row = basis_row(basis, 2.5)
+        _, pb_eval_vec = ChainRulesCore.rrule(
+            AbstractCosmologicalEmulators._evaluate_spline, c_vec, row)
+        tangents_ev = pb_eval_vec(ZeroTangent())
+        @test tangents_ev[1] isa NoTangent
+        @test tangents_ev[2] isa ZeroTangent         # coefficients
+        @test tangents_ev[3] isa NoTangent           # row (structural)
+
+        # --- _evaluate_spline: matrix ---
+        _, pb_eval_mat = ChainRulesCore.rrule(
+            AbstractCosmologicalEmulators._evaluate_spline, c_mat, row)
+        tangents_em = pb_eval_mat(ZeroTangent())
+        @test tangents_em[1] isa NoTangent
+        @test tangents_em[2] isa ZeroTangent
+        @test tangents_em[3] isa NoTangent
+    end
+
+    # -----------------------------------------------------------------
+    @testset "Matrix Flattened Tests (3 Series) with Nonlinear Loss" begin
+        U3 = hcat(u, x.^2, sin.(x))
+        plan3 = CubicBSplinePlan(x, xq)
+
+        function f_mat_nonlin(U_in)
+            y = plan3(U_in)
+            sum(y.^2) + sum(exp.(y))
+        end
+
+        # Compare Zygote to ForwardDiff element-wise via flattening
+        grad_zygote_mat = Zygote.gradient(f_mat_nonlin, U3)[1]
+
+        function f_mat_flat(U_flat)
+            U_reshaped = reshape(U_flat, size(U3))
+            f_mat_nonlin(U_reshaped)
+        end
+
+        grad_fd_flat = ForwardDiff.gradient(f_mat_flat, vec(U3))
+        grad_fd_mat = reshape(grad_fd_flat, size(U3))
+
+        # The exponential term makes some gradient entries O(1e20); compare
+        # scale-aware rather than demanding an impossible absolute tolerance.
+        @test grad_zygote_mat ≈ grad_fd_mat atol=1e-9 rtol=1e-12
+
+        # Mooncake
+        grad_mooncake_mat = DifferentiationInterface.gradient(
+            f_mat_nonlin, AutoMooncake(; config=Mooncake.Config()), U3)
+        @test grad_mooncake_mat ≈ grad_fd_mat atol=1e-9 rtol=1e-12
+    end
+
+    # -----------------------------------------------------------------
+    @testset "Basis Configurations (Custom vs Default)" begin
+        # Default not-a-knot
+        loss_default(u_in) = sum(CubicBSpline(u_in, x)(xq).^2)
+        grad_zyg_def = Zygote.gradient(loss_default, u)[1]
+        grad_fd_def = ForwardDiff.gradient(loss_default, u)
+        @test grad_zyg_def ≈ grad_fd_def atol=1e-9
+
+        # Custom internal knots
+        t_int = [1.5, 3.5]
+        loss_custom(u_in) = sum(CubicBSpline(u_in, x, internal_knots=t_int)(xq).^2)
+        grad_zyg_cust = Zygote.gradient(loss_custom, u)[1]
+        grad_fd_cust = ForwardDiff.gradient(loss_custom, u)
+        @test grad_zyg_cust ≈ grad_fd_cust atol=1e-9
+
+        grad_mc_cust = DifferentiationInterface.gradient(
+            loss_custom, AutoMooncake(; config=Mooncake.Config()), u)
+        @test grad_mc_cust ≈ grad_fd_cust atol=1e-9
+
+        # Prebuilt Basis — use the public API
+        basis_pre = CubicBSplineBasis(domain=(0.0, 5.0), internal_knots=t_int)
+        loss_pre(u_in) = sum(abs2, CubicBSpline(u_in, x; basis=basis_pre)(xq))
+
+        grad_fd_pre = ForwardDiff.gradient(loss_pre, u)
+        grad_zyg_pre = Zygote.gradient(loss_pre, u)[1]
+        @test grad_zyg_pre ≈ grad_fd_pre atol=1e-9
+
+        grad_mc_pre = DifferentiationInterface.gradient(
+            loss_pre, AutoMooncake(; config=Mooncake.Config()), u)
+        @test grad_mc_pre ≈ grad_fd_pre atol=1e-9
+    end
+end

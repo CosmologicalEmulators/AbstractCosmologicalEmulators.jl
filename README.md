@@ -25,6 +25,23 @@ At the moment, the neural-network emulator backends supported here are based on 
 - Extension support for optional packages, including `Reactant.jl` and `Mooncake.jl`.
 
 
+## Cubic B-Spline Interpolation
+
+The package provides a comprehensive, differentiable cubic B-spline interpolation module. It separates the mathematical basis from the solved coefficients to allow for advanced physics applications (e.g. basis integrals, precomputation).
+
+Key mathematical distinctions when using B-splines:
+1. **Sites vs Knots**: Interpolation sites (where your data is defined) are not B-spline knots. Knots define the piecewise polynomial segments.
+2. **Internal Knots**: The `internal_knots` parameter specifies knots strictly inside the fundamental domain. It does not include the boundary multiplicity knots.
+3. **Values vs Coefficients**: Sample values (`y`) are not B-spline coefficients (`c`). The coefficients must be solved via a banded matrix system.
+4. **Dimension Requirements**: Exact interpolation of `n` samples requires exactly `n-4` internal knots.
+5. **Default Placement**: By default, `CubicBSplineBasis` omits the second and second-to-last data sites as internal knots, reproducing classical "not-a-knot" boundary conditions.
+6. **Nonuniform Knots**: You can pass arbitrary `internal_knots` to construct custom bases (e.g., `b = CubicBSplineBasis(domain=(0, 10), internal_knots=[2.0, 5.0, 8.0])`).
+7. **Matrix Ordinates**: If providing matrix sample values, each column is treated as an independent function over the same interpolation sites.
+8. **Extrapolation**: Extrapolation policies (`:throw`, `:clamp`, `:zero`) safely evaluate points outside the fundamental domain without throwing implicit out-of-bounds errors on internal buffers.
+9. **No Implicit Transforms**: Callers should perform any necessary transforms (e.g., `x = log.(k)`) before passing data to the interpolator.
+10. **Precomputation**: You can precompute integrals or other linear functionals over the basis, resulting in a vector `K`, and then rapidly evaluate the functional for new data via `K' * c`.
+11. **AD & Reactant**: B-spline evaluation is differentiable with respect to coefficient ordinates via ForwardDiff, Zygote, and Mooncake (gradients with respect to fixed knot vectors or grid sites are not supported). Note that Reactant/XLA currently supports *coefficient evaluation* (using `ExtReactant`), but the initial coefficient recovery (band solver) remains host-only.
+
 ## Automatic differentiation compatibility
 
 The package is designed to be usable in differentiable cosmology pipelines. The interpolation and emulator utilities are tested with multiple AD systems, including:

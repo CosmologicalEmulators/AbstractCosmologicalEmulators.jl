@@ -417,3 +417,54 @@ function cubic_spline_interpolation(u::DeviceMat, t::HostOrDeviceVec, t_new::Hos
     h, z = _cubic_spline_coefficients(u, t)
     return _cubic_spline_eval(u, t, h, z, t_new)
 end
+
+# -----------------------------------------------------------------------------
+# Cubic B-Spline coefficient evaluation (traced dispatch)
+# Split stencil columns on the host before conversion to avoid traced 2D
+# slicing (idx[:, k]), which triggers StackOverflowError in the MLIR tracer.
+# -----------------------------------------------------------------------------
+
+function AbstractCosmologicalEmulators._evaluate_stencil(
+    stencil::AbstractCosmologicalEmulators.CubicBSplineStencil,
+    c::DeviceVec
+)
+    i1 = Reactant.to_rarray(copy(stencil.indices[:, 1]))
+    i2 = Reactant.to_rarray(copy(stencil.indices[:, 2]))
+    i3 = Reactant.to_rarray(copy(stencil.indices[:, 3]))
+    i4 = Reactant.to_rarray(copy(stencil.indices[:, 4]))
+    w1 = Reactant.to_rarray(copy(stencil.weights[:, 1]))
+    w2 = Reactant.to_rarray(copy(stencil.weights[:, 2]))
+    w3 = Reactant.to_rarray(copy(stencil.weights[:, 3]))
+    w4 = Reactant.to_rarray(copy(stencil.weights[:, 4]))
+
+    return c[i1] .* w1 .+ c[i2] .* w2 .+ c[i3] .* w3 .+ c[i4] .* w4
+end
+
+function AbstractCosmologicalEmulators._evaluate_stencil(
+    stencil::AbstractCosmologicalEmulators.CubicBSplineStencil,
+    c::DeviceMat
+)
+    n_query = size(stencil.indices, 1)
+    n_basis = size(c, 1)
+    n_series = size(c, 2)
+
+    # Build column-major linear indices on the host. The previous
+    # c[indices, :] form makes Reactant lower a 2D indexed gather through
+    # scalar getindex calls. A 1D gather followed by reshape avoids that
+    # tracer path while preserving the n_query × n_series layout.
+    series_offsets = n_basis .* reshape(0:(n_series - 1), 1, :)
+    linear1 = Reactant.to_rarray(vec(stencil.indices[:, 1] .+ series_offsets))
+    linear2 = Reactant.to_rarray(vec(stencil.indices[:, 2] .+ series_offsets))
+    linear3 = Reactant.to_rarray(vec(stencil.indices[:, 3] .+ series_offsets))
+    linear4 = Reactant.to_rarray(vec(stencil.indices[:, 4] .+ series_offsets))
+    w1 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 1]), n_query, 1))
+    w2 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 2]), n_query, 1))
+    w3 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 3]), n_query, 1))
+    w4 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 4]), n_query, 1))
+
+    c_flat = vec(c)
+    return reshape(c_flat[linear1], n_query, n_series) .* w1 .+
+           reshape(c_flat[linear2], n_query, n_series) .* w2 .+
+           reshape(c_flat[linear3], n_query, n_series) .* w3 .+
+           reshape(c_flat[linear4], n_query, n_series) .* w4
+end

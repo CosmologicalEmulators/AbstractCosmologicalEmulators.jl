@@ -873,6 +873,84 @@ function ChainRulesCore.rrule(::typeof(_cubic_spline_coefficients), u::AbstractM
     return (h, z), _cubic_spline_coefficients_matrix_pullback
 end
 
+# =============================================================================
+# Cubic B-Spline Chainrules
+# =============================================================================
+
+function ChainRulesCore.rrule(::typeof(solve), fact::CubicBSplineFactorization, b::AbstractVecOrMat)
+    c = solve(fact, b)
+
+    project_b = ChainRulesCore.ProjectTo(b)
+
+    function solve_pullback(Δ)
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+
+        # We only promise AD with respect to the ordinates `b`, not the fixed sites or knots in `fact`
+        if Δ_unthunked isa ChainRulesCore.ZeroTangent
+            return NoTangent(), NoTangent(), ChainRulesCore.ZeroTangent()
+        end
+
+        # Adjoint solve A^T b_bar = c_bar
+        ∂b = solve_adjoint(fact, Δ_unthunked)
+        return NoTangent(), NoTangent(), project_b(∂b)
+    end
+
+    return c, solve_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_evaluate_stencil), stencil::CubicBSplineStencil, c::AbstractVector)
+    out = _evaluate_stencil(stencil, c)
+
+    project_c = ChainRulesCore.ProjectTo(c)
+
+    function _evaluate_stencil_pullback(Δ)
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+
+        if Δ_unthunked isa ChainRulesCore.ZeroTangent
+            return NoTangent(), NoTangent(), ChainRulesCore.ZeroTangent()
+        end
+
+        ∂c = zero(c)
+        for i in 1:size(stencil.indices, 1)
+            for k in 1:4
+                ∂c[stencil.indices[i, k]] += Δ_unthunked[i] * stencil.weights[i, k]
+            end
+        end
+        return NoTangent(), NoTangent(), project_c(∂c)
+    end
+
+    return out, _evaluate_stencil_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_evaluate_stencil), stencil::CubicBSplineStencil, c::AbstractMatrix)
+    out = _evaluate_stencil(stencil, c)
+
+    project_c = ChainRulesCore.ProjectTo(c)
+
+    function _evaluate_stencil_pullback(Δ)
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+
+        if Δ_unthunked isa ChainRulesCore.ZeroTangent
+            return NoTangent(), NoTangent(), ChainRulesCore.ZeroTangent()
+        end
+
+        ∂c = zero(c)
+        n_series = size(c, 2)
+        for i in 1:size(stencil.indices, 1)
+            for k in 1:4
+                idx = stencil.indices[i, k]
+                w = stencil.weights[i, k]
+                for s in 1:n_series
+                    ∂c[idx, s] += Δ_unthunked[i, s] * w
+                end
+            end
+        end
+        return NoTangent(), NoTangent(), project_c(∂c)
+    end
+
+    return out, _evaluate_stencil_pullback
+end
+
 function ChainRulesCore.rrule(::typeof(_cubic_spline_eval), u, t, h, z, tq::AbstractArray)
     n_query = length(tq)
     results = similar(tq, promote_type(eltype(u), eltype(z), eltype(tq)))
@@ -1038,4 +1116,66 @@ function ChainRulesCore.rrule(::typeof(_cubic_spline_eval), u::AbstractMatrix, t
     end
 
     return results, _cubic_spline_eval_matrix_pullback
+end
+
+function ChainRulesCore.rrule(::Type{<:CubicBSplineFactorization}, basis, xq)
+    fact = CubicBSplineFactorization(basis, xq)
+    function CubicBSplineFactorization_pullback(Δ)
+        return NoTangent(), NoTangent(), NoTangent()
+    end
+    return fact, CubicBSplineFactorization_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_basis_stencil), basis, xq, policy)
+    stencil = _basis_stencil(basis, xq, policy)
+    function _basis_stencil_pullback(Δ)
+        return NoTangent(), NoTangent(), NoTangent(), NoTangent()
+    end
+    return stencil, _basis_stencil_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(basis_row), basis, x)
+    row = basis_row(basis, x)
+    function basis_row_pullback(Δ)
+        return NoTangent(), NoTangent(), NoTangent()
+    end
+    return row, basis_row_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_evaluate_spline), c::AbstractVector, row::CubicBSplineRow)
+    out = _evaluate_spline(c, row)
+    project_c = ChainRulesCore.ProjectTo(c)
+    function _evaluate_spline_pullback(Δ)
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+        if Δ_unthunked isa ChainRulesCore.ZeroTangent
+            return NoTangent(), ChainRulesCore.ZeroTangent(), NoTangent()
+        end
+        ∂c = zero(c)
+        for k in 1:4
+            ∂c[row.indices[k]] += Δ_unthunked * row.values[k]
+        end
+        return NoTangent(), project_c(∂c), NoTangent()
+    end
+    return out, _evaluate_spline_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(_evaluate_spline), c::AbstractMatrix, row::CubicBSplineRow)
+    out = _evaluate_spline(c, row)
+    project_c = ChainRulesCore.ProjectTo(c)
+    function _evaluate_spline_pullback(Δ)
+        Δ_unthunked = ChainRulesCore.unthunk(Δ)
+        if Δ_unthunked isa ChainRulesCore.ZeroTangent
+            return NoTangent(), ChainRulesCore.ZeroTangent(), NoTangent()
+        end
+        ∂c = zero(c)
+        for k in 1:4
+            idx = row.indices[k]
+            w = row.values[k]
+            for s in 1:size(c, 2)
+                ∂c[idx, s] += Δ_unthunked[s] * w
+            end
+        end
+        return NoTangent(), project_c(∂c), NoTangent()
+    end
+    return out, _evaluate_spline_pullback
 end
