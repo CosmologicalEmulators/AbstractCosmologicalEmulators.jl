@@ -343,35 +343,125 @@ end
             @test !isapprox(Array(out_mat2_R), Array(out_mat_R))
         end
 
-        @testset "Cubic B-Spline structural adaptation" begin
+        @testset "Cubic B-Spline structural adaptation and public API" begin
             x_sites = collect(0.0:1.0:7.0)
             u_sites = sin.(x_sites)
+            u_mat = hcat(u_sites, cos.(x_sites))
             xq_sites = [2.5, 3.5, 4.5]
-            basis = CubicBSplineBasis(domain=(first(x_sites), last(x_sites)), internal_knots=x_sites[3:end-2])
-            stencil = basis_stencil(basis, xq_sites)
-            fact = AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, x_sites)
-            spl = CubicBSpline(u_sites, x_sites)
+
+            eval_spline(spl, x) = spl(x)
+            eval_plan(plan, u) = plan(u)
+
+            # 1. CubicBSpline (vector)
+            spl_vec = CubicBSpline(u_sites, x_sites; extrapolation=:clamp)
+            spl_vec_R = Reactant.to_rarray(spl_vec)
+            xq_R = Reactant.to_rarray(xq_sites)
+
+            f_spl_vec = Reactant.@compile sync=true eval_spline(spl_vec_R, xq_R)
+            out_spl_vec_R = f_spl_vec(spl_vec_R, xq_R)
+            Reactant.synchronize(out_spl_vec_R)
+            @test Array(out_spl_vec_R) ≈ spl_vec(xq_sites)
+
+            # 2. CubicBSpline (matrix)
+            spl_mat = CubicBSpline(u_mat, x_sites; extrapolation=:clamp)
+            spl_mat_R = Reactant.to_rarray(spl_mat)
+            f_spl_mat = Reactant.@compile sync=true eval_spline(spl_mat_R, xq_R)
+            out_spl_mat_R = f_spl_mat(spl_mat_R, xq_R)
+            Reactant.synchronize(out_spl_mat_R)
+            @test Array(out_spl_mat_R) ≈ spl_mat(xq_sites)
+
+            # 3. CubicBSplinePlan (vector)
             plan = CubicBSplinePlan(x_sites, xq_sites)
+            plan_R = Reactant.to_rarray(plan)
+            u_R = Reactant.to_rarray(u_sites)
+            u2_sites = cos.(x_sites)
+            u2_R = Reactant.to_rarray(u2_sites)
 
-            # Adapt individual array fields and verify they convert
-            kv_adapted = Reactant.to_rarray(knot_vector(basis))
-            @test size(kv_adapted) == size(knot_vector(basis))
+            f_plan_vec = Reactant.@compile sync=true eval_plan(plan_R, u_R)
+            out_plan_vec_R = f_plan_vec(plan_R, u_R)
+            Reactant.synchronize(out_plan_vec_R)
+            @test Array(out_plan_vec_R) ≈ plan(u_sites)
 
-            idx_adapted = Reactant.to_rarray(stencil.indices)
-            @test size(idx_adapted) == size(stencil.indices)
+            # Dynamic input check for plan (vector)
+            out2_plan_vec_R = f_plan_vec(plan_R, u2_R)
+            Reactant.synchronize(out2_plan_vec_R)
+            @test Array(out2_plan_vec_R) ≈ plan(u2_sites)
+            @test !isapprox(Array(out2_plan_vec_R), Array(out_plan_vec_R))
 
-            w_adapted = Reactant.to_rarray(stencil.weights)
-            @test size(w_adapted) == size(stencil.weights)
+            # 4. CubicBSplinePlan (matrix)
+            u_mat_R = Reactant.to_rarray(u_mat)
+            u_mat2 = hcat(cos.(x_sites), sin.(x_sites))
+            u_mat2_R = Reactant.to_rarray(u_mat2)
 
-            bands_adapted = Reactant.to_rarray(fact.bands)
-            @test size(bands_adapted) == size(fact.bands)
+            f_plan_mat = Reactant.@compile sync=true eval_plan(plan_R, u_mat_R)
+            out_plan_mat_R = f_plan_mat(plan_R, u_mat_R)
+            Reactant.synchronize(out_plan_mat_R)
+            @test Array(out_plan_mat_R) ≈ plan(u_mat)
 
-            coeff_adapted = Reactant.to_rarray(spl.coefficients)
-            @test size(coeff_adapted) == size(spl.coefficients)
+            # Dynamic input check for plan (matrix)
+            out2_plan_mat_R = f_plan_mat(plan_R, u_mat2_R)
+            Reactant.synchronize(out2_plan_mat_R)
+            @test Array(out2_plan_mat_R) ≈ plan(u_mat2)
+            @test !isapprox(Array(out2_plan_mat_R), Array(out_plan_mat_R))
 
-            plan_bands_adapted = Reactant.to_rarray(plan.factorization.bands)
-            @test size(plan_bands_adapted) == size(plan.factorization.bands)
+            # Dynamic input check for spline (vector)
+            spl_vec2 = CubicBSpline(u2_sites, x_sites; extrapolation=:clamp)
+            spl_vec2_R = Reactant.to_rarray(spl_vec2)
+            out2_spl_vec_R = f_spl_vec(spl_vec2_R, xq_R)
+            Reactant.synchronize(out2_spl_vec_R)
+            @test Array(out2_spl_vec_R) ≈ spl_vec2(xq_sites)
+            @test !isapprox(Array(out2_spl_vec_R), Array(out_spl_vec_R))
+
+            # Dynamic input check for spline (matrix)
+            spl_mat2 = CubicBSpline(u_mat2, x_sites; extrapolation=:clamp)
+            spl_mat2_R = Reactant.to_rarray(spl_mat2)
+            out2_spl_mat_R = f_spl_mat(spl_mat2_R, xq_R)
+            Reactant.synchronize(out2_spl_mat_R)
+            @test Array(out2_spl_mat_R) ≈ spl_mat2(xq_sites)
+            @test !isapprox(Array(out2_spl_mat_R), Array(out_spl_mat_R))
+
+            # Extrapolation endpoints and out-of-domain
+            xq_out = [-1.0, 0.0, 7.0, 8.0]
+            xq_out_R = Reactant.to_rarray(xq_out)
+
+            # Test :throw error on compilation
+            spl_throw = CubicBSpline(u_sites, x_sites; extrapolation=:throw)
+            spl_throw_R = Reactant.to_rarray(spl_throw)
+            @test_throws ErrorException Reactant.@compile sync=true eval_spline(spl_throw_R, xq_R)
+
+            # Test :clamp extrapolation (vector)
+            spl_clamp = CubicBSpline(u_sites, x_sites; extrapolation=:clamp)
+            spl_clamp_R = Reactant.to_rarray(spl_clamp)
+            f_clamp = Reactant.@compile sync=true eval_spline(spl_clamp_R, xq_out_R)
+            out_clamp_R = f_clamp(spl_clamp_R, xq_out_R)
+            Reactant.synchronize(out_clamp_R)
+            @test Array(out_clamp_R) ≈ spl_clamp(xq_out)
+
+            # Test :zero extrapolation (vector)
+            spl_zero = CubicBSpline(u_sites, x_sites; extrapolation=:zero)
+            spl_zero_R = Reactant.to_rarray(spl_zero)
+            f_zero = Reactant.@compile sync=true eval_spline(spl_zero_R, xq_out_R)
+            out_zero_R = f_zero(spl_zero_R, xq_out_R)
+            Reactant.synchronize(out_zero_R)
+            @test Array(out_zero_R) ≈ spl_zero(xq_out)
+
+            # Test :clamp extrapolation (matrix)
+            spl_mat_clamp = CubicBSpline(u_mat, x_sites; extrapolation=:clamp)
+            spl_mat_clamp_R = Reactant.to_rarray(spl_mat_clamp)
+            f_mat_clamp = Reactant.@compile sync=true eval_spline(spl_mat_clamp_R, xq_out_R)
+            out_mat_clamp_R = f_mat_clamp(spl_mat_clamp_R, xq_out_R)
+            Reactant.synchronize(out_mat_clamp_R)
+            @test Array(out_mat_clamp_R) ≈ spl_mat_clamp(xq_out)
+
+            # Test :zero extrapolation (matrix)
+            spl_mat_zero = CubicBSpline(u_mat, x_sites; extrapolation=:zero)
+            spl_mat_zero_R = Reactant.to_rarray(spl_mat_zero)
+            f_mat_zero = Reactant.@compile sync=true eval_spline(spl_mat_zero_R, xq_out_R)
+            out_mat_zero_R = f_mat_zero(spl_mat_zero_R, xq_out_R)
+            Reactant.synchronize(out_mat_zero_R)
+            @test Array(out_mat_zero_R) ≈ spl_mat_zero(xq_out)
         end
+
 
         @testset "Reusable spline object and plan gradients" begin
                 if SKIP_REACTANT_REUSABLE_SPLINES

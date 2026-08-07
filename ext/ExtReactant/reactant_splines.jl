@@ -424,47 +424,254 @@ end
 # slicing (idx[:, k]), which triggers StackOverflowError in the MLIR tracer.
 # -----------------------------------------------------------------------------
 
+function AbstractCosmologicalEmulators.solve(
+    fact::AbstractCosmologicalEmulators.CubicBSplineFactorization,
+    b::DeviceVec
+)
+    n = size(fact.bands, 2)
+    x = copy(b)
+    B = fact.bands
+
+    # Forward substitution: L y = b
+    for j in 1:n
+        x_j = x[j:j]
+        for i in (j+1):min(n, j+3)
+            B_ij = B[4 + i - j : 4 + i - j, j:j]
+            x[i:i] = x[i:i] .- vec(B_ij) .* x_j
+        end
+    end
+
+    # Backward substitution: U x = y
+    for j in n:-1:1
+        B_jj = B[4:4, j:j]
+        x_j = x[j:j] ./ vec(B_jj)
+        x[j:j] = x_j
+        for i in max(1, j-3):(j-1)
+            B_ij = B[4 + i - j : 4 + i - j, j:j]
+            x[i:i] = x[i:i] .- vec(B_ij) .* x_j
+        end
+    end
+    return x
+end
+
+function AbstractCosmologicalEmulators.solve(
+    fact::AbstractCosmologicalEmulators.CubicBSplineFactorization,
+    B_mat::DeviceMat
+)
+    n = size(fact.bands, 2)
+    X = copy(B_mat)
+    B = fact.bands
+
+    # Forward substitution: L y = b
+    for j in 1:n
+        X_j = X[j:j, :]
+        for i in (j+1):min(n, j+3)
+            B_ij = B[4 + i - j : 4 + i - j, j:j]
+            X[i:i, :] = X[i:i, :] .- B_ij .* X_j
+        end
+    end
+
+    # Backward substitution: U x = y
+    for j in n:-1:1
+        B_jj = B[4:4, j:j]
+        X_j = X[j:j, :] ./ B_jj
+        X[j:j, :] = X_j
+        for i in max(1, j-3):(j-1)
+            B_ij = B[4 + i - j : 4 + i - j, j:j]
+            X[i:i, :] = X[i:i, :] .- B_ij .* X_j
+        end
+    end
+    return X
+end
+
+
 function AbstractCosmologicalEmulators._evaluate_stencil(
     stencil::AbstractCosmologicalEmulators.CubicBSplineStencil,
     c::DeviceVec
 )
-    i1 = Reactant.to_rarray(copy(stencil.indices[:, 1]))
-    i2 = Reactant.to_rarray(copy(stencil.indices[:, 2]))
-    i3 = Reactant.to_rarray(copy(stencil.indices[:, 3]))
-    i4 = Reactant.to_rarray(copy(stencil.indices[:, 4]))
-    w1 = Reactant.to_rarray(copy(stencil.weights[:, 1]))
-    w2 = Reactant.to_rarray(copy(stencil.weights[:, 2]))
-    w3 = Reactant.to_rarray(copy(stencil.weights[:, 3]))
-    w4 = Reactant.to_rarray(copy(stencil.weights[:, 4]))
+    return c[stencil.i1] .* stencil.w1 .+
+           c[stencil.i2] .* stencil.w2 .+
+           c[stencil.i3] .* stencil.w3 .+
+           c[stencil.i4] .* stencil.w4
+end
 
-    return c[i1] .* w1 .+ c[i2] .* w2 .+ c[i3] .* w3 .+ c[i4] .* w4
+function _gather_rows(c::DeviceMat, rows)
+    n_query = length(rows)
+    n_basis, n_series = size(c)
+
+    offsets = n_basis .* reshape(0:(n_series - 1), 1, :)
+    linear = vec(reshape(rows, :, 1) .+ offsets)
+
+    return reshape(vec(c)[linear], n_query, n_series)
 end
 
 function AbstractCosmologicalEmulators._evaluate_stencil(
     stencil::AbstractCosmologicalEmulators.CubicBSplineStencil,
     c::DeviceMat
 )
-    n_query = size(stencil.indices, 1)
-    n_basis = size(c, 1)
+    n_query = length(stencil.i1)
     n_series = size(c, 2)
 
-    # Build column-major linear indices on the host. The previous
-    # c[indices, :] form makes Reactant lower a 2D indexed gather through
-    # scalar getindex calls. A 1D gather followed by reshape avoids that
-    # tracer path while preserving the n_query × n_series layout.
-    series_offsets = n_basis .* reshape(0:(n_series - 1), 1, :)
-    linear1 = Reactant.to_rarray(vec(stencil.indices[:, 1] .+ series_offsets))
-    linear2 = Reactant.to_rarray(vec(stencil.indices[:, 2] .+ series_offsets))
-    linear3 = Reactant.to_rarray(vec(stencil.indices[:, 3] .+ series_offsets))
-    linear4 = Reactant.to_rarray(vec(stencil.indices[:, 4] .+ series_offsets))
-    w1 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 1]), n_query, 1))
-    w2 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 2]), n_query, 1))
-    w3 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 3]), n_query, 1))
-    w4 = Reactant.to_rarray(reshape(copy(stencil.weights[:, 4]), n_query, 1))
+    w1 = reshape(stencil.w1, n_query, 1)
+    w2 = reshape(stencil.w2, n_query, 1)
+    w3 = reshape(stencil.w3, n_query, 1)
+    w4 = reshape(stencil.w4, n_query, 1)
 
-    c_flat = vec(c)
-    return reshape(c_flat[linear1], n_query, n_series) .* w1 .+
-           reshape(c_flat[linear2], n_query, n_series) .* w2 .+
-           reshape(c_flat[linear3], n_query, n_series) .* w3 .+
-           reshape(c_flat[linear4], n_query, n_series) .* w4
+    return _gather_rows(c, stencil.i1) .* w1 .+
+           _gather_rows(c, stencil.i2) .* w2 .+
+           _gather_rows(c, stencil.i3) .* w3 .+
+           _gather_rows(c, stencil.i4) .* w4
+end
+
+function _cubic_b_spline_eval(c::DeviceVec, T::HostOrDeviceVec, xq::HostOrDeviceVec)
+    n_basis = length(T) - 4
+    cmp = reshape(T, :, 1) .<= reshape(xq, 1, :)
+    idx = vec(sum(cmp; dims=1))
+    span = clamp.(idx, 4, n_basis)
+
+    T_span = T[span]
+    T_span_p1 = T[span .+ 1]
+    T_span_m1 = T[span .- 1]
+    T_span_p2 = T[span .+ 2]
+    T_span_m2 = T[span .- 2]
+    T_span_p3 = T[span .+ 3]
+
+    left1 = xq .- T_span
+    right1 = T_span_p1 .- xq
+
+    temp1 = one(eltype(right1)) ./ (right1 .+ left1)
+    N1_0 = right1 .* temp1
+    N1_1 = left1 .* temp1
+
+    left2 = xq .- T_span_m1
+    right2 = T_span_p2 .- xq
+
+    temp2_0 = N1_0 ./ (right1 .+ left2)
+    N2_0 = right1 .* temp2_0
+    saved = left2 .* temp2_0
+
+    temp2_1 = N1_1 ./ (right2 .+ left1)
+    N2_1 = saved .+ right2 .* temp2_1
+    N2_2 = left1 .* temp2_1
+
+    left3 = xq .- T_span_m2
+    right3 = T_span_p3 .- xq
+
+    temp3_0 = N2_0 ./ (right1 .+ left3)
+    N3_0 = right1 .* temp3_0
+    saved = left3 .* temp3_0
+
+    temp3_1 = N2_1 ./ (right2 .+ left2)
+    N3_1 = saved .+ right2 .* temp3_1
+    saved = left2 .* temp3_1
+
+    temp3_2 = N2_2 ./ (right3 .+ left1)
+    N3_2 = saved .+ right3 .* temp3_2
+    N3_3 = left1 .* temp3_2
+
+    c_0 = c[span .- 3]
+    c_1 = c[span .- 2]
+    c_2 = c[span .- 1]
+    c_3 = c[span]
+
+    return c_0 .* N3_0 .+ c_1 .* N3_1 .+ c_2 .* N3_2 .+ c_3 .* N3_3
+end
+
+function _cubic_b_spline_eval(c::DeviceMat, T::HostOrDeviceVec, xq::HostOrDeviceVec)
+    n_basis = length(T) - 4
+    cmp = reshape(T, :, 1) .<= reshape(xq, 1, :)
+    idx = vec(sum(cmp; dims=1))
+    span = clamp.(idx, 4, n_basis)
+
+    T_span = T[span]
+    T_span_p1 = T[span .+ 1]
+    T_span_m1 = T[span .- 1]
+    T_span_p2 = T[span .+ 2]
+    T_span_m2 = T[span .- 2]
+    T_span_p3 = T[span .+ 3]
+
+    left1 = xq .- T_span
+    right1 = T_span_p1 .- xq
+
+    temp1 = one(eltype(right1)) ./ (right1 .+ left1)
+    N1_0 = right1 .* temp1
+    N1_1 = left1 .* temp1
+
+    left2 = xq .- T_span_m1
+    right2 = T_span_p2 .- xq
+
+    temp2_0 = N1_0 ./ (right1 .+ left2)
+    N2_0 = right1 .* temp2_0
+    saved = left2 .* temp2_0
+
+    temp2_1 = N1_1 ./ (right2 .+ left1)
+    N2_1 = saved .+ right2 .* temp2_1
+    N2_2 = left1 .* temp2_1
+
+    left3 = xq .- T_span_m2
+    right3 = T_span_p3 .- xq
+
+    temp3_0 = N2_0 ./ (right1 .+ left3)
+    N3_0 = right1 .* temp3_0
+    saved = left3 .* temp3_0
+
+    temp3_1 = N2_1 ./ (right2 .+ left2)
+    N3_1 = saved .+ right2 .* temp3_1
+    saved = left2 .* temp3_1
+
+    temp3_2 = N2_2 ./ (right3 .+ left1)
+    N3_2 = saved .+ right3 .* temp3_2
+    N3_3 = left1 .* temp3_2
+
+    c_0 = _gather_rows(c, span .- 3)
+    c_1 = _gather_rows(c, span .- 2)
+    c_2 = _gather_rows(c, span .- 1)
+    c_3 = _gather_rows(c, span)
+
+    w0 = reshape(N3_0, :, 1)
+    w1 = reshape(N3_1, :, 1)
+    w2 = reshape(N3_2, :, 1)
+    w3 = reshape(N3_3, :, 1)
+
+    return c_0 .* w0 .+ c_1 .* w1 .+ c_2 .* w2 .+ c_3 .* w3
+end
+
+function _apply_reactant_extrapolation(xq::DeviceVec, T, E)
+    xmin = T[[4]]
+    xmax = T[[length(T) - 3]]
+    if E === AbstractCosmologicalEmulators.ClampExtrap
+        return clamp.(xq, xmin, xmax)
+    elseif E === AbstractCosmologicalEmulators.ThrowExtrap
+        error("Dynamic bounds checking (`extrapolation=:throw`) is not currently supported in Reactant compiled contexts because the XLA compiler cannot lower dynamic exceptions. Please use `extrapolation=:clamp` or `:zero`.")
+    else
+        return xq
+    end
+end
+
+function _apply_reactant_zero_mask(out, xq::DeviceVec, T, E)
+    if E === AbstractCosmologicalEmulators.ZeroExtrap
+        xmin = T[[4]]
+        xmax = T[[length(T) - 3]]
+        mask = (xq .>= xmin) .& (xq .<= xmax)
+        if out isa DeviceMat
+            return out .* reshape(mask, :, 1)
+        else
+            return out .* mask
+        end
+    end
+    return out
+end
+
+function (spline::AbstractCosmologicalEmulators.CubicBSpline{X,B,C,E})(xq::DeviceVec) where {X, B, C<:AbstractVector, E}
+    T = AbstractCosmologicalEmulators.knot_vector(spline.basis)
+    xq_eval = _apply_reactant_extrapolation(xq, T, E)
+    out = _cubic_b_spline_eval(spline.coefficients, T, xq_eval)
+    return _apply_reactant_zero_mask(out, xq, T, E)
+end
+
+function (spline::AbstractCosmologicalEmulators.CubicBSpline{X,B,C,E})(xq::DeviceVec) where {X, B, C<:AbstractMatrix, E}
+    T = AbstractCosmologicalEmulators.knot_vector(spline.basis)
+    xq_eval = _apply_reactant_extrapolation(xq, T, E)
+    out = _cubic_b_spline_eval(spline.coefficients, T, xq_eval)
+    return _apply_reactant_zero_mask(out, xq, T, E)
 end

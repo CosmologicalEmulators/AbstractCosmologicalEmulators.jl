@@ -225,8 +225,8 @@ function basis_row(basis::CubicBSplineBasis, x)
 end
 
 struct CubicBSplineStencil{I,W,Q}
-    indices::I
-    weights::W
+    i1::I; i2::I; i3::I; i4::I
+    w1::W; w2::W; w3::W; w4::W
     query::Q
 end
 
@@ -246,10 +246,12 @@ end
 
 function _basis_stencil(basis::CubicBSplineBasis, xq, policy)
     n_query = length(xq)
-    indices = zeros(Int, n_query, 4)
+
+    i1 = zeros(Int, n_query); i2 = zeros(Int, n_query); i3 = zeros(Int, n_query); i4 = zeros(Int, n_query)
+
     T_type = promote_type(eltype(knot_vector(basis)), eltype(xq))
     V = typeof(one(T_type) / one(T_type))
-    weights = zeros(V, n_query, 4)
+    w1 = zeros(V, n_query); w2 = zeros(V, n_query); w3 = zeros(V, n_query); w4 = zeros(V, n_query)
 
     xmin, xmax = bspline_domain(basis)
 
@@ -257,17 +259,17 @@ function _basis_stencil(basis::CubicBSplineBasis, xq, policy)
         x = _apply_extrapolation(policy, xq[i], xmin, xmax)
         row = basis_row(basis, x)
 
-        indices[i, 1] = row.indices[1]
-        indices[i, 2] = row.indices[2]
-        indices[i, 3] = row.indices[3]
-        indices[i, 4] = row.indices[4]
-        weights[i, 1] = row.values[1]
-        weights[i, 2] = row.values[2]
-        weights[i, 3] = row.values[3]
-        weights[i, 4] = row.values[4]
+        i1[i] = row.indices[1]
+        i2[i] = row.indices[2]
+        i3[i] = row.indices[3]
+        i4[i] = row.indices[4]
+        w1[i] = row.values[1]
+        w2[i] = row.values[2]
+        w3[i] = row.values[3]
+        w4[i] = row.values[4]
     end
 
-    return CubicBSplineStencil(indices, weights, xq)
+    return CubicBSplineStencil(i1, i2, i3, i4, w1, w2, w3, w4, xq)
 end
 
 """
@@ -660,24 +662,23 @@ function (plan::CubicBSplinePlan)(u::AbstractMatrix)
 end
 
 function _evaluate_stencil(stencil::CubicBSplineStencil, c::AbstractVector)
-    n_q = size(stencil.indices, 1)
-    V = typeof(zero(eltype(c)) * zero(eltype(stencil.weights)))
+    n_q = length(stencil.i1)
+    V = typeof(zero(eltype(c)) * zero(eltype(stencil.w1)))
     out = similar(c, V, n_q)
 
     for i in 1:n_q
-        val = zero(V)
-        for k in 1:4
-            @inbounds val += c[stencil.indices[i, k]] * stencil.weights[i, k]
-        end
-        out[i] = val
+        @inbounds out[i] = c[stencil.i1[i]] * stencil.w1[i] +
+                           c[stencil.i2[i]] * stencil.w2[i] +
+                           c[stencil.i3[i]] * stencil.w3[i] +
+                           c[stencil.i4[i]] * stencil.w4[i]
     end
     return out
 end
 
 function _evaluate_stencil(stencil::CubicBSplineStencil, c::AbstractMatrix)
-    n_q = size(stencil.indices, 1)
+    n_q = length(stencil.i1)
     n_series = size(c, 2)
-    V = typeof(zero(eltype(c)) * zero(eltype(stencil.weights)))
+    V = typeof(zero(eltype(c)) * zero(eltype(stencil.w1)))
     out = similar(c, V, n_q, n_series)
     fill!(out, zero(V))
 
@@ -686,11 +687,10 @@ function _evaluate_stencil(stencil::CubicBSplineStencil, c::AbstractMatrix)
     # inner loop gives better cache locality.
     for s in 1:n_series
         for i in 1:n_q
-            val = zero(V)
-            for k in 1:4
-                @inbounds val += c[stencil.indices[i, k], s] * stencil.weights[i, k]
-            end
-            @inbounds out[i, s] = val
+            @inbounds out[i, s] = c[stencil.i1[i], s] * stencil.w1[i] +
+                                  c[stencil.i2[i], s] * stencil.w2[i] +
+                                  c[stencil.i3[i], s] * stencil.w3[i] +
+                                  c[stencil.i4[i], s] * stencil.w4[i]
         end
     end
     return out

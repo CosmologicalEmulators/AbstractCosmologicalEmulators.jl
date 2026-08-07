@@ -85,8 +85,8 @@ using Adapt
         xq = [0.0, 0.5, 1.5, 2.5, 3.0]
         
         stencil = basis_stencil(basis, xq, extrapolation=:clamp)
-        @test size(stencil.indices) == (5, 4)
-        @test size(stencil.weights) == (5, 4)
+        @test size(stencil.i1) == (5,)
+        @test size(stencil.w1) == (5,)
         
         # Test matrix
         B = basis_matrix(basis, xq)
@@ -98,7 +98,10 @@ using Adapt
         @test_throws ArgumentError basis_stencil(basis, [-1.0], extrapolation=:throw)
         
         stencil_zero = basis_stencil(basis, [-1.0, 4.0], extrapolation=:zero)
-        @test all(stencil_zero.weights .== 0.0)
+        @test all(stencil_zero.w1 .== 0.0)
+        @test all(stencil_zero.w2 .== 0.0)
+        @test all(stencil_zero.w3 .== 0.0)
+        @test all(stencil_zero.w4 .== 0.0)
         
         stencil_eval = basis_stencil(basis, [1.0, 2.0, 3.0]; extrapolation=:throw)
         @test stencil_eval isa AbstractCosmologicalEmulators.CubicBSplineStencil
@@ -108,7 +111,7 @@ using Adapt
         @test Adapt.adapt(Array, stencil_eval) isa AbstractCosmologicalEmulators.CubicBSplineStencil
         
         stencil_clamp = basis_stencil(basis, [-1.0, 4.0], extrapolation=:clamp)
-        @test stencil_clamp.weights[1, 1] ≈ 1.0 # clamps to 0.0, first basis is 1.0
-        @test stencil_clamp.weights[2, 4] ≈ 1.0 # clamps to 3.0, last basis is 1.0
+        @test stencil_clamp.w1[1] ≈ 1.0 # clamps to 0.0, first basis is 1.0
+        @test stencil_clamp.w4[2] ≈ 1.0 # clamps to 3.0, last basis is 1.0
     end
 end

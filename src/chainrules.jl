@@ -911,10 +911,11 @@ function ChainRulesCore.rrule(::typeof(_evaluate_stencil), stencil::CubicBSpline
         end
 
         ∂c = zero(c)
-        for i in 1:size(stencil.indices, 1)
-            for k in 1:4
-                ∂c[stencil.indices[i, k]] += Δ_unthunked[i] * stencil.weights[i, k]
-            end
+        for i in 1:length(stencil.i1)
+            ∂c[stencil.i1[i]] += Δ_unthunked[i] * stencil.w1[i]
+            ∂c[stencil.i2[i]] += Δ_unthunked[i] * stencil.w2[i]
+            ∂c[stencil.i3[i]] += Δ_unthunked[i] * stencil.w3[i]
+            ∂c[stencil.i4[i]] += Δ_unthunked[i] * stencil.w4[i]
         end
         return NoTangent(), NoTangent(), project_c(∂c)
     end
@@ -936,13 +937,15 @@ function ChainRulesCore.rrule(::typeof(_evaluate_stencil), stencil::CubicBSpline
 
         ∂c = zero(c)
         n_series = size(c, 2)
-        for i in 1:size(stencil.indices, 1)
-            for k in 1:4
-                idx = stencil.indices[i, k]
-                w = stencil.weights[i, k]
-                for s in 1:n_series
-                    ∂c[idx, s] += Δ_unthunked[i, s] * w
-                end
+        for i in 1:length(stencil.i1)
+            idx1, idx2, idx3, idx4 = stencil.i1[i], stencil.i2[i], stencil.i3[i], stencil.i4[i]
+            w1, w2, w3, w4 = stencil.w1[i], stencil.w2[i], stencil.w3[i], stencil.w4[i]
+            for s in 1:n_series
+                Δ_val = Δ_unthunked[i, s]
+                ∂c[idx1, s] += Δ_val * w1
+                ∂c[idx2, s] += Δ_val * w2
+                ∂c[idx3, s] += Δ_val * w3
+                ∂c[idx4, s] += Δ_val * w4
             end
         end
         return NoTangent(), NoTangent(), project_c(∂c)
