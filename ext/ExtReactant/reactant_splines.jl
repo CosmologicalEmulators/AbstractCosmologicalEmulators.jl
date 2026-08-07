@@ -158,6 +158,26 @@ function _pcr_right_neighbor(M::AbstractMatrix, stride::Int)
     return vcat(M[(stride + 1):n, :], _pcr_zeros_like(M, stride, nrhs))
 end
 
+@inline function _pcr_left_neighbor!(out::AbstractVector, v::AbstractVector, stride::Int)
+    out .= _pcr_left_neighbor(v, stride)
+    return out
+end
+
+@inline function _pcr_left_neighbor!(out::AbstractMatrix, M::AbstractMatrix, stride::Int)
+    out .= _pcr_left_neighbor(M, stride)
+    return out
+end
+
+@inline function _pcr_left_mask!(out::AbstractVector, stride::Int)
+    out .= _pcr_left_mask(length(out), stride, eltype(out))
+    return out
+end
+
+@inline function _pcr_left_mask(n::Int, stride::Int, ::Type{T}) where {T}
+    has_left = vcat(fill(false, stride), fill(true, max(n - stride, 0)))
+    return ifelse.(has_left, one(T), zero(T))
+end
+
 function _pcr_masks(T, n::Int, stride::Int)
     has_left = vcat(fill(false, stride), fill(true, n - stride))
     has_right = vcat(fill(true, n - stride), fill(false, stride))
@@ -424,64 +444,352 @@ end
 # slicing (idx[:, k]), which triggers StackOverflowError in the MLIR tracer.
 # -----------------------------------------------------------------------------
 
+@inline function _load_tail_zeros!(dst::AbstractVector, src::AbstractVector, tail_zeros::Int)
+    # Equivalent to vcat(src, fill(zero, tail_zeros))
+    src_vec = vec(src)
+    n = length(dst)
+    m = length(src_vec)
+    T = eltype(dst)
+    n_keep = min(m, n - tail_zeros)
+    if n_keep > 0
+        dst .= vcat(src_vec[1:n_keep], fill(zero(T), n - n_keep))
+    else
+        dst .= fill(zero(T), n)
+    end
+    return dst
+end
+
+@inline function _load_head_zeros!(dst::AbstractVector, src::AbstractVector, head_zeros::Int)
+    # Equivalent to vcat(fill(zero, head_zeros), src)
+    src_vec = vec(src)
+    n = length(dst)
+    m = length(src_vec)
+    T = eltype(dst)
+    n_keep = min(m, n - head_zeros)
+    if n_keep > 0
+        tail_zeros = n - head_zeros - n_keep
+        dst .= vcat(
+            fill(zero(T), head_zeros),
+            src_vec[1:n_keep],
+            fill(zero(T), tail_zeros),
+        )
+    else
+        dst .= fill(zero(T), n)
+    end
+    return dst
+end
+
+@inline function _reverse_first_dim(x::AbstractVector)
+    return x[end:-1:1]
+end
+
+@inline function _reverse_first_dim(X::AbstractMatrix)
+    return X[end:-1:1, :]
+end
+
+function _extract_cubic_factorization_bands(B::AbstractMatrix)
+    n = size(B, 2)
+    B1 = similar(B[4, :])
+    B2 = similar(B[4, :])
+    B3 = similar(B[4, :])
+    B4 = copy(B[4, :])
+    B5 = similar(B[4, :])
+    B6 = similar(B[4, :])
+    B7 = similar(B[4, :])
+
+    _load_tail_zeros!(B1, B[1, 4:n], 3)
+    _load_tail_zeros!(B2, B[2, 3:n], 2)
+    _load_tail_zeros!(B3, B[3, 2:n], 1)
+    _load_head_zeros!(B5, B[5, 1:n-1], 1)
+    _load_head_zeros!(B6, B[6, 1:n-2], 2)
+    _load_head_zeros!(B7, B[7, 1:n-3], 3)
+
+    return B1, B2, B3, B4, B5, B6, B7
+end
+
+function _solve_affine_recurrence_scan(rhs::AbstractVector, c1::AbstractVector, c2::AbstractVector, c3::AbstractVector)
+    return vec(_solve_affine_recurrence_scan(reshape(rhs, length(rhs), 1), c1, c2, c3))
+end
+
+function _solve_affine_recurrence_scan(
+    rhs::AbstractMatrix,
+    c1::AbstractVector,
+    c2::AbstractVector,
+    c3::AbstractVector
+)
+    n, nrhs = size(rhs)
+    @assert n == length(c1) == length(c2) == length(c3)
+    n <= 1 && return copy(rhs)
+
+    if eltype(rhs) <: Reactant.TracedRNumber
+        return _solve_affine_recurrence_scan_traced(rhs, c1, c2, c3)
+    end
+
+    T = promote_type(eltype(rhs), eltype(c1), eltype(c2), eltype(c3))
+    x1 = similar(rhs, T, n, nrhs)
+    x1 .= rhs
+    x2 = similar(x1)
+    x3 = similar(x1)
+    x2 .= zero(T)
+    x3 .= zero(T)
+
+    m11 = similar(c1, T, n)
+    m12 = similar(c1, T, n)
+    m13 = similar(c1, T, n)
+    m21 = similar(c1, T, n)
+    m22 = similar(c1, T, n)
+    m23 = similar(c1, T, n)
+    m31 = similar(c1, T, n)
+    m32 = similar(c1, T, n)
+    m33 = similar(c1, T, n)
+    m11 .= -c1
+    m12 .= -c2
+    m13 .= -c3
+    m21 .= one(T)
+    m22 .= zero(T)
+    m23 .= zero(T)
+    m31 .= zero(T)
+    m32 .= one(T)
+    m33 .= zero(T)
+
+    l11 = similar(m11)
+    l12 = similar(m11)
+    l13 = similar(m11)
+    l21 = similar(m11)
+    l22 = similar(m11)
+    l23 = similar(m11)
+    l31 = similar(m11)
+    l32 = similar(m11)
+    l33 = similar(m11)
+
+    lx1 = similar(x1)
+    lx2 = similar(x1)
+    lx3 = similar(x1)
+
+    nm11 = similar(m11)
+    nm12 = similar(m11)
+    nm13 = similar(m11)
+    nm21 = similar(m11)
+    nm22 = similar(m11)
+    nm23 = similar(m11)
+    nm31 = similar(m11)
+    nm32 = similar(m11)
+    nm33 = similar(m11)
+    nx1 = similar(x1)
+    nx2 = similar(x1)
+    nx3 = similar(x1)
+
+    left = similar(m11)
+
+    stride = 1
+    while stride < n
+        _pcr_left_neighbor!(l11, m11, stride)
+        _pcr_left_neighbor!(l12, m12, stride)
+        _pcr_left_neighbor!(l13, m13, stride)
+        _pcr_left_neighbor!(l21, m21, stride)
+        _pcr_left_neighbor!(l22, m22, stride)
+        _pcr_left_neighbor!(l23, m23, stride)
+        _pcr_left_neighbor!(l31, m31, stride)
+        _pcr_left_neighbor!(l32, m32, stride)
+        _pcr_left_neighbor!(l33, m33, stride)
+
+        _pcr_left_neighbor!(lx1, x1, stride)
+        _pcr_left_neighbor!(lx2, x2, stride)
+        _pcr_left_neighbor!(lx3, x3, stride)
+
+        _pcr_left_mask!(left, stride)
+        left_complement = one(T) .- left
+
+        @. nm11 = left * (m11 * l11 + m12 * l21 + m13 * l31) + left_complement * m11
+        @. nm12 = left * (m11 * l12 + m12 * l22 + m13 * l32) + left_complement * m12
+        @. nm13 = left * (m11 * l13 + m12 * l23 + m13 * l33) + left_complement * m13
+        @. nm21 = left * l11 + left_complement * m21
+        @. nm22 = left * l12 + left_complement * m22
+        @. nm23 = left * l13 + left_complement * m23
+        @. nm31 = left * l21 + left_complement * m31
+        @. nm32 = left * l22 + left_complement * m32
+        @. nm33 = left * l23 + left_complement * m33
+
+        @. nx1 = left * (m11 * lx1 + m12 * lx2 + m13 * lx3 + x1) + left_complement * x1
+        @. nx2 = left * (m21 * lx1 + m22 * lx2 + m23 * lx3 + x2) + left_complement * x2
+        @. nx3 = left * (m31 * lx1 + m32 * lx2 + m33 * lx3 + x3) + left_complement * x3
+
+        m11, nm11 = nm11, m11
+        m12, nm12 = nm12, m12
+        m13, nm13 = nm13, m13
+        m21, nm21 = nm21, m21
+        m22, nm22 = nm22, m22
+        m23, nm23 = nm23, m23
+        m31, nm31 = nm31, m31
+        m32, nm32 = nm32, m32
+        m33, nm33 = nm33, m33
+        x1, nx1 = nx1, x1
+        x2, nx2 = nx2, x2
+        x3, nx3 = nx3, x3
+
+        stride *= 2
+    end
+
+    return x1
+end
+
+function _solve_affine_recurrence_scan_traced(
+    rhs::AbstractMatrix,
+    c1::AbstractVector,
+    c2::AbstractVector,
+    c3::AbstractVector
+)
+    n, nrhs = size(rhs)
+    @assert n == length(c1) == length(c2) == length(c3)
+    n <= 1 && return copy(rhs)
+
+    T = promote_type(eltype(rhs), eltype(c1), eltype(c2), eltype(c3))
+    x1 = similar(rhs, T, n, nrhs)
+    x2 = similar(x1)
+    x3 = similar(x1)
+    x1 .= rhs
+    x2 .= zero(T)
+    x3 .= zero(T)
+
+    m11 = similar(c1, T, n)
+    m12 = similar(c1, T, n)
+    m13 = similar(c1, T, n)
+    m21 = similar(c1, T, n)
+    m22 = similar(c1, T, n)
+    m23 = similar(c1, T, n)
+    m31 = similar(c1, T, n)
+    m32 = similar(c1, T, n)
+    m33 = similar(c1, T, n)
+    m11 .= -c1
+    m12 .= -c2
+    m13 .= -c3
+    m21 .= one(T)
+    m22 .= zero(T)
+    m23 .= zero(T)
+    m31 .= zero(T)
+    m32 .= one(T)
+    m33 .= zero(T)
+
+    l11 = similar(m11)
+    l12 = similar(m11)
+    l13 = similar(m11)
+    l21 = similar(m11)
+    l22 = similar(m11)
+    l23 = similar(m11)
+    l31 = similar(m11)
+    l32 = similar(m11)
+    l33 = similar(m11)
+
+    lx1 = similar(x1)
+    lx2 = similar(x1)
+    lx3 = similar(x1)
+
+    nm11 = similar(m11)
+    nm12 = similar(m11)
+    nm13 = similar(m11)
+    nm21 = similar(m11)
+    nm22 = similar(m11)
+    nm23 = similar(m11)
+    nm31 = similar(m11)
+    nm32 = similar(m11)
+    nm33 = similar(m11)
+    nx1 = similar(x1)
+    nx2 = similar(x1)
+    nx3 = similar(x1)
+
+    left = similar(m11)
+
+    stride = 1
+    while stride < n
+        _pcr_left_neighbor!(l11, m11, stride)
+        _pcr_left_neighbor!(l12, m12, stride)
+        _pcr_left_neighbor!(l13, m13, stride)
+        _pcr_left_neighbor!(l21, m21, stride)
+        _pcr_left_neighbor!(l22, m22, stride)
+        _pcr_left_neighbor!(l23, m23, stride)
+        _pcr_left_neighbor!(l31, m31, stride)
+        _pcr_left_neighbor!(l32, m32, stride)
+        _pcr_left_neighbor!(l33, m33, stride)
+
+        _pcr_left_neighbor!(lx1, x1, stride)
+        _pcr_left_neighbor!(lx2, x2, stride)
+        _pcr_left_neighbor!(lx3, x3, stride)
+
+        _pcr_left_mask!(left, stride)
+        @. nm11 = left * (m11 * l11 + m12 * l21 + m13 * l31) + (one(T) - left) * m11
+        @. nm12 = left * (m11 * l12 + m12 * l22 + m13 * l32) + (one(T) - left) * m12
+        @. nm13 = left * (m11 * l13 + m12 * l23 + m13 * l33) + (one(T) - left) * m13
+        @. nm21 = left * l11 + (one(T) - left) * m21
+        @. nm22 = left * l12 + (one(T) - left) * m22
+        @. nm23 = left * l13 + (one(T) - left) * m23
+        @. nm31 = left * l21 + (one(T) - left) * m31
+        @. nm32 = left * l22 + (one(T) - left) * m32
+        @. nm33 = left * l23 + (one(T) - left) * m33
+
+        @. nx1 = left * (m11 * lx1 + m12 * lx2 + m13 * lx3 + x1) + (one(T) - left) * x1
+        @. nx2 = left * (m21 * lx1 + m22 * lx2 + m23 * lx3 + x2) + (one(T) - left) * x2
+        @. nx3 = left * (m31 * lx1 + m32 * lx2 + m33 * lx3 + x3) + (one(T) - left) * x3
+
+        m11, nm11 = nm11, m11
+        m12, nm12 = nm12, m12
+        m13, nm13 = nm13, m13
+        m21, nm21 = nm21, m21
+        m22, nm22 = nm22, m22
+        m23, nm23 = nm23, m23
+        m31, nm31 = nm31, m31
+        m32, nm32 = nm32, m32
+        m33, nm33 = nm33, m33
+        x1, nx1 = nx1, x1
+        x2, nx2 = nx2, x2
+        x3, nx3 = nx3, x3
+
+        stride *= 2
+    end
+
+    return x1
+end
+
+@inline function _solve_affine_recurrence_scan_backward(rhs, c1, c2, c3)
+    rhs_r = _reverse_first_dim(rhs)
+    c1_r = _reverse_first_dim(c1)
+    c2_r = _reverse_first_dim(c2)
+    c3_r = _reverse_first_dim(c3)
+    return _reverse_first_dim(_solve_affine_recurrence_scan(rhs_r, c1_r, c2_r, c3_r))
+end
+
 function AbstractCosmologicalEmulators.solve(
     fact::AbstractCosmologicalEmulators.CubicBSplineFactorization,
     b::DeviceVec
 )
-    n = size(fact.bands, 2)
-    x = copy(b)
     B = fact.bands
 
-    # Forward substitution: L y = b
-    for j in 1:n
-        x_j = x[j:j]
-        for i in (j+1):min(n, j+3)
-            B_ij = B[4 + i - j : 4 + i - j, j:j]
-            x[i:i] = x[i:i] .- vec(B_ij) .* x_j
-        end
-    end
+    B1, B2, B3, B4, B5, B6, B7 = _extract_cubic_factorization_bands(B)
 
-    # Backward substitution: U x = y
-    for j in n:-1:1
-        B_jj = B[4:4, j:j]
-        x_j = x[j:j] ./ vec(B_jj)
-        x[j:j] = x_j
-        for i in max(1, j-3):(j-1)
-            B_ij = B[4 + i - j : 4 + i - j, j:j]
-            x[i:i] = x[i:i] .- vec(B_ij) .* x_j
-        end
-    end
-    return x
+    # Forward solve with affine scan
+    x = _solve_affine_recurrence_scan(b, B5, B6, B7)
+
+    # Backward solve on reversed affine recurrence
+    B4_inv = one(eltype(B4)) ./ B4
+    x_scaled = x .* B4_inv
+    return _solve_affine_recurrence_scan_backward(x_scaled, B3 .* B4_inv, B2 .* B4_inv, B1 .* B4_inv)
 end
 
 function AbstractCosmologicalEmulators.solve(
     fact::AbstractCosmologicalEmulators.CubicBSplineFactorization,
     B_mat::DeviceMat
 )
-    n = size(fact.bands, 2)
-    X = copy(B_mat)
     B = fact.bands
 
-    # Forward substitution: L y = b
-    for j in 1:n
-        X_j = X[j:j, :]
-        for i in (j+1):min(n, j+3)
-            B_ij = B[4 + i - j : 4 + i - j, j:j]
-            X[i:i, :] = X[i:i, :] .- B_ij .* X_j
-        end
-    end
+    # Pre-extract bands
+    B1, B2, B3, B4, B5, B6, B7 = _extract_cubic_factorization_bands(B)
 
-    # Backward substitution: U x = y
-    for j in n:-1:1
-        B_jj = B[4:4, j:j]
-        X_j = X[j:j, :] ./ B_jj
-        X[j:j, :] = X_j
-        for i in max(1, j-3):(j-1)
-            B_ij = B[4 + i - j : 4 + i - j, j:j]
-            X[i:i, :] = X[i:i, :] .- B_ij .* X_j
-        end
-    end
-    return X
+    # Forward solve with affine scan
+    X = _solve_affine_recurrence_scan(B_mat, B5, B6, B7)
+
+    # Backward solve on reversed affine recurrence
+    B4_inv = one(eltype(B4)) ./ B4
+    X_scaled = X .* B4_inv
+    return _solve_affine_recurrence_scan_backward(X_scaled, B3 .* B4_inv, B2 .* B4_inv, B1 .* B4_inv)
 end
 
 
