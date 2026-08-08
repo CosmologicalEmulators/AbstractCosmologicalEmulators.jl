@@ -154,9 +154,19 @@ The accepted scan remains slower than host for dynamic plans:
 - vector plan: approximately 47x host at 128 -> 1028;
 - matrix plan: approximately 7.1x host for 128 sites, 128 RHS, and 1028 queries.
 
-The dense operator prototype has now been integrated for plans with at most
-`262_144` operator entries. Larger plans retain the affine scan. The
-dedicated dense-operator testset passes `11 / 11` tests.
+Reactant `CubicBSplinePlan` preparation is now dense-only. Calling
+`Reactant.to_rarray(plan)` constructs an internal plan containing only the
+complete interpolation operator. The affine scan remains available for direct
+coefficient solves but is no longer a silent plan fallback. Dense operators
+larger than 64 MiB are rejected explicitly.
+
+For the emulator workload with 40 sites and 8192 queries, changing the plan
+from the affine scan to the 2.5 MiB dense operator gave:
+
+| Workload | Scan median | Dense median | Speedup | Scan compile | Dense compile |
+|---|---:|---:|---:|---:|---:|
+| vector | 197.936 us | 51.516 us | 3.8x | 7.460 s | 61.6 ms |
+| matrix, 161 RHS | 6.497 ms | 1.077 ms | 6.0x | 7.777 s | 1.666 s |
 
 Plain-Julia validation now also includes:
 
@@ -193,9 +203,8 @@ Any next candidate must first pass direct forward parity, dynamic-input checks, 
 
 Intentional files are:
 
-- `src/cubic_b_spline.jl`: bounded optional dense plan operator metadata;
-- `ext/ExtReactant/reactant_splines.jl`: dense Reactant plan dispatch with
-  affine-scan fallback;
+- `src/cubic_b_spline.jl`: dense plan-operator construction helper;
+- `ext/ExtReactant/reactant_splines.jl`: dense-only Reactant plan preparation;
 - `test/test_ext_reactant.jl`: focused deterministic regression tests;
 - `test/test_cubic_b_spline_dense_operator.jl`: dense operator regression tests;
 - `benchmark/bench_dense_operator.jl`: reproducible dense operator benchmark;

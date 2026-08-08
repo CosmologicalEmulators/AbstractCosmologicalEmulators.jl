@@ -663,6 +663,11 @@ function _cubic_bspline_dense_operator(fact, stencil, nsites::Int)
         return Matrix{T}(undef, 0, 0)
     end
 
+    return _build_cubic_bspline_dense_operator(fact, stencil, nsites)
+end
+
+function _build_cubic_bspline_dense_operator(fact, stencil, nsites::Int)
+    T = eltype(fact.bands)
     identity_rhs = Matrix{T}(I, nsites, nsites)
     coefficients = solve(fact, identity_rhs)
     return _evaluate_stencil(stencil, coefficients)

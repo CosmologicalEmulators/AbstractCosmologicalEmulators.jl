@@ -6,6 +6,47 @@ const DeviceVec = Union{TracedVec,ConcreteVec}
 const DeviceMat = Union{TracedMat,ConcreteMat}
 const HostOrDeviceVec = Union{AbstractVector,DeviceVec}
 
+struct ReactantCubicBSplinePlan{O}
+    operator::O
+end
+
+const _MAX_REACTANT_BSPLINE_OPERATOR_BYTES = 64 * 1024^2
+
+function Reactant.to_rarray(
+    plan::AbstractCosmologicalEmulators.CubicBSplinePlan;
+    kwargs...,
+)
+    nsites = length(plan.sites)
+    nquery = length(plan.stencil.i1)
+    operator_bytes = nsites * nquery * sizeof(eltype(plan.factorization.bands))
+    if operator_bytes > _MAX_REACTANT_BSPLINE_OPERATOR_BYTES
+        throw(ArgumentError(
+            "Reactant CubicBSplinePlan requires a dense operator of " *
+            "$(Base.format_bytes(operator_bytes)), exceeding the 64 MiB limit.",
+        ))
+    end
+
+    operator = if isempty(plan.operator)
+        AbstractCosmologicalEmulators._build_cubic_bspline_dense_operator(
+            plan.factorization,
+            plan.stencil,
+            nsites,
+        )
+    else
+        plan.operator
+    end
+    return ReactantCubicBSplinePlan(Reactant.to_rarray(operator; kwargs...))
+end
+
+function (plan::ReactantCubicBSplinePlan)(u::DeviceVec)
+    return plan.operator * u
+end
+
+
+function (plan::ReactantCubicBSplinePlan)(u::DeviceMat)
+    return plan.operator * u
+end
+
 # Vectorized interval indices for query array.
 # Returns indices clamped to [1, n-1].
 function _interval_indices(t::HostOrDeviceVec, tq::HostOrDeviceVec)
@@ -793,21 +834,17 @@ function AbstractCosmologicalEmulators.solve(
 end
 
 function (plan::AbstractCosmologicalEmulators.CubicBSplinePlan)(u::DeviceVec)
-    if !isempty(plan.operator)
-        return plan.operator * u
-    end
-
-    c = AbstractCosmologicalEmulators.solve(plan.factorization, u)
-    return AbstractCosmologicalEmulators._evaluate_stencil(plan.stencil, c)
+    isempty(plan.operator) && throw(ArgumentError(
+        "Reactant CubicBSplinePlan requires dense preparation with Reactant.to_rarray.",
+    ))
+    return plan.operator * u
 end
 
 function (plan::AbstractCosmologicalEmulators.CubicBSplinePlan)(u::DeviceMat)
-    if !isempty(plan.operator)
-        return plan.operator * u
-    end
-
-    c = AbstractCosmologicalEmulators.solve(plan.factorization, u)
-    return AbstractCosmologicalEmulators._evaluate_stencil(plan.stencil, c)
+    isempty(plan.operator) && throw(ArgumentError(
+        "Reactant CubicBSplinePlan requires dense preparation with Reactant.to_rarray.",
+    ))
+    return plan.operator * u
 end
 
 

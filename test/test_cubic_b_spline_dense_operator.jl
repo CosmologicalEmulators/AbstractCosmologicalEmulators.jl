@@ -54,4 +54,23 @@ Reactant.set_default_backend("cpu")
     xq_large = collect(range(0.0, 511.0; length=1028))
     large_plan = CubicBSplinePlan(x_large, xq_large; extrapolation=:clamp)
     @test isempty(large_plan.operator)
+
+    # Reactant preparation must replace the old host-side scan fallback with
+    # a dense-only plan when the operator fits the Reactant memory budget.
+    x_emulator = collect(range(0.0, 39.0; length=40))
+    xq_emulator = collect(range(0.0, 39.0; length=8192))
+    emulator_plan = CubicBSplinePlan(x_emulator, xq_emulator; extrapolation=:clamp)
+    @test isempty(emulator_plan.operator)
+    emulator_plan_R = Reactant.to_rarray(emulator_plan)
+    @test size(emulator_plan_R.operator) == (8192, 40)
+
+    # 512 * 16385 * sizeof(Float64) is just over the 64 MiB Reactant limit.
+    x_oversized = collect(range(0.0, 511.0; length=512))
+    xq_oversized = collect(range(0.0, 511.0; length=16385))
+    oversized_plan = CubicBSplinePlan(
+        x_oversized,
+        xq_oversized;
+        extrapolation=:clamp,
+    )
+    @test_throws ArgumentError Reactant.to_rarray(oversized_plan)
 end
