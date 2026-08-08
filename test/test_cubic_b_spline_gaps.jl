@@ -117,14 +117,12 @@ const xq = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
     end
 
     # =====================================================
-    # E. Reactant CubicBSpline with non-uniform knots
+    # E. Reactant CubicBSpline with non-uniform sites
     # =====================================================
-    @testset "Reactant CubicBSpline with non-uniform knots" begin
-        x_nu = collect(0.0:1.0:10.0)
+    @testset "Reactant CubicBSpline with non-uniform sites" begin
+        x_nu = [0.0, 0.4, 1.1, 2.0, 3.2, 4.7, 5.5, 6.8, 8.0, 9.3, 10.0]
         u_nu = sin.(x_nu)
-        internal = collect(1.0:1.0:7.0)
-        basis = CubicBSplineBasis(domain=(0.0, 10.0), internal_knots=internal)
-        spl = CubicBSpline(u_nu, x_nu; basis=basis, extrapolation=:clamp)
+        spl = CubicBSpline(u_nu, x_nu; extrapolation=:clamp)
         xq_nu = [0.5, 2.5, 4.5, 6.5, 8.5]
         ref = spl(xq_nu)
 

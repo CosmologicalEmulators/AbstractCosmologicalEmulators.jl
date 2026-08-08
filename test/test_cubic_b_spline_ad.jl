@@ -214,34 +214,10 @@ using ChainRulesCore
     end
 
     # -----------------------------------------------------------------
-    @testset "Basis Configurations (Custom vs Default)" begin
-        # Default not-a-knot
+    @testset "Fixed not-a-knot basis" begin
         loss_default(u_in) = sum(CubicBSpline(u_in, x)(xq).^2)
         grad_zyg_def = Zygote.gradient(loss_default, u)[1]
         grad_fd_def = ForwardDiff.gradient(loss_default, u)
         @test grad_zyg_def ≈ grad_fd_def atol=1e-9
-
-        # Custom internal knots
-        t_int = [1.5, 3.5]
-        loss_custom(u_in) = sum(CubicBSpline(u_in, x, internal_knots=t_int)(xq).^2)
-        grad_zyg_cust = Zygote.gradient(loss_custom, u)[1]
-        grad_fd_cust = ForwardDiff.gradient(loss_custom, u)
-        @test grad_zyg_cust ≈ grad_fd_cust atol=1e-9
-
-        grad_mc_cust = DifferentiationInterface.gradient(
-            loss_custom, AutoMooncake(; config=Mooncake.Config()), u)
-        @test grad_mc_cust ≈ grad_fd_cust atol=1e-9
-
-        # Prebuilt Basis — use the public API
-        basis_pre = CubicBSplineBasis(domain=(0.0, 5.0), internal_knots=t_int)
-        loss_pre(u_in) = sum(abs2, CubicBSpline(u_in, x; basis=basis_pre)(xq))
-
-        grad_fd_pre = ForwardDiff.gradient(loss_pre, u)
-        grad_zyg_pre = Zygote.gradient(loss_pre, u)[1]
-        @test grad_zyg_pre ≈ grad_fd_pre atol=1e-9
-
-        grad_mc_pre = DifferentiationInterface.gradient(
-            loss_pre, AutoMooncake(; config=Mooncake.Config()), u)
-        @test grad_mc_pre ≈ grad_fd_pre atol=1e-9
     end
 end

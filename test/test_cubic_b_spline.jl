@@ -11,17 +11,13 @@ using ForwardDiff
         spline = CubicBSpline(u, x)
         @test internal_knots(spline.basis) == [2.0, 3.0]
 
-        # Explicit internal knots
-        spline2 = CubicBSpline(u, x, internal_knots=[1.5, 3.5])
-        @test internal_knots(spline2.basis) == [1.5, 3.5]
-
-        # Explicit full vector
+        # Knot placement is fixed by the interpolation sites. Custom knot and
+        # basis configuration is deliberately not part of the high-level API.
         T = [0.0, 0.0, 0.0, 0.0, 1.2, 3.8, 5.0, 5.0, 5.0, 5.0]
-        spline3 = CubicBSpline(u, x, knot_vector=T)
-        @test knot_vector(spline3.basis) == T
-
-        # Validation
-        @test_throws ArgumentError CubicBSpline(u, x, internal_knots=[2.0], knot_vector=T)
+        basis_custom = CubicBSplineBasis(knot_vector=T)
+        @test_throws MethodError CubicBSpline(u, x; internal_knots=[1.5, 3.5])
+        @test_throws MethodError CubicBSpline(u, x; knot_vector=T)
+        @test_throws MethodError CubicBSpline(u, x; basis=basis_custom)
 
         # Dimension checks
         @test_throws DimensionMismatch CubicBSpline(u[1:end-1], x)
@@ -84,6 +80,10 @@ using ForwardDiff
         spline_clamp = CubicBSpline(u, x, extrapolation=:clamp)
         @test spline_clamp(-1.0) ≈ spline_clamp(0.0)
         @test spline_clamp(4.0) ≈ spline_clamp(3.0)
+
+        spline_default = CubicBSpline(u, x)
+        @test spline_default(-1.0) ≈ spline_default(0.0)
+        @test spline_default(4.0) ≈ spline_default(3.0)
 
         spline_zero = CubicBSpline(u, x, extrapolation=:zero)
         @test spline_zero(-1.0) ≈ 0.0

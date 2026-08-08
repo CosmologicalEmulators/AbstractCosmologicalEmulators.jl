@@ -115,7 +115,10 @@ function main()
         ("vec_40_8192", query_long, values),
         ("mat_40x161_8192", query_long, values_matrix),
     )
-    interpolations = ("Akima", "Cubic", "CubicBSpline")
+    interpolations = split(
+        get(ENV, "SPLINE_BENCHMARKS", "Akima,Cubic,CubicBSpline"),
+        ',',
+    )
     results = BenchmarkResult[]
 
     for interpolation in interpolations

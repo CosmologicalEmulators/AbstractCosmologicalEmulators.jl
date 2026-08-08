@@ -13,6 +13,14 @@ using Test
         
         # Plan
         plan = CubicBSplinePlan(x, xq)
+
+        custom_basis = CubicBSplineBasis(
+            domain=(first(x), last(x)),
+            internal_knots=x[3:end-2],
+        )
+        @test_throws MethodError CubicBSplinePlan(x, xq; internal_knots=x[3:end-2])
+        @test_throws MethodError CubicBSplinePlan(x, xq; knot_vector=knot_vector(custom_basis))
+        @test_throws MethodError CubicBSplinePlan(x, xq; basis=custom_basis)
         yq_plan = plan(u)
         
         @test yq_plan ≈ yq_ref atol=1e-12
@@ -42,6 +50,9 @@ using Test
         plan_clamp = CubicBSplinePlan(x, xq, extrapolation=:clamp)
         yq_clamp = plan_clamp(u)
         @test yq_clamp ≈ [0.0^2, 3.0^2] atol=1e-12
+
+        plan_default = CubicBSplinePlan(x, xq)
+        @test plan_default(u) ≈ yq_clamp atol=1e-12
         
         # :zero
         plan_zero = CubicBSplinePlan(x, xq, extrapolation=:zero)

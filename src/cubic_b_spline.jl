@@ -480,30 +480,18 @@ end
 
 Adapt.@adapt_structure CubicBSpline
 
-function CubicBSpline(u::AbstractVecOrMat, x::AbstractVector;
-    internal_knots=nothing,
-    knot_vector=nothing,
-    basis=nothing,
-    extrapolation=:throw)
+function CubicBSpline(
+    u::AbstractVecOrMat,
+    x::AbstractVector;
+    extrapolation=:clamp,
+)
 
     _validate_bspline_sites(x)
     if size(u, 1) != length(x)
         throw(DimensionMismatch("Number of ordinates ($(size(u, 1))) does not match number of sites ($(length(x)))."))
     end
 
-    if count(!isnothing, (internal_knots, knot_vector, basis)) > 1
-        throw(ArgumentError("Only one of internal_knots, knot_vector, or basis can be provided."))
-    end
-
-    if !isnothing(basis)
-        b = basis
-    elseif !isnothing(knot_vector)
-        b = CubicBSplineBasis(knot_vector=knot_vector)
-    elseif !isnothing(internal_knots)
-        b = CubicBSplineBasis(domain=(first(x), last(x)), internal_knots=internal_knots)
-    else
-        b = CubicBSplineBasis(domain=(first(x), last(x)), internal_knots=x[3:end-2])
-    end
+    b = CubicBSplineBasis(domain=(first(x), last(x)), internal_knots=x[3:end-2])
 
     fact = CubicBSplineFactorization(b, x)
     c = solve(fact, u)
@@ -624,27 +612,15 @@ end
 
 Adapt.@adapt_structure CubicBSplinePlan
 
-function CubicBSplinePlan(x::AbstractVector, xq::AbstractVector;
-    internal_knots=nothing,
-    knot_vector=nothing,
-    basis=nothing,
-    extrapolation=:throw)
+function CubicBSplinePlan(
+    x::AbstractVector,
+    xq::AbstractVector;
+    extrapolation=:clamp,
+)
 
     _validate_bspline_sites(x)
 
-    if count(!isnothing, (internal_knots, knot_vector, basis)) > 1
-        throw(ArgumentError("Only one of internal_knots, knot_vector, or basis can be provided."))
-    end
-
-    if !isnothing(basis)
-        b = basis
-    elseif !isnothing(knot_vector)
-        b = CubicBSplineBasis(knot_vector=knot_vector)
-    elseif !isnothing(internal_knots)
-        b = CubicBSplineBasis(domain=(first(x), last(x)), internal_knots=internal_knots)
-    else
-        b = CubicBSplineBasis(domain=(first(x), last(x)), internal_knots=x[3:end-2])
-    end
+    b = CubicBSplineBasis(domain=(first(x), last(x)), internal_knots=x[3:end-2])
 
     fact = CubicBSplineFactorization(b, x)
     stencil = basis_stencil(b, xq; extrapolation=extrapolation)
