@@ -71,6 +71,7 @@ using AbstractCosmologicalEmulators
     include("test_cubic_b_spline_plan.jl")
     include("test_cubic_b_spline_ad.jl")
     include("test_cubic_b_spline_gaps.jl")
+    include("test_cubic_b_spline_dense_operator.jl")
     include("test_reference_scipy.jl")
 
     # Edge cases and additional coverage tests

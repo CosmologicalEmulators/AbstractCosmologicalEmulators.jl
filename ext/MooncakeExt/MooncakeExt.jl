@@ -25,6 +25,8 @@ using Mooncake: @from_chainrules, MinimalCtx, NoFData, NoRData
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._akima_coefficients), Any, AbstractMatrix}
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._akima_eval), AbstractMatrix, Any, AbstractMatrix, AbstractMatrix, AbstractMatrix, Any}
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._akima_eval), AbstractMatrix, Any, AbstractMatrix, AbstractMatrix, AbstractMatrix, AbstractArray}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._akima_plan_eval), AbstractVector, AbstractVector, AbstractVector, AbstractVector, Any, Any}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._akima_plan_eval), AbstractMatrix, AbstractMatrix, AbstractMatrix, AbstractMatrix, Any, Any}
 
 # High-level Akima interpolation interface
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.akima_interpolation), AbstractVector, AbstractVector, AbstractArray}
@@ -36,6 +38,16 @@ using Mooncake: @from_chainrules, MinimalCtx, NoFData, NoRData
 # Cubic spline interpolation - internal functions (matrix versions)
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_coefficients), AbstractMatrix, AbstractVector}
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_eval), AbstractMatrix, Any, Any, AbstractMatrix, AbstractArray}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_plan_eval), AbstractCosmologicalEmulators.CubicSplinePlan, AbstractVector}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_plan_eval), AbstractCosmologicalEmulators.CubicSplinePlan, AbstractMatrix}
+
+# Cubic B-spline coefficient solve and fixed-stencil evaluation
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.solve), AbstractCosmologicalEmulators.CubicBSplineFactorization, AbstractVector}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.solve), AbstractCosmologicalEmulators.CubicBSplineFactorization, AbstractMatrix}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_stencil), AbstractCosmologicalEmulators.CubicBSplineStencil, AbstractVector}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_stencil), AbstractCosmologicalEmulators.CubicBSplineStencil, AbstractMatrix}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_spline), AbstractVector, AbstractCosmologicalEmulators.CubicBSplineRow}
+@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_spline), AbstractMatrix, AbstractCosmologicalEmulators.CubicBSplineRow}
 
 # Chebyshev optimization
 Mooncake.tangent_type(::Type{P}) where {P<:FFTW.FFTWPlan} = Mooncake.NoTangent

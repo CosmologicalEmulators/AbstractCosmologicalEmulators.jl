@@ -154,7 +154,38 @@ The accepted scan remains slower than host for dynamic plans:
 - vector plan: approximately 47x host at 128 -> 1028;
 - matrix plan: approximately 7.1x host for 128 sites, 128 RHS, and 1028 queries.
 
-The next useful work is not another dense solve. It is to isolate the accepted scan and determine whether fixed plan metadata can be hoisted and whether its nine transform streams and three right-hand-side state streams can be represented with fewer compiled intermediates while preserving Enzyme support.
+The dense operator prototype has now been integrated for plans with at most
+`262_144` operator entries. Larger plans retain the affine scan. The
+dedicated dense-operator testset passes `11 / 11` tests.
+
+Plain-Julia validation now also includes:
+
+- JET optimization analysis for `CubicBSpline` and `CubicBSplinePlan`
+  construction and vector/matrix execution in `Float32` and `Float64`;
+- `@inferred` return-type checks for spline evaluation, plan evaluation, and
+  coefficient solving;
+- DifferentiationInterface gradient parity across `AutoForwardDiff`,
+  `AutoZygote`, and `AutoMooncake` for direct and plan paths with vector and
+  matrix ordinates.
+
+The focused JET and DifferentiationInterface suite passed:
+
+```text
+82 / 82 passed
+```
+
+For 128 sites and 1028 queries, the integrated dispatch measured:
+
+| Path | Median | Compile |
+|---|---:|---:|
+| dense-dispatch vector plan | 17.694 us | 19.010 s |
+| explicit dense vector multiply | 17.012 us | 1.287 s |
+| dense-dispatch matrix plan, 128 RHS | 460.777 us | 2.141 s |
+| explicit dense matrix multiply, 128 RHS | 479.043 us | 1.344 s |
+
+Runtime is substantially better than the affine scan, especially for the
+matrix plan. The vector plan dispatch still has excessive compilation cost;
+that specialization/closure overhead should be isolated next.
 
 Any next candidate must first pass direct forward parity, dynamic-input checks, and matrix Enzyme parity. Full `Pkg.test()` should run only after those focused gates are green.
 
@@ -162,8 +193,12 @@ Any next candidate must first pass direct forward parity, dynamic-input checks, 
 
 Intentional files are:
 
-- `ext/ExtReactant/reactant_splines.jl`: affine scan implementation only;
+- `src/cubic_b_spline.jl`: bounded optional dense plan operator metadata;
+- `ext/ExtReactant/reactant_splines.jl`: dense Reactant plan dispatch with
+  affine-scan fallback;
 - `test/test_ext_reactant.jl`: focused deterministic regression tests;
+- `test/test_cubic_b_spline_dense_operator.jl`: dense operator regression tests;
+- `benchmark/bench_dense_operator.jl`: reproducible dense operator benchmark;
 - `IMPLEMENTATION.md`: implementation instructions;
 - `REACTANT_BSPLINE_PERFORMANCE_REVIEW.md`: this report.
 

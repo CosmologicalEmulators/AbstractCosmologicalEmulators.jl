@@ -944,7 +944,7 @@ function CubicSplinePlan(t, t_new::AbstractVector)
     )
 end
 
-function (plan::CubicSplinePlan)(u::AbstractVector)
+function _cubic_spline_plan_eval(plan::CubicSplinePlan, u::AbstractVector)
     z = plan.second_derivative_operator * u
     idx = plan.interval_indices
     return plan.left_value_weights .* u[idx] .+
@@ -953,7 +953,7 @@ function (plan::CubicSplinePlan)(u::AbstractVector)
            plan.right_curve_weights .* z[idx .+ 1]
 end
 
-function (plan::CubicSplinePlan)(u::AbstractMatrix)
+function _cubic_spline_plan_eval(plan::CubicSplinePlan, u::AbstractMatrix)
     z = plan.second_derivative_operator * u
     idx = plan.interval_indices
     left_value_weights = reshape(plan.left_value_weights, :, 1)
@@ -965,6 +965,9 @@ function (plan::CubicSplinePlan)(u::AbstractMatrix)
            left_curve_weights .* z[idx, :] .+
            right_curve_weights .* z[idx .+ 1, :]
 end
+
+(plan::CubicSplinePlan)(u::AbstractVector) = _cubic_spline_plan_eval(plan, u)
+(plan::CubicSplinePlan)(u::AbstractMatrix) = _cubic_spline_plan_eval(plan, u)
 
 """
     cubic_spline_interpolation(u, t, t_new)

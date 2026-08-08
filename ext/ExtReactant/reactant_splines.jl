@@ -792,6 +792,24 @@ function AbstractCosmologicalEmulators.solve(
     return _solve_affine_recurrence_scan_backward(X_scaled, B3 .* B4_inv, B2 .* B4_inv, B1 .* B4_inv)
 end
 
+function (plan::AbstractCosmologicalEmulators.CubicBSplinePlan)(u::DeviceVec)
+    if !isempty(plan.operator)
+        return plan.operator * u
+    end
+
+    c = AbstractCosmologicalEmulators.solve(plan.factorization, u)
+    return AbstractCosmologicalEmulators._evaluate_stencil(plan.stencil, c)
+end
+
+function (plan::AbstractCosmologicalEmulators.CubicBSplinePlan)(u::DeviceMat)
+    if !isempty(plan.operator)
+        return plan.operator * u
+    end
+
+    c = AbstractCosmologicalEmulators.solve(plan.factorization, u)
+    return AbstractCosmologicalEmulators._evaluate_stencil(plan.stencil, c)
+end
+
 
 function AbstractCosmologicalEmulators._evaluate_stencil(
     stencil::AbstractCosmologicalEmulators.CubicBSplineStencil,

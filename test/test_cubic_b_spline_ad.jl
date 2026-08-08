@@ -44,6 +44,32 @@ using ChainRulesCore
     end
 
     # -----------------------------------------------------------------
+    @testset "DifferentiationInterface backend parity" begin
+        plan = CubicBSplinePlan(x, xq)
+        U = hcat(u, sin.(x), x .^ 2)
+        backends = (
+            AutoForwardDiff(),
+            AutoZygote(),
+            AutoMooncake(; config=Mooncake.Config()),
+        )
+
+        losses_and_inputs = (
+            (values -> sum(abs2, plan(values)), u),
+            (values -> sum(abs2, plan(values)), U),
+            (values -> sum(abs2, CubicBSpline(values, x)(xq)), u),
+            (values -> sum(abs2, CubicBSpline(values, x)(xq)), U),
+        )
+
+        for (loss, input) in losses_and_inputs
+            reference = DifferentiationInterface.gradient(loss, AutoForwardDiff(), input)
+            for backend in backends
+                result = DifferentiationInterface.gradient(loss, backend, input)
+                @test result ≈ reference atol=1e-9 rtol=1e-12
+            end
+        end
+    end
+
+    # -----------------------------------------------------------------
     @testset "ForwardDiff Query-Coordinate Derivatives" begin
         # Note: cubic B-splines with simple knots are C² at those knots;
         # double knots give C¹, triple knots give C⁰.

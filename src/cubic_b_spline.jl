@@ -605,16 +605,21 @@ function _band_solve_adjoint!(B::AbstractMatrix, x::AbstractVector)
 end
 
 """
-    CubicBSplinePlan{F, S, E}
+    CubicBSplinePlan{F, S, E, O}
 
 A prepared plan for repeated evaluation of a cubic B-spline with different sample ordinates but fixed source interpolation sites and fixed query points.
+
+For moderate plans, `operator` stores a dense linear map used by the
+Reactant extension. Larger plans store an empty matrix and use the
+banded affine-scan solve. Both branches retain the same concrete field type.
 """
-struct CubicBSplinePlan{X,B,F,S,E}
+struct CubicBSplinePlan{X,B,F,S,E,O}
     sites::X
     basis::B
     factorization::F
     stencil::S
     extrapolation::E
+    operator::O
 end
 
 Adapt.@adapt_structure CubicBSplinePlan
@@ -644,8 +649,23 @@ function CubicBSplinePlan(x::AbstractVector, xq::AbstractVector;
     fact = CubicBSplineFactorization(b, x)
     stencil = basis_stencil(b, xq; extrapolation=extrapolation)
     extrap = _get_extrapolation_policy(extrapolation)
+    operator = _cubic_bspline_dense_operator(fact, stencil, length(x))
 
-    return CubicBSplinePlan(x, b, fact, stencil, extrap)
+    return CubicBSplinePlan(x, b, fact, stencil, extrap, operator)
+end
+
+const _CUBIC_BSPLINE_DENSE_OPERATOR_MAX_ENTRIES = 262_144
+
+function _cubic_bspline_dense_operator(fact, stencil, nsites::Int)
+    nquery = length(stencil.i1)
+    T = eltype(fact.bands)
+    if nsites * nquery > _CUBIC_BSPLINE_DENSE_OPERATOR_MAX_ENTRIES
+        return Matrix{T}(undef, 0, 0)
+    end
+
+    identity_rhs = Matrix{T}(I, nsites, nsites)
+    coefficients = solve(fact, identity_rhs)
+    return _evaluate_stencil(stencil, coefficients)
 end
 
 bspline_basis(plan::CubicBSplinePlan) = plan.basis
