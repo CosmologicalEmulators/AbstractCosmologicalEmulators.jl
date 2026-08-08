@@ -23,8 +23,10 @@ const xq = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
         plan_loss(v) = sum(plan(v))
         grad_ref = ForwardDiff.gradient(plan_loss, copy(u))
 
+        planR = Reactant.to_rarray(plan)
         uR = Reactant.to_rarray(u)
-        grad_fun(v) = Enzyme.gradient(Reverse, plan_loss, v)[1]
+        reactant_loss(v) = sum(planR(v))
+        grad_fun(v) = Enzyme.gradient(Reverse, reactant_loss, v)[1]
         f = Reactant.@compile sync=true grad_fun(uR)
         gradR = f(uR)
         Reactant.synchronize(gradR)
@@ -34,23 +36,16 @@ const xq = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
     @testset "Reactant Enzyme grad through CubicBSplinePlan (matrix)" begin
         plan = CubicBSplinePlan(x, xq)
         plan_loss(M) = sum(plan(M))
-        grad_ref = ForwardDiff.gradient(m -> plan_loss(reshape(m, size(U))), vec(U))
+        grad_ref = ForwardDiff.gradient(plan_loss, copy(U))
 
+        planR = Reactant.to_rarray(plan)
         UR = Reactant.to_rarray(U)
-        loss_flat(m_flat) = sum(plan(reshape(m_flat, size(U))))
-        grad_fun(m_flat) = Enzyme.gradient(Reverse, loss_flat, m_flat)[1]
-        try
-            f = Reactant.@compile sync=true grad_fun(UR)
-            gradR = f(UR)
-            Reactant.synchronize(gradR)
-            grad_mat = reshape(Array(gradR), size(U))
-            @test grad_mat ≈ reshape(grad_ref, size(U)) atol=1e-8 rtol=1e-8
-        catch e
-            # The Reactant band-solve uses single-element slice loops that
-            # trigger scalar indexing during the Enzyme reverse pass.
-            # This is a known limitation of the current implementation.
-            @test e isa ErrorException && occursin("Scalar indexing", e.msg)
-        end
+        reactant_loss(M) = sum(planR(M))
+        grad_fun(M) = Enzyme.gradient(Reverse, reactant_loss, M)[1]
+        f = Reactant.@compile sync=true grad_fun(UR)
+        gradR = f(UR)
+        Reactant.synchronize(gradR)
+        @test Array(gradR) ≈ grad_ref atol=1e-8 rtol=1e-8
     end
 
     # =====================================================

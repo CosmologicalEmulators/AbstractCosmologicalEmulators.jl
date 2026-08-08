@@ -597,10 +597,12 @@ end
 
                     # Matrix plan Enzyme gradient test
                     plan_mat = AbstractCosmologicalEmulators.CubicBSplinePlan(t, tq)
+                    plan_mat_R = Reactant.to_rarray(plan_mat)
                     UR = Reactant.to_rarray(U)
-                    plan_loss_mat = U_ -> sum(plan_mat(U_))
-                    plan_grad_ref_mat = ForwardDiff.gradient(plan_loss_mat, copy(U))
-                    plan_grad_fun_mat = U_ -> Enzyme.gradient(Reverse, plan_loss_mat, U_)[1]
+                    plan_loss_mat_host = U_ -> sum(plan_mat(U_))
+                    plan_loss_mat_R = U_ -> sum(plan_mat_R(U_))
+                    plan_grad_ref_mat = ForwardDiff.gradient(plan_loss_mat_host, copy(U))
+                    plan_grad_fun_mat = U_ -> Enzyme.gradient(Reverse, plan_loss_mat_R, U_)[1]
                     plan_grad_compiled_mat = Reactant.@compile sync=true plan_grad_fun_mat(UR)
                     plan_grad_R_mat = plan_grad_compiled_mat(UR)
                     Reactant.synchronize(plan_grad_R_mat)
@@ -608,9 +610,11 @@ end
 
                     # Also test vector B-spline plan gradient
                     plan_vec_bs = AbstractCosmologicalEmulators.CubicBSplinePlan(t, tq)
-                    plan_loss_vec = u_ -> sum(plan_vec_bs(u_))
-                    plan_grad_ref_vec = ForwardDiff.gradient(plan_loss_vec, copy(u))
-                    plan_grad_fun_vec = u_ -> Enzyme.gradient(Reverse, plan_loss_vec, u_)[1]
+                    plan_vec_bs_R = Reactant.to_rarray(plan_vec_bs)
+                    plan_loss_vec_host = u_ -> sum(plan_vec_bs(u_))
+                    plan_loss_vec_R = u_ -> sum(plan_vec_bs_R(u_))
+                    plan_grad_ref_vec = ForwardDiff.gradient(plan_loss_vec_host, copy(u))
+                    plan_grad_fun_vec = u_ -> Enzyme.gradient(Reverse, plan_loss_vec_R, u_)[1]
                     plan_grad_compiled_vec = Reactant.@compile sync=true plan_grad_fun_vec(uR)
                     plan_grad_R_vec = plan_grad_compiled_vec(uR)
                     Reactant.synchronize(plan_grad_R_vec)

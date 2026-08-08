@@ -11,12 +11,12 @@ Reactant.set_default_backend("cpu")
     u = sin.(x) .+ 0.1 .* cos.(2 .* x)
     U = hcat(u, cos.(x), x .^ 2)
     plan = CubicBSplinePlan(x, xq; extrapolation=:clamp)
-
-    @test !isempty(plan.operator)
-    @test plan.operator * u ≈ plan(u) atol=1e-10 rtol=1e-10
-    @test plan.operator * U ≈ plan(U) atol=1e-10 rtol=1e-10
-
     plan_R = Reactant.to_rarray(plan)
+    operator = Array(plan_R.operator)
+    @test !hasproperty(plan, :operator)
+    @test operator * u ≈ plan(u) atol=1e-10 rtol=1e-10
+    @test operator * U ≈ plan(U) atol=1e-10 rtol=1e-10
+
     u_R = Reactant.to_rarray(u)
     U_R = Reactant.to_rarray(U)
 
@@ -42,25 +42,20 @@ Reactant.set_default_backend("cpu")
     @test !isapprox(Array(changed_vec), Array(result_vec))
     @test !isapprox(Array(changed_mat), Array(result_mat))
 
-    loss(values) = sum(abs2, plan(values))
-    grad(values) = Enzyme.gradient(Reverse, loss, values)[1]
-    grad_ref = ForwardDiff.gradient(loss, copy(U))
+    loss_host(values) = sum(abs2, plan(values))
+    loss_reactant(values) = sum(abs2, plan_R(values))
+    grad(values) = Enzyme.gradient(Reverse, loss_reactant, values)[1]
+    grad_ref = ForwardDiff.gradient(loss_host, copy(U))
     compiled_grad = Reactant.@compile sync=true grad(U_R)
     result_grad = compiled_grad(U_R)
     Reactant.synchronize(result_grad)
     @test Array(result_grad) ≈ grad_ref atol=1e-8 rtol=1e-8
 
-    x_large = collect(range(0.0, 511.0; length=512))
-    xq_large = collect(range(0.0, 511.0; length=1028))
-    large_plan = CubicBSplinePlan(x_large, xq_large; extrapolation=:clamp)
-    @test isempty(large_plan.operator)
-
-    # Reactant preparation must replace the old host-side scan fallback with
-    # a dense-only plan when the operator fits the Reactant memory budget.
+    # Reactant preparation constructs the dense operator only when converting
+    # the otherwise lean host plan.
     x_emulator = collect(range(0.0, 39.0; length=40))
     xq_emulator = collect(range(0.0, 39.0; length=8192))
     emulator_plan = CubicBSplinePlan(x_emulator, xq_emulator; extrapolation=:clamp)
-    @test isempty(emulator_plan.operator)
     emulator_plan_R = Reactant.to_rarray(emulator_plan)
     @test size(emulator_plan_R.operator) == (8192, 40)
 

@@ -26,15 +26,11 @@ function Reactant.to_rarray(
         ))
     end
 
-    operator = if isempty(plan.operator)
-        AbstractCosmologicalEmulators._build_cubic_bspline_dense_operator(
-            plan.factorization,
-            plan.stencil,
-            nsites,
-        )
-    else
-        plan.operator
-    end
+    operator = AbstractCosmologicalEmulators._build_cubic_bspline_dense_operator(
+        plan.factorization,
+        plan.stencil,
+        nsites,
+    )
     return ReactantCubicBSplinePlan(Reactant.to_rarray(operator; kwargs...))
 end
 
@@ -834,17 +830,15 @@ function AbstractCosmologicalEmulators.solve(
 end
 
 function (plan::AbstractCosmologicalEmulators.CubicBSplinePlan)(u::DeviceVec)
-    isempty(plan.operator) && throw(ArgumentError(
-        "Reactant CubicBSplinePlan requires dense preparation with Reactant.to_rarray.",
+    throw(ArgumentError(
+        "Reactant CubicBSplinePlan requires preparation with Reactant.to_rarray.",
     ))
-    return plan.operator * u
 end
 
 function (plan::AbstractCosmologicalEmulators.CubicBSplinePlan)(u::DeviceMat)
-    isempty(plan.operator) && throw(ArgumentError(
-        "Reactant CubicBSplinePlan requires dense preparation with Reactant.to_rarray.",
+    throw(ArgumentError(
+        "Reactant CubicBSplinePlan requires preparation with Reactant.to_rarray.",
     ))
-    return plan.operator * u
 end
 
 
