@@ -145,6 +145,7 @@ using ChainRulesCore
         @test tangents_sv[1] isa NoTangent           # function slot
         @test tangents_sv[2] isa NoTangent           # stencil (structural)
         @test tangents_sv[3] isa ZeroTangent         # coefficients
+        @test pb_stencil_vec(NoTangent())[3] isa ZeroTangent
 
         # --- _evaluate_stencil: matrix ---
         U3 = hcat(u, x.^2, sin.(x))
@@ -155,6 +156,7 @@ using ChainRulesCore
         @test tangents_sm[1] isa NoTangent
         @test tangents_sm[2] isa NoTangent
         @test tangents_sm[3] isa ZeroTangent
+        @test pb_stencil_mat(NoTangent())[3] isa ZeroTangent
 
         # --- solve ---
         _, pb_solve = ChainRulesCore.rrule(
@@ -163,6 +165,7 @@ using ChainRulesCore
         @test tangents_solv[1] isa NoTangent         # function slot
         @test tangents_solv[2] isa NoTangent         # factorization (structural)
         @test tangents_solv[3] isa ZeroTangent       # ordinates
+        @test pb_solve(NoTangent())[3] isa ZeroTangent
 
         # --- _evaluate_spline: vector ---
         row = basis_row(basis, 2.5)
@@ -172,6 +175,7 @@ using ChainRulesCore
         @test tangents_ev[1] isa NoTangent
         @test tangents_ev[2] isa ZeroTangent         # coefficients
         @test tangents_ev[3] isa NoTangent           # row (structural)
+        @test pb_eval_vec(NoTangent())[2] isa ZeroTangent
 
         # --- _evaluate_spline: matrix ---
         _, pb_eval_mat = ChainRulesCore.rrule(
@@ -180,6 +184,7 @@ using ChainRulesCore
         @test tangents_em[1] isa NoTangent
         @test tangents_em[2] isa ZeroTangent
         @test tangents_em[3] isa NoTangent
+        @test pb_eval_mat(NoTangent())[2] isa ZeroTangent
     end
 
     # -----------------------------------------------------------------
@@ -211,6 +216,164 @@ using ChainRulesCore
         grad_mooncake_mat = DifferentiationInterface.gradient(
             f_mat_nonlin, AutoMooncake(; config=Mooncake.Config()), U3)
         @test grad_mooncake_mat ≈ grad_fd_mat atol=1e-9 rtol=1e-12
+    end
+
+    @testset "Complete reverse geometry derivatives" begin
+        sites = Float64[0.0, 0.3, 0.9, 1.8, 3.0, 4.7, 6.0]
+        values = @. sin(0.8sites) + 0.2cos(1.3sites)
+        values_matrix = hcat(values, @. cos(0.4sites) - 0.1sin(sites))
+        query = [0.45, 1.25, 2.6, 5.2]
+        mooncake = AutoMooncake(; config=Mooncake.Config())
+
+        check_reverse(loss, input; atol=1e-9, rtol=1e-9) = begin
+            reference = ForwardDiff.gradient(loss, input)
+            zygote = only(Zygote.gradient(loss, input))
+            mooncake_gradient = DifferentiationInterface.gradient(
+                loss,
+                mooncake,
+                input,
+            )
+            @test zygote ≈ reference atol=atol rtol=rtol
+            @test mooncake_gradient ≈ reference atol=atol rtol=rtol
+        end
+
+        for ordinates in (values, values_matrix)
+            one_shot_u(v) = sum(abs2, cubic_b_spline_interpolation(v, sites, query))
+            one_shot_t(t) = sum(abs2, cubic_b_spline_interpolation(ordinates, t, query))
+            one_shot_q(q) = sum(abs2, cubic_b_spline_interpolation(ordinates, sites, q))
+            check_reverse(one_shot_u, ordinates)
+            check_reverse(one_shot_t, sites)
+            check_reverse(one_shot_q, query)
+
+            prepared_t(t) = sum(abs2, CubicBSpline(ordinates, t)(query))
+            prepared_q(q) = sum(abs2, CubicBSpline(ordinates, sites)(q))
+            check_reverse(prepared_t, sites)
+            check_reverse(prepared_q, query)
+
+            plan_t(t) = sum(abs2, CubicBSplinePlan(t, query)(ordinates))
+            plan_q(q) = sum(abs2, CubicBSplinePlan(sites, q)(ordinates))
+            check_reverse(plan_t, sites)
+            check_reverse(plan_q, query)
+        end
+
+        for ordinates in (values, values_matrix)
+            scalar_loss(q) = sum(abs2, CubicBSpline(ordinates, sites)(q))
+            scalar_reference = ForwardDiff.derivative(scalar_loss, 2.35)
+            @test only(Zygote.gradient(scalar_loss, 2.35)) ≈ scalar_reference atol=1e-9 rtol=1e-9
+            @test DifferentiationInterface.derivative(
+                scalar_loss,
+                mooncake,
+                2.35,
+            ) ≈ scalar_reference atol=1e-9 rtol=1e-9
+        end
+
+        outside_query = [-0.4, 0.6, 6.7]
+        for policy in (:clamp, :zero), ordinates in (values, values_matrix)
+            policy_t(t) = sum(abs2, cubic_b_spline_interpolation(
+                ordinates,
+                t,
+                outside_query;
+                extrapolation=policy,
+            ))
+            policy_q(q) = sum(abs2, cubic_b_spline_interpolation(
+                ordinates,
+                sites,
+                q;
+                extrapolation=policy,
+            ))
+            check_reverse(policy_t, sites)
+            check_reverse(policy_q, outside_query)
+        end
+
+        throw_t(t) = sum(abs2, cubic_b_spline_interpolation(
+            values,
+            t,
+            query;
+            extrapolation=:throw,
+        ))
+        throw_q(q) = sum(abs2, cubic_b_spline_interpolation(
+            values,
+            sites,
+            q;
+            extrapolation=:throw,
+        ))
+        check_reverse(throw_t, sites)
+        check_reverse(throw_q, query)
+
+        sites32 = collect(Float32, range(0.0, 6.0; length=7))
+        values32 = @. sin(0.8f0 * sites32) + 0.2f0 * cos(1.3f0 * sites32)
+        query32 = Float32[0.45, 1.25, 2.6, 5.2]
+        loss_t32(t) = sum(abs2, CubicBSpline(values32, t)(query32))
+        loss_q32(q) = sum(abs2, CubicBSpline(values32, sites32)(q))
+        check_reverse(loss_t32, sites32; atol=2e-4, rtol=2e-4)
+        check_reverse(loss_q32, query32; atol=2e-4, rtol=2e-4)
+    end
+
+    @testset "Plan helper geometry derivatives" begin
+        sites = Float64[0.0, 0.3, 0.9, 1.8, 3.0, 4.7, 6.0]
+        values = @. sin(0.8sites) + 0.2cos(1.3sites)
+        values_matrix = hcat(values, @. cos(0.4sites) - 0.1sin(sites))
+        query = [0.45, 1.25, 2.6, 5.2]
+        mooncake = AutoMooncake(; config=Mooncake.Config())
+
+        coefficient_loss_vector(t) = sum(abs2, bspline_coefficients(
+            CubicBSplinePlan(t, query),
+            values,
+        ))
+        coefficient_loss_matrix(t) = sum(abs2, bspline_coefficients(
+            CubicBSplinePlan(t, query),
+            values_matrix,
+        ))
+        basis_loss(t) = sum(abs2, knot_vector(
+            bspline_basis(CubicBSplinePlan(t, query)),
+        ))
+        stencil_loss(t) = begin
+            stencil = CubicBSplinePlan(t, query).stencil
+            return sum(abs2, stencil.w1) + sum(abs2, stencil.w2) +
+                   sum(abs2, stencil.w3) + sum(abs2, stencil.w4)
+        end
+
+        for loss in (
+            coefficient_loss_vector,
+            coefficient_loss_matrix,
+            basis_loss,
+            stencil_loss,
+        )
+            reference = ForwardDiff.gradient(loss, sites)
+            zygote = only(Zygote.gradient(loss, sites))
+            mooncake_gradient = DifferentiationInterface.gradient(
+                loss,
+                mooncake,
+                sites,
+            )
+            @test zygote ≈ reference atol=1e-9 rtol=1e-9
+            @test mooncake_gradient ≈ reference atol=1e-9 rtol=1e-9
+        end
+
+        plan = CubicBSplinePlan(sites, query)
+        for ordinates in (values, values_matrix)
+            coefficient_u_loss(u) = sum(abs2, bspline_coefficients(plan, u))
+            reference = ForwardDiff.gradient(coefficient_u_loss, ordinates)
+            @test only(Zygote.gradient(coefficient_u_loss, ordinates)) ≈
+                  reference atol=1e-9 rtol=1e-9
+            @test DifferentiationInterface.gradient(
+                coefficient_u_loss,
+                mooncake,
+                ordinates,
+            ) ≈ reference atol=1e-9 rtol=1e-9
+        end
+
+        _, coefficients_pullback = ChainRulesCore.rrule(
+            bspline_coefficients,
+            plan,
+            values,
+        )
+        for zero_cotangent in (ZeroTangent(), NoTangent())
+            tangents = coefficients_pullback(zero_cotangent)
+            @test tangents[1] isa NoTangent
+            @test tangents[2] isa ZeroTangent
+            @test tangents[3] isa ZeroTangent
+        end
     end
 
     # -----------------------------------------------------------------

@@ -1,11 +1,75 @@
 using Test
 using Enzyme
 using ForwardDiff
+using LinearAlgebra
 using Reactant
 
 Reactant.set_default_backend("cpu")
 
 @testset "Reactant cubic B-spline dense plan operator" begin
+    @testset "Adjoint operator construction" begin
+        cases = (
+            (
+                Float64[0.0, 0.2, 0.7, 1.4, 2.5, 4.0, 6.0],
+                collect(range(0.0, 6.0; length=23)),
+                1e-12,
+            ),
+            (
+                Float32[0.0, 0.2, 0.7, 1.4, 2.5, 4.0, 6.0],
+                collect(range(0.0, 6.0; length=23)),
+                1e-5,
+            ),
+            (
+                Float64[0.0, 0.2, 0.7, 1.4, 2.5, 4.0, 6.0],
+                Float64[0.3, 2.1, 5.4],
+                1e-12,
+            ),
+            (
+                Float32[0.0, 0.2, 0.7, 1.4, 2.5, 4.0, 6.0],
+                Float64[0.3, 2.1, 5.4],
+                1e-6,
+            ),
+        )
+
+        for (sites, query, tolerance) in cases
+            plan = CubicBSplinePlan(sites, query)
+            nsites = length(sites)
+            old_operator = AbstractCosmologicalEmulators._evaluate_stencil(
+                plan.stencil,
+                AbstractCosmologicalEmulators.solve(
+                    plan.factorization,
+                    Matrix{eltype(plan.factorization.bands)}(I, nsites, nsites),
+                ),
+            )
+            new_operator =
+                AbstractCosmologicalEmulators._build_cubic_bspline_dense_operator(
+                    plan.factorization,
+                    plan.stencil,
+                    nsites,
+                )
+
+            @test new_operator ≈ old_operator atol=tolerance rtol=tolerance
+            @test eltype(new_operator) == promote_type(
+                eltype(plan.factorization.bands),
+                eltype(plan.stencil.w1),
+            )
+        end
+
+        skewed_sites = collect(range(0.0, 1.0; length=2000))
+        skewed_plan = CubicBSplinePlan(skewed_sites, [0.5])
+        AbstractCosmologicalEmulators._build_cubic_bspline_dense_operator(
+            skewed_plan.factorization,
+            skewed_plan.stencil,
+            length(skewed_sites),
+        )
+        allocated = @allocated AbstractCosmologicalEmulators._build_cubic_bspline_dense_operator(
+            skewed_plan.factorization,
+            skewed_plan.stencil,
+            length(skewed_sites),
+        )
+        @test allocated < 1_000_000
+    end
+
     x = collect(0.0:1.0:7.0)
     xq = collect(range(0.0, 7.0; length=12))
     u = sin.(x) .+ 0.1 .* cos.(2 .* x)

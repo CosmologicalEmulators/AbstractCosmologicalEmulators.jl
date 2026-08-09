@@ -219,7 +219,13 @@ SUITE["cubic_b_spline"]["plan_apply_3000"] = @benchmarkable plan(u) setup = (
 
 # Compile Reactant in setup to measure pure steady-state execution time
 using Reactant
-SUITE["cubic_b_spline"]["reactant_stencil"] = @benchmarkable compiled_f(c_R) setup = (
+function synchronized_reactant_call(f, args...)
+    result = f(args...)
+    Reactant.synchronize(result)
+    return result
+end
+
+SUITE["cubic_b_spline"]["reactant_stencil"] = @benchmarkable synchronized_reactant_call(compiled_f, c_R) setup = (
     k = 0:511;
     t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
     u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));

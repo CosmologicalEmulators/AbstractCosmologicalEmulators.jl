@@ -10,6 +10,8 @@ using ForwardDiff
         # Default (not-a-knot)
         spline = CubicBSpline(u, x)
         @test internal_knots(spline.basis) == [2.0, 3.0]
+        @test cubic_b_spline_interpolation(u, x, x) ≈ spline(x)
+        @test cubic_b_spline_interpolation(u, x, 1.5) ≈ spline(1.5)
 
         # Knot placement is fixed by the interpolation sites. Custom knot and
         # basis configuration is deliberately not part of the high-level API.
@@ -67,6 +69,7 @@ using ForwardDiff
         @test size(val_mat) == (3, 2)
         @test val_mat[:, 1] ≈ xq.^2 atol=1e-12
         @test val_mat[:, 2] ≈ 2.0 .* xq atol=1e-12
+        @test cubic_b_spline_interpolation(U, x, xq) ≈ val_mat atol=1e-12
     end
 
     @testset "Extrapolation Policies" begin
@@ -84,6 +87,15 @@ using ForwardDiff
         spline_default = CubicBSpline(u, x)
         @test spline_default(-1.0) ≈ spline_default(0.0)
         @test spline_default(4.0) ≈ spline_default(3.0)
+        @test cubic_b_spline_interpolation(u, x, [-1.0, 4.0]) ≈
+              spline_clamp([-1.0, 4.0])
+
+        @test_throws ArgumentError cubic_b_spline_interpolation(
+            u,
+            x,
+            -1.0;
+            extrapolation=:throw,
+        )
 
         spline_zero = CubicBSpline(u, x, extrapolation=:zero)
         @test spline_zero(-1.0) ≈ 0.0

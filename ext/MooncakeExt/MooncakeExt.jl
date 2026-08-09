@@ -44,10 +44,259 @@ using Mooncake: @from_chainrules, MinimalCtx, NoFData, NoRData
 # Cubic B-spline coefficient solve and fixed-stencil evaluation
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.solve), AbstractCosmologicalEmulators.CubicBSplineFactorization, AbstractVector}
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.solve), AbstractCosmologicalEmulators.CubicBSplineFactorization, AbstractMatrix}
-@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_stencil), AbstractCosmologicalEmulators.CubicBSplineStencil, AbstractVector}
-@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_stencil), AbstractCosmologicalEmulators.CubicBSplineStencil, AbstractMatrix}
-@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_spline), AbstractVector, AbstractCosmologicalEmulators.CubicBSplineRow}
-@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._evaluate_spline), AbstractMatrix, AbstractCosmologicalEmulators.CubicBSplineRow}
+
+# High-level B-spline rules need to move cotangents through immutable structs
+# containing mutable array fields. Do this directly instead of asking
+# @from_chainrules to translate a structured ChainRules tangent into Mooncake
+# forward data.
+Mooncake.@is_primitive MinimalCtx Tuple{
+    typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline),
+    Union{AbstractVector,AbstractMatrix},
+    AbstractVector,
+    Any,
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline)},
+    u_dual::Mooncake.CoDual{<:Union{AbstractVector,AbstractMatrix}},
+    sites_dual::Mooncake.CoDual{<:AbstractVector},
+    extrap_dual::Mooncake.CoDual,
+)
+    spline = AbstractCosmologicalEmulators._construct_cubic_b_spline(
+        Mooncake.primal(u_dual),
+        Mooncake.primal(sites_dual),
+        Mooncake.primal(extrap_dual),
+    )
+    spline_dual = Mooncake.zero_fcodual(spline)
+    spline_data = Mooncake.tangent(spline_dual).data
+
+    function construct_pullback(::Mooncake.NoRData)
+        c_bar = spline_data.coefficients
+        u_bar, sites_bar, knot_bar =
+            AbstractCosmologicalEmulators._collocation_geometry_vjp(spline, c_bar)
+        sites_bar .+= spline_data.sites
+        knot_bar .+= spline_data.basis.data.knot_vector
+        AbstractCosmologicalEmulators._map_not_a_knot_bar!(sites_bar, knot_bar)
+        Mooncake.tangent(u_dual) .+= u_bar
+        Mooncake.tangent(sites_dual) .+= sites_bar
+        return Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData()
+    end
+    return spline_dual, construct_pullback
+end
+
+Mooncake.@is_primitive MinimalCtx Tuple{
+    typeof(AbstractCosmologicalEmulators._evaluate_cubic_b_spline),
+    AbstractCosmologicalEmulators.CubicBSpline,
+    AbstractVector,
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._evaluate_cubic_b_spline)},
+    spline_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSpline},
+    query_dual::Mooncake.CoDual{<:AbstractVector},
+)
+    spline = Mooncake.primal(spline_dual)
+    query = Mooncake.primal(query_dual)
+    output_dual = Mooncake.zero_fcodual(
+        AbstractCosmologicalEmulators._evaluate_cubic_b_spline(spline, query),
+    )
+    output_bar = Mooncake.tangent(output_dual)
+    spline_data = Mooncake.tangent(spline_dual).data
+
+    function evaluate_pullback(::Mooncake.NoRData)
+        c_bar, sites_bar, knot_bar, query_bar =
+            AbstractCosmologicalEmulators._evaluation_geometry_vjp(
+                spline,
+                query,
+                output_bar,
+            )
+        spline_data.coefficients .+= c_bar
+        spline_data.sites .+= sites_bar
+        spline_data.basis.data.knot_vector .+= knot_bar
+        Mooncake.tangent(query_dual) .+= query_bar
+        return Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData()
+    end
+    return output_dual, evaluate_pullback
+end
+
+Mooncake.@is_primitive MinimalCtx Tuple{
+    typeof(AbstractCosmologicalEmulators._evaluate_cubic_b_spline),
+    AbstractCosmologicalEmulators.CubicBSpline,
+    Real,
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._evaluate_cubic_b_spline)},
+    spline_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSpline{X,B,C,E}},
+    query_dual::Mooncake.CoDual{<:Real},
+) where {X,B,C<:AbstractVector,E}
+    spline = Mooncake.primal(spline_dual)
+    query = Mooncake.primal(query_dual)
+    output = AbstractCosmologicalEmulators._evaluate_cubic_b_spline(spline, query)
+
+    function evaluate_pullback(output_bar)
+        c_bar, sites_bar, knot_bar, query_bar =
+            AbstractCosmologicalEmulators._evaluation_geometry_vjp(
+                spline,
+                [query],
+                [output_bar],
+            )
+        spline_data = Mooncake.tangent(spline_dual).data
+        spline_data.coefficients .+= c_bar
+        spline_data.sites .+= sites_bar
+        spline_data.basis.data.knot_vector .+= knot_bar
+        return Mooncake.NoRData(), Mooncake.NoRData(), only(query_bar)
+    end
+    return Mooncake.zero_fcodual(output), evaluate_pullback
+end
+
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._evaluate_cubic_b_spline)},
+    spline_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSpline{X,B,C,E}},
+    query_dual::Mooncake.CoDual{<:Real},
+) where {X,B,C<:AbstractMatrix,E}
+    spline = Mooncake.primal(spline_dual)
+    query = Mooncake.primal(query_dual)
+    output_dual = Mooncake.zero_fcodual(
+        AbstractCosmologicalEmulators._evaluate_cubic_b_spline(spline, query),
+    )
+    output_bar = Mooncake.tangent(output_dual)
+
+    function evaluate_pullback(::Mooncake.NoRData)
+        c_bar, sites_bar, knot_bar, query_bar =
+            AbstractCosmologicalEmulators._evaluation_geometry_vjp(
+                spline,
+                [query],
+                reshape(output_bar, 1, :),
+            )
+        spline_data = Mooncake.tangent(spline_dual).data
+        spline_data.coefficients .+= c_bar
+        spline_data.sites .+= sites_bar
+        spline_data.basis.data.knot_vector .+= knot_bar
+        return Mooncake.NoRData(), Mooncake.NoRData(), only(query_bar)
+    end
+    return output_dual, evaluate_pullback
+end
+
+Mooncake.@is_primitive MinimalCtx Tuple{
+    typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline_plan),
+    AbstractVector,
+    AbstractVector,
+    Any,
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline_plan)},
+    sites_dual::Mooncake.CoDual{<:AbstractVector},
+    query_dual::Mooncake.CoDual{<:AbstractVector},
+    extrap_dual::Mooncake.CoDual,
+)
+    plan = AbstractCosmologicalEmulators._construct_cubic_b_spline_plan(
+        Mooncake.primal(sites_dual),
+        Mooncake.primal(query_dual),
+        Mooncake.primal(extrap_dual),
+    )
+    plan_dual = Mooncake.zero_fcodual(plan)
+    plan_data = Mooncake.tangent(plan_dual).data
+    function construct_plan_pullback(::Mooncake.NoRData)
+        sites_bar = copy(plan_data.sites)
+        knot_bar = copy(plan_data.basis.data.knot_vector)
+        stencil_knot_bar, stencil_query_bar =
+            AbstractCosmologicalEmulators._stencil_geometry_vjp(
+                plan.basis,
+                plan.stencil.query,
+                plan.extrapolation,
+                plan_data.stencil.data.w1,
+                plan_data.stencil.data.w2,
+                plan_data.stencil.data.w3,
+                plan_data.stencil.data.w4,
+            )
+        knot_bar .+= stencil_knot_bar
+        AbstractCosmologicalEmulators._map_not_a_knot_bar!(sites_bar, knot_bar)
+        Mooncake.tangent(sites_dual) .+= sites_bar
+        Mooncake.tangent(query_dual) .+=
+            plan_data.stencil.data.query .+ stencil_query_bar
+        return Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData()
+    end
+    return plan_dual, construct_plan_pullback
+end
+
+Mooncake.@is_primitive MinimalCtx Tuple{
+    typeof(AbstractCosmologicalEmulators.bspline_coefficients),
+    AbstractCosmologicalEmulators.CubicBSplinePlan,
+    Union{AbstractVector,AbstractMatrix},
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators.bspline_coefficients)},
+    plan_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSplinePlan},
+    u_dual::Mooncake.CoDual{<:Union{AbstractVector,AbstractMatrix}},
+)
+    plan = Mooncake.primal(plan_dual)
+    u = Mooncake.primal(u_dual)
+    coefficients = AbstractCosmologicalEmulators.bspline_coefficients(plan, u)
+    coefficients_dual = Mooncake.zero_fcodual(coefficients)
+    coefficients_bar = Mooncake.tangent(coefficients_dual)
+    plan_data = Mooncake.tangent(plan_dual).data
+
+    function coefficients_pullback(::Mooncake.NoRData)
+        spline = AbstractCosmologicalEmulators.CubicBSpline(
+            plan.sites,
+            plan.basis,
+            coefficients,
+            plan.extrapolation,
+        )
+        u_bar, sites_bar, knot_bar =
+            AbstractCosmologicalEmulators._collocation_geometry_vjp(
+                spline,
+                coefficients_bar,
+            )
+        AbstractCosmologicalEmulators._map_not_a_knot_bar!(sites_bar, knot_bar)
+        plan_data.sites .+= sites_bar
+        Mooncake.tangent(u_dual) .+= u_bar
+        return Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData()
+    end
+    return coefficients_dual, coefficients_pullback
+end
+
+Mooncake.@is_primitive MinimalCtx Tuple{
+    typeof(AbstractCosmologicalEmulators._apply_cubic_b_spline_plan),
+    AbstractCosmologicalEmulators.CubicBSplinePlan,
+    Union{AbstractVector,AbstractMatrix},
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._apply_cubic_b_spline_plan)},
+    plan_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSplinePlan},
+    u_dual::Mooncake.CoDual{<:Union{AbstractVector,AbstractMatrix}},
+)
+    plan = Mooncake.primal(plan_dual)
+    u = Mooncake.primal(u_dual)
+    output_dual = Mooncake.zero_fcodual(
+        AbstractCosmologicalEmulators._apply_cubic_b_spline_plan(plan, u),
+    )
+    output_bar = Mooncake.tangent(output_dual)
+    plan_data = Mooncake.tangent(plan_dual).data
+    function apply_plan_pullback(::Mooncake.NoRData)
+        c = AbstractCosmologicalEmulators.bspline_coefficients(plan, u)
+        spline = AbstractCosmologicalEmulators.CubicBSpline(
+            plan.sites,
+            plan.basis,
+            c,
+            plan.extrapolation,
+        )
+        c_bar, sites_bar, knot_bar, query_bar =
+            AbstractCosmologicalEmulators._evaluation_geometry_vjp(
+                spline,
+                plan.stencil.query,
+                output_bar,
+            )
+        u_bar, collocation_sites_bar, collocation_knot_bar =
+            AbstractCosmologicalEmulators._collocation_geometry_vjp(spline, c_bar)
+        sites_bar .+= collocation_sites_bar
+        knot_bar .+= collocation_knot_bar
+        AbstractCosmologicalEmulators._map_not_a_knot_bar!(sites_bar, knot_bar)
+        plan_data.sites .+= sites_bar
+        plan_data.stencil.data.query .+= query_bar
+        Mooncake.tangent(u_dual) .+= u_bar
+        return Mooncake.NoRData(), Mooncake.NoRData(), Mooncake.NoRData()
+    end
+    return output_dual, apply_plan_pullback
+end
 
 # Chebyshev optimization
 Mooncake.tangent_type(::Type{P}) where {P<:FFTW.FFTWPlan} = Mooncake.NoTangent

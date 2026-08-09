@@ -57,7 +57,8 @@ end
     CubicBSplineBasis(; domain, internal_knots=nothing, knot_vector=nothing)
 
 Construct a `CubicBSplineBasis` from either a full `knot_vector`, or a `domain` `(xmin, xmax)` and optional `internal_knots`.
-If `internal_knots` is omitted, the domain endpoints form a simple not-a-knot configuration (multiplicity 4).
+If `internal_knots` is omitted, the result is an endpoint-clamped cubic
+polynomial basis with four basis functions.
 """
 function CubicBSplineBasis(; domain=nothing, internal_knots=nothing, knot_vector=nothing)
     if !isnothing(knot_vector)
@@ -480,12 +481,39 @@ end
 
 Adapt.@adapt_structure CubicBSpline
 
+"""
+    CubicBSpline(u, x; extrapolation=:clamp)
+
+Construct a not-a-knot cubic B-spline through ordinates `u` at interpolation
+sites `x`. The sites must be a finite, strictly increasing vector with at least
+four entries. For matrix `u`, `size(u, 1) == length(x)` and each column is an
+independent series.
+
+Calling the result with a scalar query returns a scalar for vector ordinates or
+a series vector for matrix ordinates. A vector query returns a vector or an
+`nquery × nseries` matrix. Extrapolation policies are `:clamp`, `:throw`, and
+`:zero`.
+
+ForwardDiff, Zygote, and Mooncake support derivatives through ordinates, sites,
+and query coordinates on plain Julia arrays.
+
+In compiled Reactant evaluation, dynamic `extrapolation=:throw` is unsupported
+because XLA cannot lower data-dependent exceptions. Use `:clamp` or `:zero` for
+dynamic device queries.
+"""
 function CubicBSpline(
     u::AbstractVecOrMat,
     x::AbstractVector;
     extrapolation=:clamp,
 )
+    return _construct_cubic_b_spline(
+        u,
+        x,
+        _get_extrapolation_policy(extrapolation),
+    )
+end
 
+function _construct_cubic_b_spline(u::AbstractVecOrMat, x::AbstractVector, extrap)
     _validate_bspline_sites(x)
     if size(u, 1) != length(x)
         throw(DimensionMismatch("Number of ordinates ($(size(u, 1))) does not match number of sites ($(length(x)))."))
@@ -496,8 +524,32 @@ function CubicBSpline(
     fact = CubicBSplineFactorization(b, x)
     c = solve(fact, u)
 
-    extrap = _get_extrapolation_policy(extrapolation)
     return CubicBSpline(x, b, c, extrap)
+end
+
+"""
+    cubic_b_spline_interpolation(u, t, t_new; extrapolation=:clamp)
+
+Interpolate vector or matrix ordinates `u` from sites `t` onto `t_new` using
+the not-a-knot cubic B-spline derived from `t`.
+
+Sites must be finite, strictly increasing, and contain at least four entries.
+For matrix ordinates, each column is an independent series. A scalar query
+returns a scalar or series vector; a vector query returns a vector or an
+`nquery × nseries` matrix. Extrapolation policies are `:clamp`, `:throw`, and
+`:zero`.
+
+Plain Julia supports differentiation with respect to ordinates, sites, and
+queries. Under Reactant, fixed host sites with dynamic device ordinates and
+queries are supported; fully dynamic device sites are not currently supported.
+"""
+function cubic_b_spline_interpolation(
+    u::AbstractVecOrMat,
+    t::AbstractVector,
+    t_new;
+    extrapolation=:clamp,
+)
+    return CubicBSpline(u, t; extrapolation=extrapolation)(t_new)
 end
 
 """
@@ -505,6 +557,11 @@ end
     bspline_coefficients(plan::CubicBSplinePlan, u)
 
 Return the computed B-spline coefficients for the spline, or solve for them using the precomputed `plan` and input data `u`.
+
+For a `CubicBSplinePlan`, reverse-mode AD propagates through both ordinates and
+source sites using the implicit adjoint of the collocation solve. The stored LU
+factorization is an implementation detail; differentiate this helper rather
+than accessing `plan.factorization` directly.
 """
 bspline_coefficients(spline::CubicBSpline) = spline.coefficients
 
@@ -515,12 +572,14 @@ Return the underlying `CubicBSplineBasis` of the given spline.
 """
 bspline_basis(spline::CubicBSpline) = spline.basis
 
-function (spline::CubicBSpline)(xq::Real)
+function _evaluate_cubic_b_spline(spline::CubicBSpline, xq::Real)
     xmin, xmax = bspline_domain(spline.basis)
     x = _apply_extrapolation(spline.extrapolation, xq, xmin, xmax)
     row = basis_row(spline.basis, x)
     return _evaluate_spline(spline.coefficients, row)
 end
+
+(spline::CubicBSpline)(xq::Real) = _evaluate_cubic_b_spline(spline, xq)
 
 function _evaluate_spline(c::AbstractVector, row)
     val = zero(eltype(c)) * zero(eltype(row.values))
@@ -543,15 +602,23 @@ function _evaluate_spline(c::AbstractMatrix, row)
     return val
 end
 
-function (spline::CubicBSpline{X,B,C,E})(xq::AbstractVector) where {X,B,C<:AbstractVector,E}
+function _evaluate_cubic_b_spline(
+    spline::CubicBSpline{X,B,C,E},
+    xq::AbstractVector,
+) where {X,B,C<:AbstractVector,E}
     stencil = _basis_stencil(spline.basis, xq, spline.extrapolation)
     return _evaluate_stencil(stencil, spline.coefficients)
 end
 
-function (spline::CubicBSpline{X,B,C,E})(xq::AbstractVector) where {X,B,C<:AbstractMatrix,E}
+function _evaluate_cubic_b_spline(
+    spline::CubicBSpline{X,B,C,E},
+    xq::AbstractVector,
+) where {X,B,C<:AbstractMatrix,E}
     stencil = _basis_stencil(spline.basis, xq, spline.extrapolation)
     return _evaluate_stencil(stencil, spline.coefficients)
 end
+
+(spline::CubicBSpline)(xq::AbstractVector) = _evaluate_cubic_b_spline(spline, xq)
 
 function solve_adjoint(fact::CubicBSplineFactorization, c_bar::AbstractVector)
     b_bar = similar(c_bar, promote_type(eltype(fact.bands), eltype(c_bar)))
@@ -608,39 +675,97 @@ end
 
 Adapt.@adapt_structure CubicBSplinePlan
 
+"""
+    CubicBSplinePlan(x, xq; extrapolation=:clamp)
+
+Prepare a not-a-knot cubic B-spline plan for fixed source sites `x` and fixed
+query points `xq`, with changing vector or matrix ordinates. Each matrix column
+is treated as an independent series.
+
+Sites must be finite, strictly increasing, and contain at least four entries.
+Applying the plan to a vector returns a query vector. Applying it to an
+`nsites × nseries` matrix returns an `nquery × nseries` matrix. Reverse-mode AD
+supports ordinates, sites, and fixed query coordinates.
+
+The exported `plan(u)`, `bspline_coefficients(plan, u)`, and
+`bspline_basis(plan)` operations compose through plan construction. Raw LU
+factorization storage is structural and is not a differentiable public input.
+
+Plain Julia stores a band factorization and four-entry query stencil. Preparing
+the plan with `Reactant.to_rarray` constructs a dense fixed interpolation
+operator, limited to 64 MiB, so compiled execution and its Enzyme pullback are
+matrix multiplication and transpose multiplication.
+
+Dynamic compiled Reactant evaluation cannot use `extrapolation=:throw`; use
+`:clamp` or `:zero`. A fixed plan may use `:throw` because `xq` is validated on
+the host during plan construction.
+"""
 function CubicBSplinePlan(
     x::AbstractVector,
     xq::AbstractVector;
     extrapolation=:clamp,
 )
+    return _construct_cubic_b_spline_plan(
+        x,
+        xq,
+        _get_extrapolation_policy(extrapolation),
+    )
+end
 
+function _construct_cubic_b_spline_plan(
+    x::AbstractVector,
+    xq::AbstractVector,
+    extrap,
+)
     _validate_bspline_sites(x)
 
     b = CubicBSplineBasis(domain=(first(x), last(x)), internal_knots=x[3:end-2])
 
     fact = CubicBSplineFactorization(b, x)
-    stencil = basis_stencil(b, xq; extrapolation=extrapolation)
-    extrap = _get_extrapolation_policy(extrapolation)
+    stencil = _basis_stencil(b, xq, extrap)
 
     return CubicBSplinePlan(x, b, fact, stencil, extrap)
 end
 
 function _build_cubic_bspline_dense_operator(fact, stencil, nsites::Int)
-    T = eltype(fact.bands)
-    identity_rhs = Matrix{T}(I, nsites, nsites)
-    coefficients = solve(fact, identity_rhs)
-    return _evaluate_stencil(stencil, coefficients)
+    nquery = length(stencil.i1)
+    T = promote_type(eltype(fact.bands), eltype(stencil.w1))
+
+    if nquery >= nsites
+        # Solving nsites inverse columns is cheaper than solving nquery adjoint
+        # right-hand sides. In this branch, the nsites² temporary is no larger
+        # than the final nquery × nsites operator.
+        identity_rhs = Matrix{T}(I, nsites, nsites)
+        coefficients = solve(fact, identity_rhs)
+        return _evaluate_stencil(stencil, coefficients)
+    end
+
+    # For skewed nsites ≫ nquery plans, construct Sᵀ directly and solve
+    # A⁻ᵀSᵀ. This avoids an otherwise hidden nsites² temporary.
+    stencil_transpose = zeros(T, nsites, nquery)
+
+    @inbounds for i in 1:nquery
+        stencil_transpose[stencil.i1[i], i] += stencil.w1[i]
+        stencil_transpose[stencil.i2[i], i] += stencil.w2[i]
+        stencil_transpose[stencil.i3[i], i] += stencil.w3[i]
+        stencil_transpose[stencil.i4[i], i] += stencil.w4[i]
+    end
+
+    return copy(transpose(solve_adjoint(fact, stencil_transpose)))
 end
 
 bspline_basis(plan::CubicBSplinePlan) = plan.basis
 bspline_coefficients(plan::CubicBSplinePlan, u::AbstractVecOrMat) = solve(plan.factorization, u)
 
 function (plan::CubicBSplinePlan)(u::AbstractVector)
-    c = bspline_coefficients(plan, u)
-    return _evaluate_stencil(plan.stencil, c)
+    return _apply_cubic_b_spline_plan(plan, u)
 end
 
 function (plan::CubicBSplinePlan)(u::AbstractMatrix)
+    return _apply_cubic_b_spline_plan(plan, u)
+end
+
+function _apply_cubic_b_spline_plan(plan::CubicBSplinePlan, u::AbstractVecOrMat)
     c = bspline_coefficients(plan, u)
     return _evaluate_stencil(plan.stencil, c)
 end

@@ -18,7 +18,21 @@ function Reactant.to_rarray(
 )
     nsites = length(plan.sites)
     nquery = length(plan.stencil.i1)
-    operator_bytes = nsites * nquery * sizeof(eltype(plan.factorization.bands))
+    operator_type = promote_type(
+        eltype(plan.factorization.bands),
+        eltype(plan.stencil.w1),
+    )
+    operator_bytes = try
+        Base.checked_mul(
+            Base.checked_mul(nsites, nquery),
+            sizeof(operator_type),
+        )
+    catch error
+        error isa OverflowError || rethrow()
+        throw(ArgumentError(
+            "Reactant CubicBSplinePlan dense operator size overflows Int.",
+        ))
+    end
     if operator_bytes > _MAX_REACTANT_BSPLINE_OPERATOR_BYTES
         throw(ArgumentError(
             "Reactant CubicBSplinePlan requires a dense operator of " *
