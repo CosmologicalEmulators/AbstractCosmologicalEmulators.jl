@@ -53,6 +53,9 @@ end
         @test isdefined(ext, :S_of_K)
 
         include("test_background.jl")
+        include("test_neutrino_three_mass.jl")
+        include("test_neutrino_neff.jl")
+        include("test_growth_prescriptions.jl")
     else
         @warn "BackgroundCosmologyExt extension not loaded. Make sure all dependencies are available."
     end
