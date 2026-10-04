@@ -7,6 +7,17 @@ fixtures and their generators live under `test/fixtures/`.
 
 ## Review corrections (October 2026)
 
+Further evidence and regression coverage includes background preparation reuse
+at changed and zero-mass inputs, the exact documented lower redshift endpoint,
+and an integration-order/ODE-tolerance forward-versus-reverse report in
+`test/fixtures/neutrino_neff/ad_convergence.md`. Its generator uses independent
+preparations per observable/settings combination and reuses each at three points.
+In JAX, the original-state NumPy/SciPy oracle now independently checks flux
+equivalence, D/f, and complex-step mass sensitivities over six redshifts and two
+cosmologies; a separate CI-stack tolerance table records production-path errors.
+The original-equation oracle calls neither JAX nor Diffrax. No public API changes or
+speculative unchecked kernels were introduced for this review follow-up.
+
 - Restored the historical nine-argument positional cosmology constructor,
   including Dual-valued fields, with the new thermal-field defaults.
 - Growth now rejects queries outside its actual integration interval

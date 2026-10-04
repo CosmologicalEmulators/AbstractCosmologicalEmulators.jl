@@ -12,6 +12,12 @@
         end
         @test ext.D_z(138.,Ωcb,h) ≈ 1/139 atol=1e-14
         @test ext.f_z(138.,Ωcb,h) ≈ 1. atol=1e-14
+        lower_z = 1/1.01-1
+        for f in (ext.D_z,ext.f_z,ext.D_f_z)
+            result = f(lower_z,Ωcb,h)
+            @test result isa Tuple ? all(x -> all(isfinite,x),result) : all(isfinite,result)
+            @test_throws ArgumentError f(1/1.010001-1,Ωcb,h)
+        end
     end
     @testset "Frozen Gerrit scalar reference" begin
         for line in eachline(joinpath(@__DIR__,"fixtures/growth_prescriptions/jax_scalar_reference.txt"))

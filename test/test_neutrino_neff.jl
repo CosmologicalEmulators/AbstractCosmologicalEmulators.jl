@@ -101,8 +101,9 @@ import ADTypes: AutoForwardDiff, AutoMooncake
                      v -> sum(ext.f_z(z, v[1], v[2]; mν=v[3:5], Neff=v[6], neutrino_prescription=policy, reltol=1e-9, abstol=1e-11)))
             for f in funcs
                 fd, mc = AutoForwardDiff(), AutoMooncake(; config=Mooncake.Config())
-                gfd = DifferentiationInterface.gradient(f, prepare_gradient(f, fd, x), fd, x)
-                gmc = DifferentiationInterface.gradient(f, prepare_gradient(f, mc, x), mc, x)
+                pfd, pmc = prepare_gradient(f, fd, x), prepare_gradient(f, mc, x)
+                gfd = DifferentiationInterface.gradient(f, pfd, fd, x)
+                gmc = DifferentiationInterface.gradient(f, pmc, mc, x)
                 @test all(isfinite, gfd) && all(isfinite, gmc)
                 @test gmc ≈ gfd rtol=2e-6 atol=1e-10
                 @test abs(gfd[6]) > 1e-10
@@ -110,6 +111,13 @@ import ADTypes: AutoForwardDiff, AutoMooncake
                 xp[6] += 1e-3
                 xm[6] -= 1e-3
                 @test gfd[6] ≈ (f(xp)-f(xm))/2e-3 rtol=2e-3 atol=1e-8
+                for changed in ([.29,.71,.01,.025,.06,3.5], [.34,.64,0.,0.,0.,4.5])
+                    forward = DifferentiationInterface.gradient(f,pfd,fd,changed)
+                    reused = DifferentiationInterface.gradient(f,pmc,mc,changed)
+                    @test all(isfinite,reused)
+                    @test all(isapprox.(reused,forward;rtol=2e-6,atol=1e-10))
+                    @test reused != gmc
+                end
             end
         end
     end
