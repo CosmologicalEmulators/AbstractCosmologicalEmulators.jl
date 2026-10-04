@@ -1,5 +1,38 @@
 # Neff in the three-mass background and growth paths
 
+This file preserves the design and dated validation history. Sibling-directory
+paths below identify local investigation artifacts, not files required to run
+the package tests. The shipped API is documented in the README; reference text
+fixtures and their generators live under `test/fixtures/`.
+
+## Review corrections (October 2026)
+
+- Restored the historical nine-argument positional cosmology constructor,
+  including Dual-valued fields, with the new thermal-field defaults.
+- Growth now rejects queries outside its actual integration interval
+  `1/139 ≤ a ≤ 1.01` rather than relying on solver-specific out-of-range saveat
+  behavior. This does not restrict background/distance calculations.
+- Prepared Mooncake caches are tested at changed masses/Neff and at zero
+  masses, against componentwise ForwardDiff results. Both source prescriptions
+  have per-mass finite-difference checks. A zero-mass source-reduction test now
+  also covers Neff away from 3.044.
+- Vector inputs are a migration, not a promise of unchanged old vector outputs:
+  exactly three species, full radiation remainder and CLASS photon convention.
+  Scalar inputs retain the old single-species thermal approximation.
+
+JAX scalar growth was separately compared with an independent Julia solve
+using the **exact frozen JAX Akima coefficients**. Native Julia scalar tables
+are different and are not an interchangeable numerical oracle. The JAX repair
+evolves the algebraically equivalent flux `Q=a² E D′`; this avoids second
+derivatives of its C1 scalar table in RHS sensitivities. Julia's production ODE
+formulation is unchanged. The frozen-model generator and reference outputs
+are committed under `jaxace/tests/`; they establish numerical consistency,
+not physical accuracy of the historical scalar approximation/extrapolation.
+
+Historical timing/test counts below describe their original snapshots, not
+certification of later edits. In particular the original local 3198 assertions
+included two unrelated loader tests; the clean pre-review PR had 3196.
+
 ## Validated solver contract
 
 Before implementation, CAMB 2.0.4 (CosmoRec checkout `fa3f097`) and CLASS

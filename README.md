@@ -91,6 +91,15 @@ At the default `Neff = 3.044`, this path uses three Fermi–Dirac species with
 CLASS thermal convention. Scalar `mν` retains the historical single-species
 approximation and is **not** equivalent to `(mν, 0, 0)`.
 
+**Migration from older vector inputs:** vectors previously summed legacy
+species and could have arbitrary length. They now require exactly three masses,
+include the massless remainder, and use the photon density at the stated CLASS
+temperature rather than the historical scalar coefficient. Old vector outputs
+can therefore change. The scalar approximation carries approximately one third
+of standard early-time neutrino radiation; it is retained for compatibility,
+not offered as the complete three-species model. The historical nine-positional-
+argument cosmology constructor remains supported with the new field defaults.
+
 The three-mass functions and cosmology object also accept `Neff` and
 `neutrino_prescription`:
 
@@ -123,6 +132,10 @@ focused ForwardDiff/prepared-Mooncake validation uses tighter tolerances:
 D, f = background.D_f_z([0.0, 1.0, 3.0], cosmology;
     reltol=1e-9, abstol=1e-11)
 ```
+
+Growth queries must lie inside the actual integration domain
+`1/139 ≤ a=1/(1+z) ≤ 1.01`; otherwise they raise `ArgumentError`. Background
+and distance functions are not restricted to this growth-integration interval.
 
 `D_z`, `f_z`, and `D_f_z` default to the **smooth-neutrino cold+baryon growth
 approximation**, appropriate to scales well below the neutrino free-streaming

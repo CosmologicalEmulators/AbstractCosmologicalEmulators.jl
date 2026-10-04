@@ -13,6 +13,11 @@
     neutrino_prescription::Symbol = :temperature
 end
 
+# Preserve the historical positional API when adding optional thermal fields.
+function w0waCDMCosmology(ln10Aₛ, nₛ, h, ωb, ωc, ωk, mν, w0, wa)
+    return w0waCDMCosmology(; ln10Aₛ, nₛ, h, ωb, ωc, ωk, mν, w0, wa)
+end
+
 _call_interpolant(interp::Ref, y::T) where {T} = interp[](y)::T
 
 function _F(y)
@@ -388,6 +393,9 @@ _growth_rhs(::ThermalNeutrinos, species) = (du, u, p, loga) -> _growth_three_mas
 
 function _growth_solver(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature, reltol=1e-5, abstol=1e-6, species=CBGrowth())
     amin = 1 / 139
+    zs = z isa Number ? (z,) : z
+    all(zi -> isfinite(zi) && amin <= 1/(1+zi) <= 1.01, zs) ||
+        throw(ArgumentError("growth requires finite redshifts with 1/139 ≤ a=1/(1+z) ≤ 1.01"))
     loga = vcat(log.(_a_z.(z)))
 
     if issorted(loga)

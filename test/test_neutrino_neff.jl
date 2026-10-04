@@ -8,6 +8,25 @@ import ADTypes: AutoForwardDiff, AutoMooncake
     mass = (0.01, 0.02, 0.03)
     fixtures = joinpath(@__DIR__, "fixtures", "neutrino_neff")
 
+    @testset "Historical positional constructor" begin
+        positional(m) = ext.w0waCDMCosmology(3., .96, h, .0224, .12, 0., m, -1., 0.)
+        keyword(m) = ext.w0waCDMCosmology(ln10Aₛ=3., nₛ=.96, h=h, ωb=.0224, ωc=.12,
+                                        ωk=0., mν=m, w0=-1., wa=0.)
+        p, k = positional(.06), keyword(.06)
+        for name in fieldnames(typeof(p))
+            @test getproperty(p, name) == getproperty(k, name)
+        end
+        @test p.Neff == 3.044
+        @test p.neutrino_prescription === :temperature
+        for f in (ext.E_z, ext.r_z, ext.D_z)
+            @test f([0., .5, 1.], p) == f([0., .5, 1.], k)
+        end
+        gp = ForwardDiff.derivative(m -> ext.E_z(1., positional(m)), .06)
+        gk = ForwardDiff.derivative(m -> ext.E_z(1., keyword(m)), .06)
+        @test isfinite(gp) && gp != 0
+        @test gp == gk
+    end
+
     @testset "Frozen default and prescription agreement" begin
         for line in eachline(joinpath(fixtures, "pre_neff_baseline.txt"))
             startswith(line, "#") && continue

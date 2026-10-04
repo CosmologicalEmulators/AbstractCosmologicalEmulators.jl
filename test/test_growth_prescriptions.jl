@@ -3,6 +3,16 @@
     z = [0., 1., .5, 5., 3.]
     Ωcb, h = .1424/.67^2, .67
     tol = (; reltol=1e-9, abstol=1e-11)
+    @testset "Explicit integration domain" begin
+        for f in (ext.D_z,ext.f_z,ext.D_f_z)
+            for bad in (139.,1100.,-.1,-1.,NaN,Inf)
+                @test_throws ArgumentError f(bad,Ωcb,h)
+                @test_throws ArgumentError f([0.,bad],Ωcb,h)
+            end
+        end
+        @test ext.D_z(138.,Ωcb,h) ≈ 1/139 atol=1e-14
+        @test ext.f_z(138.,Ωcb,h) ≈ 1. atol=1e-14
+    end
     @testset "Frozen Gerrit scalar reference" begin
         for line in eachline(joinpath(@__DIR__,"fixtures/growth_prescriptions/jax_scalar_reference.txt"))
             startswith(line,"#") && continue
@@ -42,7 +52,22 @@
         prep = DifferentiationInterface.prepare_gradient(loss,backend,x)
         reverse = DifferentiationInterface.gradient(loss,prep,backend,x)
         @test all(isfinite,reverse)
-        @test reverse ≈ forward rtol=2e-5 atol=2e-8
+        @test all(isapprox.(reverse, forward; rtol=2e-5, atol=2e-8))
+        for changed in ([.012,.018,.045,4.2], [0.,0.,0.,3.5])
+            reused = DifferentiationInterface.gradient(loss,prep,backend,changed)
+            fresh_forward = ForwardDiff.gradient(loss,changed)
+            @test all(isfinite,reused)
+            @test all(isapprox.(reused,fresh_forward;rtol=2e-5,atol=2e-8))
+            @test reused != reverse
+        end
+        # An intermediate difference step avoids both cancellation at tiny
+        # steps and truncation at large steps (see the convergence probe).
+        for i in 1:3
+            xp,xm = copy(x),copy(x)
+            xp[i] += 1e-4; xm[i] -= 1e-4
+            finite = (loss(xp)-loss(xm))/2e-4
+            @test reverse[i] ≈ finite rtol=2e-4 atol=5e-8
+        end
         eps = 1e-4
         xp,xm = copy(x),copy(x)
         xp[4]+=eps; xm[4]-=eps
@@ -50,6 +75,15 @@
         for masses in ((0.,0.,0.),(.01,.02,.03))
             ν = ext._neutrino_background(masses,x[4],preset)
             @test ext._mass_induced_density(.5,ext._Ωγ0(h,ν),ν) >= 0
+        end
+    end
+    @testset "Massless source reduction away from the reference Neff" begin
+        for (n,policy) in ((2.,:temperature),(5.,:temperature),(5.,:radiation))
+            kw = (;mν=(0.,0.,0.),Neff=n,neutrino_prescription=policy,tol...)
+            dc,fc = ext.D_f_z(z,Ωcb,h;kw...,species=cb)
+            dm,fm = ext.D_f_z(z,Ωcb,h;kw...,species=matter)
+            @test dm ≈ dc rtol=1e-12
+            @test fm ≈ fc rtol=1e-12
         end
     end
 end
