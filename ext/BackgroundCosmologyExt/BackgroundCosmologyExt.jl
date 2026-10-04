@@ -41,6 +41,7 @@ export AbstractCosmology, w0waCDMCosmology
 export E_z, E_a
 export r_z, dM_z, dA_z, dL_z
 export D_z, f_z, D_f_z
+export CBGrowth, MatterGrowthApprox
 export S_of_K
 
 # Constants
@@ -49,6 +50,10 @@ const c_0 = 2.99792458e5  # Speed of light in km/s
 # Global interpolants for neutrino calculations - will be initialized in __init__
 const F_interpolant = Ref{AkimaSpline}()
 const dFdy_interpolant = Ref{AkimaSpline}()
+# Finer tables used only by the three-mass path (legacy tables are kept unchanged
+# so scalar-mν outputs are reproduced bit-for-bit).
+const F_three_mass_interpolant = Ref{AkimaSpline}()
+const dFdy_three_mass_interpolant = Ref{AkimaSpline}()
 
 # Include utility functions and background cosmology functionality
 include("utils.jl")
@@ -71,6 +76,12 @@ function __init__()
     dFdy_grid = [_dFdy(y) for y in y_grid_dF]
     dFdy_interpolant[] = AkimaSpline(dFdy_grid, y_grid_dF)
 
+    # Three-mass tables: max relative error vs direct quadrature ≲ 2e-7 for F (all y)
+    # and ≲ 5e-7 for dF/dy at y ≥ 1 (dF/dy → 0 as y → 0); ~75 ms extra at load.
+    y_grid_3ν = vcat(LinRange(min_y, 10.0, 2001), LinRange(10.0, 100.0, 901)[2:end],
+                     LinRange(100.0, 1000.0, 451)[2:end], exp.(LinRange(log(1000.0), log(max_y), 401))[2:end])
+    F_three_mass_interpolant[] = AkimaSpline([_F(y) for y in y_grid_3ν], y_grid_3ν)
+    dFdy_three_mass_interpolant[] = AkimaSpline([_dFdy(y) for y in y_grid_3ν], y_grid_3ν)
 end
 
 end # module BackgroundCosmologyExt
