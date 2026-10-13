@@ -22,15 +22,6 @@ using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 
-if ARGS == ["spline_plans"]
-    include("test_spline_plans.jl")
-elseif ARGS == ["bspline_scalar"]
-    include("test_cubic_b_spline_scalar_reactant.jl")
-elseif ARGS == ["bspline_affine"]
-    include("test_cubic_b_spline_affine_reactant.jl")
-elseif ARGS == ["bspline_abstract_inputs"]
-    include("test_cubic_b_spline_abstract_inputs.jl")
-else
 @testset "AbstractEmulators test" begin
     # Aqua.jl quality assurance tests
     include("test_aqua.jl")
@@ -92,5 +83,4 @@ else
 
     # Chebyshev optimization tests
     include("test_chebyshev.jl")
-end
 end
