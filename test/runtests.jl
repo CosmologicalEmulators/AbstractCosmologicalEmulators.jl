@@ -22,6 +22,10 @@ using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 
+if "require-datainterpolations-10" in ARGS
+    @test v"10" <= Base.pkgversion(DataInterpolations) < v"11"
+end
+
 @testset "AbstractEmulators test" begin
     # Aqua.jl quality assurance tests
     include("test_aqua.jl")
