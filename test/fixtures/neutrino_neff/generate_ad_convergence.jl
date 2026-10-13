@@ -15,6 +15,9 @@ function model(name,setting,policy,z)
     end
 end
 
+# E has no adjustable setting; `nothing` marks the static interpolation table.
+setting_label(setting)=setting===nothing ? "static Akima table" : @sprintf("%g",setting)
+
 function report()
     z=[1.5,.2,3.,.7]
     points=([.31,.67,0.,.02,.05,4.], [.29,.71,.01,.025,.06,3.5], [.34,.64,0.,0.,0.,4.5])
@@ -23,7 +26,7 @@ function report()
     println("| policy | observable | order/reltol | point | max absolute gap | max relative gap |")
     println("|---|---|---:|---:|---:|---:|")
     for policy in (:temperature,:radiation), name in (:E,:distance,:growth)
-        settings=name===:E ? (128,) : name===:distance ? (10,20,30,50) : (1e-7,1e-9,1e-11,1e-13)
+        settings=name===:E ? (nothing,) : name===:distance ? (10,20,30,50) : (1e-7,1e-9,1e-11,1e-13)
         for setting in settings
             f=model(name,setting,policy,z)
             fd,mc=AutoForwardDiff(),AutoMooncake(;config=Mooncake.Config())
@@ -35,11 +38,11 @@ function report()
                 delta=abs.(reverse-forward)
                 active=abs.(forward).>1e-8
                 relative=maximum(delta[active]./abs.(forward[active]))
-                @printf("| %s | %s | %g | %d | %.6e | %.6e |\n",policy,name,setting,i,maximum(delta),relative)
+                @printf("| %s | %s | %s | %d | %.6e | %.6e |\n",policy,name,setting_label(setting),i,maximum(delta),relative)
                 flush(stdout)
             end
         end
     end
-    println("\nE uses a fixed 128-node density quadrature and has no adjustable solver tolerance. Distance settings are integration orders, not ODE tolerances. Growth differences need not decrease monotonically with tolerance.")
+    println("\nE evaluates the three-mass Fermi-Dirac integral through the static Akima `F_three_mass_interpolant` table built at extension load, so it has no runtime node count or solver tolerance (the 128-node runtime quadrature belongs to the JAX kernel, not Julia). Distance settings are integration orders, not ODE tolerances. Growth differences need not decrease monotonically with tolerance.")
 end
 report()

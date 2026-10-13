@@ -4,9 +4,9 @@ Julia 1.12.6; Float64; every preparation reused at all three points, including z
 
 | policy | observable | order/reltol | point | max absolute gap | max relative gap |
 |---|---|---:|---:|---:|---:|
-| temperature | E | 128 | 1 | 5.551115e-17 | 3.464497e-16 |
-| temperature | E | 128 | 2 | 1.387779e-17 | 2.984589e-16 |
-| temperature | E | 128 | 3 | 1.776357e-15 | 4.208036e-16 |
+| temperature | E | static Akima table | 1 | 5.551115e-17 | 3.464497e-16 |
+| temperature | E | static Akima table | 2 | 1.387779e-17 | 2.984589e-16 |
+| temperature | E | static Akima table | 3 | 1.776357e-15 | 4.208036e-16 |
 | temperature | distance | 10 | 1 | 1.136868e-13 | 3.567359e-16 |
 | temperature | distance | 10 | 2 | 3.637979e-12 | 1.861611e-16 |
 | temperature | distance | 10 | 3 | 3.637979e-12 | 3.478589e-16 |
@@ -31,9 +31,9 @@ Julia 1.12.6; Float64; every preparation reused at all three points, including z
 | temperature | growth | 1e-13 | 1 | 1.471804e-10 | 4.692243e-10 |
 | temperature | growth | 1e-13 | 2 | 1.777795e-11 | 5.768267e-11 |
 | temperature | growth | 1e-13 | 3 | 6.383782e-14 | 1.008238e-13 |
-| radiation | E | 128 | 1 | 1.776357e-15 | 2.217720e-16 |
-| radiation | E | 128 | 2 | 1.776357e-15 | 2.179316e-16 |
-| radiation | E | 128 | 3 | 1.776357e-15 | 2.419931e-16 |
+| radiation | E | static Akima table | 1 | 1.776357e-15 | 2.217720e-16 |
+| radiation | E | static Akima table | 2 | 1.776357e-15 | 2.179316e-16 |
+| radiation | E | static Akima table | 3 | 1.776357e-15 | 2.419931e-16 |
 | radiation | distance | 10 | 1 | 0.000000e+00 | 0.000000e+00 |
 | radiation | distance | 10 | 2 | 7.275958e-12 | 4.893588e-16 |
 | radiation | distance | 10 | 3 | 3.637979e-12 | 3.478589e-16 |
@@ -59,4 +59,4 @@ Julia 1.12.6; Float64; every preparation reused at all three points, including z
 | radiation | growth | 1e-13 | 2 | 8.103462e-11 | 3.758626e-10 |
 | radiation | growth | 1e-13 | 3 | 2.675637e-14 | 4.225833e-14 |
 
-E uses a fixed 128-node density quadrature and has no adjustable solver tolerance. Distance settings are integration orders, not ODE tolerances. Growth differences need not decrease monotonically with tolerance.
+E evaluates the three-mass Fermi-Dirac integral through the static Akima `F_three_mass_interpolant` table built at extension load, so it has no runtime node count or solver tolerance (the 128-node runtime quadrature belongs to the JAX kernel, not Julia). Distance settings are integration orders, not ODE tolerances. Growth differences need not decrease monotonically with tolerance.
