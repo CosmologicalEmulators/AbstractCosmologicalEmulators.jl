@@ -57,11 +57,28 @@ if !isnothing(ext)
     # Create test cosmology struct
     mycosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=0.06, w0=-2.0, wa=1.0, ωk=0.0)
 
+    # Expected three-mass densities written out independently of the extension constants:
+    # three FD species (deg 1, T_ncdm = 0.71611 T_cmb, CLASS k_B) + N_ur = 3.044 - 3 (0.71611/(4/11)^(1/3))^4
+    # massless, both × Ωγ0 / a⁴. Uses the extension's three-mass F, dF/dy tables.
+    nu3_y(m, a) = m * a / (1.3806504e-23 / 1.602176487e-19 * 0.71611 * 2.7255)
+    nu3_ur = (3.044 - 3 * (0.71611 / (4 / 11)^(1 / 3))^4) * 7 / 8 * (4 / 11)^(4 / 3)
+    nu3_fd(a, m) = 15 / π^4 * 0.71611^4 * sum(mi -> ext.F_three_mass_interpolant[](nu3_y(mi, a)), m)
+    nu3_ρ(a, Ωγ0, m) = Ωγ0 / a^4 * (nu3_fd(a, m) + nu3_ur)
+    nu3_dρda(a, Ωγ0, m) = Ωγ0 * (-4 / a^5 * (nu3_fd(a, m) + nu3_ur) + 15 / π^4 * 0.71611^4 / a^4 *
+                                  sum(mi -> ext.dFdy_three_mass_interpolant[](nu3_y(mi, a)) * nu3_y(mi, a) / a, m))
+
     @testset "Background cosmology tests" begin
         @test isapprox(ext._get_y(0.0, 1.0), 0.0)
         @test isapprox(ext._dFdy(0.0), 0.0)
-        @test isapprox(ext._ΩνE2(1.0, 1e-4, 1.0) * 3, ext._ΩνE2(1.0, 1e-4, ones(3)))
-        @test isapprox(ext._dΩνE2da(1.0, 1e-4, 1.0) * 3, ext._dΩνE2da(1.0, 1e-4, ones(3)))
+        # Scalar mν (legacy): one FD species, weight (4/11)^(4/3) Neff/3, y = mν a / (kB Tν).
+        y_leg = 1.0 / (8.617342e-5 * 0.71611 * 2.7255)
+        pre_leg = 15 / π^4 * (4 / 11)^(4 / 3) * (3.044 / 3) * 1e-4
+        F_leg, dF_leg = ext.F_interpolant[](y_leg), ext.dFdy_interpolant[](y_leg)
+        @test isapprox(ext._ΩνE2(1.0, 1e-4, 1.0), pre_leg * F_leg; rtol=1e-14)
+        @test isapprox(ext._dΩνE2da(1.0, 1e-4, 1.0), pre_leg * (-4 * F_leg + dF_leg * y_leg); rtol=1e-14)
+        # Three masses: see nu3_ρ / nu3_dρda (three FD species at 0.71611 T_cmb + massless N_ur).
+        @test isapprox(ext._ΩνE2(1.0, 1e-4, ones(3)), nu3_ρ(1.0, 1e-4, (1.0, 1.0, 1.0)); rtol=1e-14)
+        @test isapprox(ext._dΩνE2da(1.0, 1e-4, ones(3)), nu3_dρda(1.0, 1e-4, (1.0, 1.0, 1.0)); rtol=1e-14)
         @test isapprox(ext._ρDE_z(0.0, -1.0, 1.0), 1.0)
         @test isapprox(E_a(1.0, Ωcb0, h), 1.0)
         @test isapprox(E_a(1.0, mycosmo), 1.0)
@@ -542,11 +559,13 @@ if !isnothing(ext)
             ΩνE2_degenerate = ext._ΩνE2(0.5, Ωγ0_test, mν_degenerate)
             @test isfinite(ΩνE2_degenerate)
             @test ΩνE2_degenerate > 0
-            @test isapprox(ΩνE2_degenerate, ext._ΩνE2(0.5, Ωγ0_test, 0.1) * 3, rtol=1e-10)
+            @test ΩνE2_degenerate == ext._ΩνE2(0.5, Ωγ0_test, (0.1, 0.1, 0.1))
+            @test isapprox(ΩνE2_degenerate, nu3_ρ(0.5, Ωγ0_test, (0.1, 0.1, 0.1)); rtol=1e-14)
 
             dΩνE2da_degenerate = ext._dΩνE2da(0.5, Ωγ0_test, mν_degenerate)
             @test isfinite(dΩνE2da_degenerate)
-            @test isapprox(dΩνE2da_degenerate, ext._dΩνE2da(0.5, Ωγ0_test, 0.1) * 3, rtol=1e-10)
+            @test dΩνE2da_degenerate == ext._dΩνE2da(0.5, Ωγ0_test, (0.1, 0.1, 0.1))
+            @test isapprox(dΩνE2da_degenerate, nu3_dρda(0.5, Ωγ0_test, (0.1, 0.1, 0.1)); rtol=1e-14)
 
             # Test with normal hierarchy approximation
             mν_normal = [0.0, 0.008, 0.05]

@@ -22,6 +22,20 @@ using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 
+# Focused runs: Pkg.test(test_args=["neutrino_three_mass"]) or ["extensions"]; no args runs everything.
+if "growth_prescriptions" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    include("test_growth_prescriptions.jl")
+elseif "neutrino_neff" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    include("test_neutrino_neff.jl")
+elseif "neutrino_three_mass" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    using .ext: w0waCDMCosmology
+    include("test_neutrino_three_mass.jl")
+elseif "extensions" in ARGS
+    include("test_extensions.jl")
+else
 @testset "AbstractEmulators test" begin
     # Aqua.jl quality assurance tests
     include("test_aqua.jl")
@@ -69,4 +83,5 @@ using AbstractCosmologicalEmulators
 
     # Chebyshev optimization tests
     include("test_chebyshev.jl")
+end
 end
