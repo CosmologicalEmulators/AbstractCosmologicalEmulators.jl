@@ -51,6 +51,10 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: ${{ matrix.version == '1.12' && matrix.os == 'ubuntu-latest' }}
+          # Older Julia releases need an older JET; never force an unsupported
+          # test dependency merely because this is a CompatHelper branch.
+          force_latest_compatible_version: ${{ matrix.version == '1.12' && 'auto' || 'false' }}
+          test_args: ${{ matrix.version == '1.12' && 'require-jet-012' || '' }}
       # Only process and upload coverage once, on the latest Julia release job
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'

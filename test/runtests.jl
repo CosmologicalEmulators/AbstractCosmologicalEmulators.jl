@@ -22,6 +22,10 @@ using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 
+if "require-jet-012" in ARGS
+    @test v"0.12" <= Base.pkgversion(JET) < v"0.13"
+end
+
 @testset "AbstractEmulators test" begin
     # Aqua.jl quality assurance tests
     include("test_aqua.jl")
