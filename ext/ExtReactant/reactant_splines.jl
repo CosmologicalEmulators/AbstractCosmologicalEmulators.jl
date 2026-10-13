@@ -6,6 +6,9 @@ const DeviceVec = Union{TracedVec,ConcreteVec}
 const DeviceMat = Union{TracedMat,ConcreteMat}
 const HostOrDeviceVec = Union{AbstractVector,DeviceVec}
 
+# Device inputs already have the representation needed by traced kernels.
+AbstractCosmologicalEmulators._bspline_dense_input(x::Union{DeviceVec,DeviceMat}) = x
+
 struct ReactantCubicBSplinePlan{O}
     operator::O
 end
@@ -654,12 +657,14 @@ function _solve_affine_recurrence_scan(
         @. nm11 = left * (m11 * l11 + m12 * l21 + m13 * l31) + left_complement * m11
         @. nm12 = left * (m11 * l12 + m12 * l22 + m13 * l32) + left_complement * m12
         @. nm13 = left * (m11 * l13 + m12 * l23 + m13 * l33) + left_complement * m13
-        @. nm21 = left * l11 + left_complement * m21
-        @. nm22 = left * l12 + left_complement * m22
-        @. nm23 = left * l13 + left_complement * m23
-        @. nm31 = left * l21 + left_complement * m31
-        @. nm32 = left * l22 + left_complement * m32
-        @. nm33 = left * l23 + left_complement * m33
+        # After the first doubling the matrices are no longer companion
+        # matrices: all three rows require the full composition product.
+        @. nm21 = left * (m21 * l11 + m22 * l21 + m23 * l31) + left_complement * m21
+        @. nm22 = left * (m21 * l12 + m22 * l22 + m23 * l32) + left_complement * m22
+        @. nm23 = left * (m21 * l13 + m22 * l23 + m23 * l33) + left_complement * m23
+        @. nm31 = left * (m31 * l11 + m32 * l21 + m33 * l31) + left_complement * m31
+        @. nm32 = left * (m31 * l12 + m32 * l22 + m33 * l32) + left_complement * m32
+        @. nm33 = left * (m31 * l13 + m32 * l23 + m33 * l33) + left_complement * m33
 
         @. nx1 = left * (m11 * lx1 + m12 * lx2 + m13 * lx3 + x1) + left_complement * x1
         @. nx2 = left * (m21 * lx1 + m22 * lx2 + m23 * lx3 + x2) + left_complement * x2
@@ -770,12 +775,12 @@ function _solve_affine_recurrence_scan_traced(
         @. nm11 = left * (m11 * l11 + m12 * l21 + m13 * l31) + (one(T) - left) * m11
         @. nm12 = left * (m11 * l12 + m12 * l22 + m13 * l32) + (one(T) - left) * m12
         @. nm13 = left * (m11 * l13 + m12 * l23 + m13 * l33) + (one(T) - left) * m13
-        @. nm21 = left * l11 + (one(T) - left) * m21
-        @. nm22 = left * l12 + (one(T) - left) * m22
-        @. nm23 = left * l13 + (one(T) - left) * m23
-        @. nm31 = left * l21 + (one(T) - left) * m31
-        @. nm32 = left * l22 + (one(T) - left) * m32
-        @. nm33 = left * l23 + (one(T) - left) * m33
+        @. nm21 = left * (m21 * l11 + m22 * l21 + m23 * l31) + (one(T) - left) * m21
+        @. nm22 = left * (m21 * l12 + m22 * l22 + m23 * l32) + (one(T) - left) * m22
+        @. nm23 = left * (m21 * l13 + m22 * l23 + m23 * l33) + (one(T) - left) * m23
+        @. nm31 = left * (m31 * l11 + m32 * l21 + m33 * l31) + (one(T) - left) * m31
+        @. nm32 = left * (m31 * l12 + m32 * l22 + m33 * l32) + (one(T) - left) * m32
+        @. nm33 = left * (m31 * l13 + m32 * l23 + m33 * l33) + (one(T) - left) * m33
 
         @. nx1 = left * (m11 * lx1 + m12 * lx2 + m13 * lx3 + x1) + (one(T) - left) * x1
         @. nx2 = left * (m21 * lx1 + m22 * lx2 + m23 * lx3 + x2) + (one(T) - left) * x2
@@ -1045,4 +1050,15 @@ function (spline::AbstractCosmologicalEmulators.CubicBSpline{X,B,C,E})(xq::Devic
     xq_eval = _apply_reactant_extrapolation(xq, T, E)
     out = _cubic_b_spline_eval(spline.coefficients, T, xq_eval)
     return _apply_reactant_zero_mask(out, xq, T, E)
+end
+
+# A traced scalar is not a Real. Reuse the vector kernel without materializing
+# its value on the host, then recover the public scalar/series-vector shape.
+function (spline::AbstractCosmologicalEmulators.CubicBSpline{X,B,C,E})(xq::Reactant.TracedRNumber) where {X, B, C<:AbstractVector, E}
+    # Reduce the singleton on-device; `only` would perform scalar indexing.
+    return sum(spline(Reactant.broadcast_to_size(xq, (1,))))
+end
+
+function (spline::AbstractCosmologicalEmulators.CubicBSpline{X,B,C,E})(xq::Reactant.TracedRNumber) where {X, B, C<:AbstractMatrix, E}
+    return vec(spline(Reactant.broadcast_to_size(xq, (1,))))
 end

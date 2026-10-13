@@ -481,6 +481,12 @@ end
 
 Adapt.@adapt_structure CubicBSpline
 
+# Materialize before the dense-array AD primitives so ordinary AD propagates
+# back through views and range endpoints. Floating dense arrays are unchanged;
+# integer inputs become floating storage rather than inactive tangent buffers.
+_bspline_dense_input(x::Array) = float(x)
+_bspline_dense_input(x::AbstractVecOrMat) = float(collect(x))
+
 """
     CubicBSpline(u, x; extrapolation=:clamp)
 
@@ -507,8 +513,8 @@ function CubicBSpline(
     extrapolation=:clamp,
 )
     return _construct_cubic_b_spline(
-        u,
-        x,
+        _bspline_dense_input(u),
+        _bspline_dense_input(x),
         _get_extrapolation_policy(extrapolation),
     )
 end
@@ -618,7 +624,7 @@ function _evaluate_cubic_b_spline(
     return _evaluate_stencil(stencil, spline.coefficients)
 end
 
-(spline::CubicBSpline)(xq::AbstractVector) = _evaluate_cubic_b_spline(spline, xq)
+(spline::CubicBSpline)(xq::AbstractVector) = _evaluate_cubic_b_spline(spline, _bspline_dense_input(xq))
 
 function solve_adjoint(fact::CubicBSplineFactorization, c_bar::AbstractVector)
     b_bar = similar(c_bar, promote_type(eltype(fact.bands), eltype(c_bar)))
@@ -706,8 +712,8 @@ function CubicBSplinePlan(
     extrapolation=:clamp,
 )
     return _construct_cubic_b_spline_plan(
-        x,
-        xq,
+        _bspline_dense_input(x),
+        _bspline_dense_input(xq),
         _get_extrapolation_policy(extrapolation),
     )
 end
@@ -755,14 +761,15 @@ function _build_cubic_bspline_dense_operator(fact, stencil, nsites::Int)
 end
 
 bspline_basis(plan::CubicBSplinePlan) = plan.basis
-bspline_coefficients(plan::CubicBSplinePlan, u::AbstractVecOrMat) = solve(plan.factorization, u)
+bspline_coefficients(plan::CubicBSplinePlan, u::AbstractVecOrMat) = _bspline_coefficients(plan, _bspline_dense_input(u))
+_bspline_coefficients(plan::CubicBSplinePlan, u::AbstractVecOrMat) = solve(plan.factorization, u)
 
 function (plan::CubicBSplinePlan)(u::AbstractVector)
-    return _apply_cubic_b_spline_plan(plan, u)
+    return _apply_cubic_b_spline_plan(plan, _bspline_dense_input(u))
 end
 
 function (plan::CubicBSplinePlan)(u::AbstractMatrix)
-    return _apply_cubic_b_spline_plan(plan, u)
+    return _apply_cubic_b_spline_plan(plan, _bspline_dense_input(u))
 end
 
 function _apply_cubic_b_spline_plan(plan::CubicBSplinePlan, u::AbstractVecOrMat)

@@ -38,8 +38,58 @@ using Mooncake: @from_chainrules, MinimalCtx, NoFData, NoRData
 # Cubic spline interpolation - internal functions (matrix versions)
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_coefficients), AbstractMatrix, AbstractVector}
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_eval), AbstractMatrix, Any, Any, AbstractMatrix, AbstractArray}
-@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_plan_eval), AbstractCosmologicalEmulators.CubicSplinePlan, AbstractVector}
-@from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators._cubic_spline_plan_eval), AbstractCosmologicalEmulators.CubicSplinePlan, AbstractMatrix}
+
+# Dense native pullback: unlike the former NoTangent(plan) bridge, preserve
+# cotangents for all weights and the second-derivative operator. Abstract
+# ordinate containers retain the generic AD path instead of assuming their
+# forward data is a mutable dense array.
+const DenseCubicSplinePlan = AbstractCosmologicalEmulators.CubicSplinePlan{
+    T,TQ,Matrix{F},I,Vector{F},Vector{F},Vector{F},Vector{F},
+} where {T,TQ,I,F<:Base.IEEEFloat}
+
+Mooncake.@is_primitive MinimalCtx Tuple{
+    typeof(AbstractCosmologicalEmulators._cubic_spline_plan_eval),
+    DenseCubicSplinePlan,
+    Union{Vector{<:Base.IEEEFloat},Matrix{<:Base.IEEEFloat}},
+}
+function Mooncake.rrule!!(
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._cubic_spline_plan_eval)},
+    plan_dual::Mooncake.CoDual{<:DenseCubicSplinePlan},
+    u_dual::Mooncake.CoDual{<:Union{Vector{<:Base.IEEEFloat},Matrix{<:Base.IEEEFloat}}},
+)
+    plan, u = Mooncake.primal(plan_dual), Mooncake.primal(u_dual)
+    output_dual = Mooncake.zero_fcodual(AbstractCosmologicalEmulators._cubic_spline_plan_eval(plan, u))
+    output_bar = Mooncake.tangent(output_dual)
+    plan_bar = Mooncake.tangent(plan_dual).data
+    u_bar = Mooncake.tangent(u_dual)
+    z = plan.second_derivative_operator * u
+    z_bar = zero(z)
+
+    function cubic_plan_pullback(::Mooncake.NoRData)
+        fill!(z_bar, zero(eltype(z_bar)))
+        # Series-major traversal keeps matrix ordinates and output cotangents
+        # contiguous. A vector is also indexable as an n-by-1 array in Julia.
+        @inbounds for s in axes(u, 2), i in eachindex(plan.interval_indices)
+            j = plan.interval_indices[i]
+            delta = output_bar[i, s]
+            u_bar[j, s] += delta * plan.left_value_weights[i]
+            u_bar[j + 1, s] += delta * plan.right_value_weights[i]
+            z_bar[j, s] += delta * plan.left_curve_weights[i]
+            z_bar[j + 1, s] += delta * plan.right_curve_weights[i]
+            plan_bar.left_value_weights[i] += delta * u[j, s]
+            plan_bar.right_value_weights[i] += delta * u[j + 1, s]
+            plan_bar.left_curve_weights[i] += delta * z[j, s]
+            plan_bar.right_curve_weights[i] += delta * z[j + 1, s]
+        end
+        u_bar .+= transpose(plan.second_derivative_operator) * z_bar
+        plan_bar.second_derivative_operator .+= z_bar * transpose(u)
+        # t/t_new are not read directly by evaluation; their derivatives flow
+        # through construction of the weights/operator, not a fabricated zero
+        # tangent for the entire plan.
+        return Mooncake.NoRData(), Mooncake.zero_rdata(plan), Mooncake.NoRData()
+    end
+    return output_dual, cubic_plan_pullback
+end
 
 # Cubic B-spline coefficient solve and fixed-stencil evaluation
 @from_chainrules MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.solve), AbstractCosmologicalEmulators.CubicBSplineFactorization, AbstractVector}
@@ -51,14 +101,14 @@ using Mooncake: @from_chainrules, MinimalCtx, NoFData, NoRData
 # forward data.
 Mooncake.@is_primitive MinimalCtx Tuple{
     typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline),
-    Union{AbstractVector,AbstractMatrix},
-    AbstractVector,
+    Union{Vector,Matrix},
+    Vector,
     Any,
 }
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline)},
-    u_dual::Mooncake.CoDual{<:Union{AbstractVector,AbstractMatrix}},
-    sites_dual::Mooncake.CoDual{<:AbstractVector},
+    u_dual::Mooncake.CoDual{<:Union{Vector,Matrix}},
+    sites_dual::Mooncake.CoDual{<:Vector},
     extrap_dual::Mooncake.CoDual,
 )
     spline = AbstractCosmologicalEmulators._construct_cubic_b_spline(
@@ -86,12 +136,12 @@ end
 Mooncake.@is_primitive MinimalCtx Tuple{
     typeof(AbstractCosmologicalEmulators._evaluate_cubic_b_spline),
     AbstractCosmologicalEmulators.CubicBSpline,
-    AbstractVector,
+    Vector,
 }
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._evaluate_cubic_b_spline)},
     spline_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSpline},
-    query_dual::Mooncake.CoDual{<:AbstractVector},
+    query_dual::Mooncake.CoDual{<:Vector},
 )
     spline = Mooncake.primal(spline_dual)
     query = Mooncake.primal(query_dual)
@@ -142,7 +192,13 @@ function Mooncake.rrule!!(
         spline_data.coefficients .+= c_bar
         spline_data.sites .+= sites_bar
         spline_data.basis.data.knot_vector .+= knot_bar
-        return Mooncake.NoRData(), Mooncake.NoRData(), only(query_bar)
+        query_rdata = Mooncake.zero_rdata(query)
+        # Mooncake treats integers as inactive, unlike ChainRules' continuous
+        # integer projection. Preserve the backend's activity and scalar type.
+        if !(query_rdata isa Mooncake.NoRData)
+            query_rdata = convert(typeof(query_rdata), only(query_bar))
+        end
+        return Mooncake.NoRData(), Mooncake.NoRData(), query_rdata
     end
     return Mooncake.zero_fcodual(output), evaluate_pullback
 end
@@ -170,21 +226,25 @@ function Mooncake.rrule!!(
         spline_data.coefficients .+= c_bar
         spline_data.sites .+= sites_bar
         spline_data.basis.data.knot_vector .+= knot_bar
-        return Mooncake.NoRData(), Mooncake.NoRData(), only(query_bar)
+        query_rdata = Mooncake.zero_rdata(query)
+        if !(query_rdata isa Mooncake.NoRData)
+            query_rdata = convert(typeof(query_rdata), only(query_bar))
+        end
+        return Mooncake.NoRData(), Mooncake.NoRData(), query_rdata
     end
     return output_dual, evaluate_pullback
 end
 
 Mooncake.@is_primitive MinimalCtx Tuple{
     typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline_plan),
-    AbstractVector,
-    AbstractVector,
+    Vector,
+    Vector,
     Any,
 }
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._construct_cubic_b_spline_plan)},
-    sites_dual::Mooncake.CoDual{<:AbstractVector},
-    query_dual::Mooncake.CoDual{<:AbstractVector},
+    sites_dual::Mooncake.CoDual{<:Vector},
+    query_dual::Mooncake.CoDual{<:Vector},
     extrap_dual::Mooncake.CoDual,
 )
     plan = AbstractCosmologicalEmulators._construct_cubic_b_spline_plan(
@@ -218,18 +278,18 @@ function Mooncake.rrule!!(
 end
 
 Mooncake.@is_primitive MinimalCtx Tuple{
-    typeof(AbstractCosmologicalEmulators.bspline_coefficients),
+    typeof(AbstractCosmologicalEmulators._bspline_coefficients),
     AbstractCosmologicalEmulators.CubicBSplinePlan,
-    Union{AbstractVector,AbstractMatrix},
+    Union{Vector,Matrix},
 }
 function Mooncake.rrule!!(
-    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators.bspline_coefficients)},
+    ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._bspline_coefficients)},
     plan_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSplinePlan},
-    u_dual::Mooncake.CoDual{<:Union{AbstractVector,AbstractMatrix}},
+    u_dual::Mooncake.CoDual{<:Union{Vector,Matrix}},
 )
     plan = Mooncake.primal(plan_dual)
     u = Mooncake.primal(u_dual)
-    coefficients = AbstractCosmologicalEmulators.bspline_coefficients(plan, u)
+    coefficients = AbstractCosmologicalEmulators._bspline_coefficients(plan, u)
     coefficients_dual = Mooncake.zero_fcodual(coefficients)
     coefficients_bar = Mooncake.tangent(coefficients_dual)
     plan_data = Mooncake.tangent(plan_dual).data
@@ -257,12 +317,12 @@ end
 Mooncake.@is_primitive MinimalCtx Tuple{
     typeof(AbstractCosmologicalEmulators._apply_cubic_b_spline_plan),
     AbstractCosmologicalEmulators.CubicBSplinePlan,
-    Union{AbstractVector,AbstractMatrix},
+    Union{Vector,Matrix},
 }
 function Mooncake.rrule!!(
     ::Mooncake.CoDual{typeof(AbstractCosmologicalEmulators._apply_cubic_b_spline_plan)},
     plan_dual::Mooncake.CoDual{<:AbstractCosmologicalEmulators.CubicBSplinePlan},
-    u_dual::Mooncake.CoDual{<:Union{AbstractVector,AbstractMatrix}},
+    u_dual::Mooncake.CoDual{<:Union{Vector,Matrix}},
 )
     plan = Mooncake.primal(plan_dual)
     u = Mooncake.primal(u_dual)

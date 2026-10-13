@@ -944,6 +944,8 @@ function CubicSplinePlan(t, t_new::AbstractVector)
     )
 end
 
+# AD must propagate through both ordinates and the plan's weights/operator:
+# source and query geometry enter through those differentiable fields.
 function _cubic_spline_plan_eval(plan::CubicSplinePlan, u::AbstractVector)
     z = plan.second_derivative_operator * u
     idx = plan.interval_indices

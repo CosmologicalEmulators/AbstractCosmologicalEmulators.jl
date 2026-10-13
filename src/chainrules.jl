@@ -508,13 +508,14 @@ function ChainRulesCore.rrule(
         Δ = ChainRulesCore.unthunk(Δ)
         if Δ isa ChainRulesCore.AbstractZero
             return NoTangent(), ZeroTangent(), ZeroTangent(), ZeroTangent(),
-                   ZeroTangent(), NoTangent(), NoTangent()
+                   ZeroTangent(), NoTangent(), ZeroTangent()
         end
 
         ∂u = zero(u)
         ∂b = zero(b)
         ∂c = zero(c)
         ∂d = zero(d)
+        ∂offsets = zero(offsets)
         @inbounds for i in eachindex(interval_indices)
             idx = interval_indices[i]
             w = offsets[i]
@@ -523,9 +524,10 @@ function ChainRulesCore.rrule(
             ∂b[idx] += Δi * w
             ∂c[idx] += Δi * w^2
             ∂d[idx] += Δi * w^3
+            ∂offsets[i] += Δi * (b[idx] + 2 * c[idx] * w + 3 * d[idx] * w^2)
         end
         return NoTangent(), project_u(∂u), project_b(∂b), project_c(∂c),
-               project_d(∂d), NoTangent(), NoTangent()
+               project_d(∂d), NoTangent(), ChainRulesCore.ProjectTo(offsets)(∂offsets)
     end
 
     return out, _akima_plan_eval_pullback
@@ -550,80 +552,36 @@ function ChainRulesCore.rrule(
         Δ = ChainRulesCore.unthunk(Δ)
         if Δ isa ChainRulesCore.AbstractZero
             return NoTangent(), ZeroTangent(), ZeroTangent(), ZeroTangent(),
-                   ZeroTangent(), NoTangent(), NoTangent()
+                   ZeroTangent(), NoTangent(), ZeroTangent()
         end
 
         ∂u = zero(u)
         ∂b = zero(b)
         ∂c = zero(c)
         ∂d = zero(d)
+        ∂offsets = zero(offsets)
         nseries = size(u, 2)
         @inbounds for i in eachindex(interval_indices)
             idx = interval_indices[i]
             w = offsets[i]
             w2 = w * w
             w3 = w2 * w
+            ∂w = zero(eltype(∂offsets))
             @simd for s in 1:nseries
                 Δis = Δ[i, s]
                 ∂u[idx, s] += Δis
                 ∂b[idx, s] += Δis * w
                 ∂c[idx, s] += Δis * w2
                 ∂d[idx, s] += Δis * w3
+                ∂w += Δis * (b[idx, s] + 2 * c[idx, s] * w + 3 * d[idx, s] * w2)
             end
+            ∂offsets[i] = ∂w
         end
         return NoTangent(), project_u(∂u), project_b(∂b), project_c(∂c),
-               project_d(∂d), NoTangent(), NoTangent()
+               project_d(∂d), NoTangent(), ChainRulesCore.ProjectTo(offsets)(∂offsets)
     end
 
     return out, _akima_plan_eval_matrix_pullback
-end
-
-function ChainRulesCore.rrule(
-    ::typeof(_cubic_spline_plan_eval),
-    plan::CubicSplinePlan,
-    u::AbstractVecOrMat,
-)
-    out = _cubic_spline_plan_eval(plan, u)
-    project_u = ChainRulesCore.ProjectTo(u)
-
-    function _cubic_spline_plan_eval_pullback(Δ)
-        Δ = ChainRulesCore.unthunk(Δ)
-        if Δ isa ChainRulesCore.AbstractZero
-            return NoTangent(), NoTangent(), ZeroTangent()
-        end
-
-        idx = plan.interval_indices
-        ∂u = zero(u)
-        ∂z = similar(u)
-        fill!(∂z, zero(eltype(∂z)))
-
-        if u isa AbstractVector
-            @inbounds for i in eachindex(idx)
-                Δi = Δ[i]
-                ∂u[idx[i]] += Δi * plan.left_value_weights[i]
-                ∂u[idx[i] + 1] += Δi * plan.right_value_weights[i]
-                ∂z[idx[i]] += Δi * plan.left_curve_weights[i]
-                ∂z[idx[i] + 1] += Δi * plan.right_curve_weights[i]
-            end
-        else
-            nseries = size(u, 2)
-            @inbounds for i in eachindex(idx)
-                ii = idx[i]
-                @simd for s in 1:nseries
-                    Δis = Δ[i, s]
-                    ∂u[ii, s] += Δis * plan.left_value_weights[i]
-                    ∂u[ii + 1, s] += Δis * plan.right_value_weights[i]
-                    ∂z[ii, s] += Δis * plan.left_curve_weights[i]
-                    ∂z[ii + 1, s] += Δis * plan.right_curve_weights[i]
-                end
-            end
-        end
-
-        ∂u .+= transpose(plan.second_derivative_operator) * ∂z
-        return NoTangent(), NoTangent(), project_u(∂u)
-    end
-
-    return out, _cubic_spline_plan_eval_pullback
 end
 
 function ChainRulesCore.rrule(::typeof(akima_interpolation), u::AbstractVector, t::AbstractVector, t_new::AbstractArray)

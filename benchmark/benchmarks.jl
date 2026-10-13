@@ -239,6 +239,13 @@ SUITE["cubic_b_spline"]["reactant_stencil"] = @benchmarkable synchronized_reacta
 
 SUITE["akima_spline"] = BenchmarkGroup(["interpolation"])
 
+# AirspeedVelocity also runs this script against the pre-feature baseline.
+# Keep all sixteen B-spline cases on the head; absent baseline results are
+# reported as missing, not fabricated timings or a comparison against zero.
+if !isdefined(AbstractCosmologicalEmulators, :CubicBSplineBasis)
+    delete!(SUITE, "cubic_b_spline")
+end
+
 SUITE["akima_spline"]["pure_512_to_8999"] = @benchmarkable akima_interpolation(u, t, t_new) setup = (
     k = 0:511;
     t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
