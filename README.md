@@ -25,6 +25,37 @@ At the moment, the neural-network emulator backends supported here are based on 
 - Extension support for optional packages, including `Reactant.jl` and `Mooncake.jl`.
 
 
+## Cubic B-Spline Interpolation
+
+The package provides differentiable not-a-knot cubic B-spline interpolation.
+The knot vector is determined uniquely from the interpolation sites: endpoint
+knots have multiplicity four and the internal knots are `t[3:end-2]`.
+Custom knots and custom basis objects are deliberately not accepted by the
+high-level `CubicBSpline` or `CubicBSplinePlan` constructors.
+
+Use `cubic_b_spline_interpolation(u, t, t_new)` for one-shot interpolation,
+`CubicBSpline(u, t)` when values are fixed and query points change, and
+`CubicBSplinePlan(t, t_new)` when grids are fixed and values change.
+
+Matrix ordinates are supported, with each column treated as an independent
+function over the same interpolation sites. Outside queries are clamped to
+the nearest endpoint by default. The explicit extrapolation policies
+`:clamp`, `:throw`, and `:zero` select endpoint continuation, strict domain
+checking, or zero outside the domain. Callers should perform transformations
+such as `log.(k)` before constructing the spline.
+
+ForwardDiff, Zygote, and Mooncake support derivatives through B-spline
+ordinates, interpolation sites, and query coordinates on plain Julia arrays.
+Reactant plans use a prepared dense interpolation operator and support Enzyme
+differentiation through compiled execution. The one-shot Reactant path supports
+fixed host sites with dynamic device ordinates and queries; fully dynamic device
+sites are not currently supported.
+
+In compiled Reactant evaluation, dynamic `extrapolation=:throw` is unsupported
+because XLA cannot lower data-dependent Julia exceptions. Use `:clamp` or
+`:zero` for dynamic device queries. A fixed `CubicBSplinePlan` may use `:throw`
+because its fixed query points are validated during host plan construction.
+
 ## Automatic differentiation compatibility
 
 The package is designed to be usable in differentiable cosmology pipelines. The interpolation and emulator utilities are tested with multiple AD systems, including:

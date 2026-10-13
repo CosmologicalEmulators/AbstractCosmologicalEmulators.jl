@@ -292,7 +292,278 @@ end
                 @test Array(grad_tq_R) ≈ grad_tq_ref atol=atol rtol=atol
             end
 
-            @testset "Reusable spline object and plan gradients" begin
+        @testset "Cubic B-Spline _evaluate_stencil" begin
+            # 1D Case
+            x_sites = collect(0.0:1.0:7.0)
+            basis = CubicBSplineBasis(domain=(first(x_sites), last(x_sites)), internal_knots=x_sites[3:end-2])
+            stencil = basis_stencil(basis, [2.5, 3.5, 4.5])
+
+            # Deterministic coefficient vectors for reproducibility
+            c_vec = collect(Float64, 1:length(x_sites))
+            c_vec2 = collect(Float64, length(x_sites):-1:1)
+
+            ref_out = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_vec)
+            ref_out2 = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_vec2)
+
+            function f_stencil(c)
+                AbstractCosmologicalEmulators._evaluate_stencil(stencil, c)
+            end
+
+            c_vec_R = Reactant.to_rarray(c_vec)
+            c_vec2_R = Reactant.to_rarray(c_vec2)
+            f_stencil_R = Reactant.@compile sync=true f_stencil(c_vec_R)
+
+            out_R = f_stencil_R(c_vec_R)
+            Reactant.synchronize(out_R)
+            @test Array(out_R) ≈ ref_out
+
+            # Verify dynamic coefficients
+            out2_R = f_stencil_R(c_vec2_R)
+            Reactant.synchronize(out2_R)
+            @test Array(out2_R) ≈ ref_out2
+            @test !isapprox(Array(out2_R), Array(out_R))
+
+            # 2D Case - Matrix (3 series), deterministic
+            c_mat = hcat(c_vec, c_vec .^ 2, sin.(c_vec))
+            c_mat2 = hcat(c_vec2, c_vec2 .^ 2, cos.(c_vec2))
+            ref_out_mat = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_mat)
+            ref_out_mat2 = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c_mat2)
+
+            c_mat_R = Reactant.to_rarray(c_mat)
+            c_mat2_R = Reactant.to_rarray(c_mat2)
+            f_stencil_mat_R = Reactant.@compile sync=true f_stencil(c_mat_R)
+
+            out_mat_R = f_stencil_mat_R(c_mat_R)
+            Reactant.synchronize(out_mat_R)
+            @test Array(out_mat_R) ≈ ref_out_mat
+
+            out_mat2_R = f_stencil_mat_R(c_mat2_R)
+            Reactant.synchronize(out_mat2_R)
+            @test Array(out_mat2_R) ≈ ref_out_mat2
+            @test !isapprox(Array(out_mat2_R), Array(out_mat_R))
+        end
+
+        @testset "Cubic B-Spline structural adaptation and public API" begin
+            x_sites = collect(0.0:1.0:7.0)
+            u_sites = sin.(x_sites)
+            u_mat = hcat(u_sites, cos.(x_sites))
+            xq_sites = [2.5, 3.5, 4.5]
+
+            eval_spline(spl, x) = spl(x)
+            eval_plan(plan, u) = plan(u)
+
+            # Solver Correctness
+            plan_for_solve = CubicBSplinePlan(x_sites, xq_sites)
+            fact = plan_for_solve.factorization
+            fact_R = Reactant.to_rarray(fact)
+
+            b_vec_for_solve = rand(length(x_sites))
+            b_vec_R = Reactant.to_rarray(b_vec_for_solve)
+            b_mat_for_solve = rand(length(x_sites), 2)
+            b_mat_R = Reactant.to_rarray(b_mat_for_solve)
+
+            do_solve(f, b) = AbstractCosmologicalEmulators.solve(f, b)
+
+            solve_vec_R = Reactant.@compile sync=true do_solve(fact_R, b_vec_R)
+            out_solve_vec = solve_vec_R(fact_R, b_vec_R)
+            Reactant.synchronize(out_solve_vec)
+            @test Array(out_solve_vec) ≈ AbstractCosmologicalEmulators.solve(fact, b_vec_for_solve)
+
+            solve_mat_R = Reactant.@compile sync=true do_solve(fact_R, b_mat_R)
+            out_solve_mat = solve_mat_R(fact_R, b_mat_R)
+            Reactant.synchronize(out_solve_mat)
+            @test Array(out_solve_mat) ≈ AbstractCosmologicalEmulators.solve(fact, b_mat_for_solve)
+
+            b_vec_for_solve2 = rand(length(x_sites))
+            b_vec_R2 = Reactant.to_rarray(b_vec_for_solve2)
+            out_solve_vec_R2 = solve_vec_R(fact_R, b_vec_R2)
+            Reactant.synchronize(out_solve_vec_R2)
+            @test Array(out_solve_vec_R2) ≈ AbstractCosmologicalEmulators.solve(fact, b_vec_for_solve2)
+            @test !isapprox(Array(out_solve_vec_R2), Array(out_solve_vec))
+
+            b_mat_for_solve2 = rand(length(x_sites), 2)
+            b_mat_R2 = Reactant.to_rarray(b_mat_for_solve2)
+            out_solve_mat_R2 = solve_mat_R(fact_R, b_mat_R2)
+            Reactant.synchronize(out_solve_mat_R2)
+            @test Array(out_solve_mat_R2) ≈ AbstractCosmologicalEmulators.solve(fact, b_mat_for_solve2)
+            @test !isapprox(Array(out_solve_mat_R2), Array(out_solve_mat))
+
+            @testset "Large nonuniform-solve parity (vector and matrix)" begin
+                n_nu = 127
+                increments_nu = @. 0.25 + 0.03 * sin(0.37 * (1:n_nu))^2
+                x_sites_nu = cumsum(increments_nu)
+                u_sites_nu = @. sin(1.3 * x_sites_nu) + 0.2 * cos(0.7 * x_sites_nu)
+                xq_sites_nu = range(
+                    x_sites_nu[1] + 0.1,
+                    x_sites_nu[end] - 0.1;
+                    length = 32,
+                )
+
+                plan_for_solve_nu = CubicBSplinePlan(x_sites_nu, collect(xq_sites_nu))
+                fact_nu = plan_for_solve_nu.factorization
+                fact_nu_R = Reactant.to_rarray(fact_nu)
+
+                b_vec_for_solve_nu = @. sin(0.41 * x_sites_nu) + 0.1 * cos(0.13 * x_sites_nu)
+                b_vec_nu_R = Reactant.to_rarray(b_vec_for_solve_nu)
+                b_mat_for_solve_nu = hcat(
+                    b_vec_for_solve_nu,
+                    cos.(0.23 .* x_sites_nu),
+                    sin.(0.17 .* x_sites_nu),
+                    x_sites_nu ./ last(x_sites_nu),
+                    exp.(-x_sites_nu ./ last(x_sites_nu)),
+                )
+                b_mat_nu_R = Reactant.to_rarray(b_mat_for_solve_nu)
+
+                solve_vec_nu_R = Reactant.@compile sync=true do_solve(fact_nu_R, b_vec_nu_R)
+                out_solve_vec_nu = solve_vec_nu_R(fact_nu_R, b_vec_nu_R)
+                Reactant.synchronize(out_solve_vec_nu)
+                @test Array(out_solve_vec_nu) ≈ AbstractCosmologicalEmulators.solve(
+                    fact_nu,
+                    b_vec_for_solve_nu,
+                )
+
+                solve_mat_nu_R = Reactant.@compile sync=true do_solve(fact_nu_R, b_mat_nu_R)
+                out_solve_mat_nu = solve_mat_nu_R(fact_nu_R, b_mat_nu_R)
+                Reactant.synchronize(out_solve_mat_nu)
+                @test Array(out_solve_mat_nu) ≈ AbstractCosmologicalEmulators.solve(
+                    fact_nu,
+                    b_mat_for_solve_nu,
+                )
+            end
+
+            # 1. CubicBSpline (vector)
+            spl_vec = CubicBSpline(u_sites, x_sites; extrapolation=:clamp)
+            spl_vec_R = Reactant.to_rarray(spl_vec)
+            xq_R = Reactant.to_rarray(xq_sites)
+
+            f_spl_vec = Reactant.@compile sync=true eval_spline(spl_vec_R, xq_R)
+            out_spl_vec_R = f_spl_vec(spl_vec_R, xq_R)
+            Reactant.synchronize(out_spl_vec_R)
+            @test Array(out_spl_vec_R) ≈ spl_vec(xq_sites)
+
+            # 2. CubicBSpline (matrix)
+            spl_mat = CubicBSpline(u_mat, x_sites; extrapolation=:clamp)
+            spl_mat_R = Reactant.to_rarray(spl_mat)
+            f_spl_mat = Reactant.@compile sync=true eval_spline(spl_mat_R, xq_R)
+            out_spl_mat_R = f_spl_mat(spl_mat_R, xq_R)
+            Reactant.synchronize(out_spl_mat_R)
+            @test Array(out_spl_mat_R) ≈ spl_mat(xq_sites)
+
+            # 3. CubicBSplinePlan (vector)
+            plan = CubicBSplinePlan(x_sites, xq_sites)
+            plan_R = Reactant.to_rarray(plan)
+            u_R = Reactant.to_rarray(u_sites)
+            u2_sites = cos.(x_sites)
+            u2_R = Reactant.to_rarray(u2_sites)
+
+            f_plan_vec = Reactant.@compile sync=true eval_plan(plan_R, u_R)
+            out_plan_vec_R = f_plan_vec(plan_R, u_R)
+            Reactant.synchronize(out_plan_vec_R)
+            @test Array(out_plan_vec_R) ≈ plan(u_sites)
+
+            # Dynamic input check for plan (vector)
+            out2_plan_vec_R = f_plan_vec(plan_R, u2_R)
+            Reactant.synchronize(out2_plan_vec_R)
+            @test Array(out2_plan_vec_R) ≈ plan(u2_sites)
+            @test !isapprox(Array(out2_plan_vec_R), Array(out_plan_vec_R))
+
+            # 4. CubicBSplinePlan (matrix)
+            u_mat_R = Reactant.to_rarray(u_mat)
+            u_mat2 = hcat(cos.(x_sites), sin.(x_sites))
+            u_mat2_R = Reactant.to_rarray(u_mat2)
+
+            f_plan_mat = Reactant.@compile sync=true eval_plan(plan_R, u_mat_R)
+            out_plan_mat_R = f_plan_mat(plan_R, u_mat_R)
+            Reactant.synchronize(out_plan_mat_R)
+            @test Array(out_plan_mat_R) ≈ plan(u_mat)
+
+            # Dynamic input check for plan (matrix)
+            out2_plan_mat_R = f_plan_mat(plan_R, u_mat2_R)
+            Reactant.synchronize(out2_plan_mat_R)
+            @test Array(out2_plan_mat_R) ≈ plan(u_mat2)
+            @test !isapprox(Array(out2_plan_mat_R), Array(out_plan_mat_R))
+
+            # Dynamic input check for spline (vector)
+            spl_vec2 = CubicBSpline(u2_sites, x_sites; extrapolation=:clamp)
+            spl_vec2_R = Reactant.to_rarray(spl_vec2)
+            out2_spl_vec_R = f_spl_vec(spl_vec2_R, xq_R)
+            Reactant.synchronize(out2_spl_vec_R)
+            @test Array(out2_spl_vec_R) ≈ spl_vec2(xq_sites)
+            @test !isapprox(Array(out2_spl_vec_R), Array(out_spl_vec_R))
+
+            # Dynamic input check for spline (matrix)
+            spl_mat2 = CubicBSpline(u_mat2, x_sites; extrapolation=:clamp)
+            spl_mat2_R = Reactant.to_rarray(spl_mat2)
+            out2_spl_mat_R = f_spl_mat(spl_mat2_R, xq_R)
+            Reactant.synchronize(out2_spl_mat_R)
+            @test Array(out2_spl_mat_R) ≈ spl_mat2(xq_sites)
+            @test !isapprox(Array(out2_spl_mat_R), Array(out_spl_mat_R))
+
+            # Extrapolation endpoints and out-of-domain
+            xq_out = [-1.0, 0.0, 7.0, 8.0]
+            xq_out_R = Reactant.to_rarray(xq_out)
+
+            # Test :throw error on compilation
+            spl_throw = CubicBSpline(u_sites, x_sites; extrapolation=:throw)
+            spl_throw_R = Reactant.to_rarray(spl_throw)
+            @test_throws ErrorException Reactant.@compile sync=true eval_spline(spl_throw_R, xq_R)
+
+            # Test :clamp extrapolation (vector)
+            spl_clamp = CubicBSpline(u_sites, x_sites; extrapolation=:clamp)
+            spl_clamp_R = Reactant.to_rarray(spl_clamp)
+            f_clamp = Reactant.@compile sync=true eval_spline(spl_clamp_R, xq_out_R)
+            out_clamp_R = f_clamp(spl_clamp_R, xq_out_R)
+            Reactant.synchronize(out_clamp_R)
+            @test Array(out_clamp_R) ≈ spl_clamp(xq_out)
+
+            # Test :zero extrapolation (vector)
+            spl_zero = CubicBSpline(u_sites, x_sites; extrapolation=:zero)
+            spl_zero_R = Reactant.to_rarray(spl_zero)
+            f_zero = Reactant.@compile sync=true eval_spline(spl_zero_R, xq_out_R)
+            out_zero_R = f_zero(spl_zero_R, xq_out_R)
+            Reactant.synchronize(out_zero_R)
+            @test Array(out_zero_R) ≈ spl_zero(xq_out)
+
+            # Test :clamp extrapolation (matrix)
+            spl_mat_clamp = CubicBSpline(u_mat, x_sites; extrapolation=:clamp)
+            spl_mat_clamp_R = Reactant.to_rarray(spl_mat_clamp)
+            f_mat_clamp = Reactant.@compile sync=true eval_spline(spl_mat_clamp_R, xq_out_R)
+            out_mat_clamp_R = f_mat_clamp(spl_mat_clamp_R, xq_out_R)
+            Reactant.synchronize(out_mat_clamp_R)
+            @test Array(out_mat_clamp_R) ≈ spl_mat_clamp(xq_out)
+
+            # Test :zero extrapolation (matrix)
+            spl_mat_zero = CubicBSpline(u_mat, x_sites; extrapolation=:zero)
+            spl_mat_zero_R = Reactant.to_rarray(spl_mat_zero)
+            f_mat_zero = Reactant.@compile sync=true eval_spline(spl_mat_zero_R, xq_out_R)
+            out_mat_zero_R = f_mat_zero(spl_mat_zero_R, xq_out_R)
+            Reactant.synchronize(out_mat_zero_R)
+            @test Array(out_mat_zero_R) ≈ spl_mat_zero(xq_out)
+
+            @testset "CubicBSpline scan Float32 matrix path" begin
+                x_sites_32 = Float32[0.0, 0.2, 0.7, 1.4, 2.5, 4.0, 6.0]
+                xq_sites_32 = collect(range(first(x_sites_32), last(x_sites_32); length=11))
+                u_sites_32 = @. sin(1.3f0 * x_sites_32) + 0.2f0 * cos(0.7f0 * x_sites_32)
+                U_sites_32 = hcat(u_sites_32, cos.(x_sites_32), x_sites_32 .^ 2)
+                plan_32 = CubicBSplinePlan(x_sites_32, xq_sites_32; extrapolation=:clamp)
+                fact_32_R = Reactant.to_rarray(plan_32.factorization)
+                plan_32_R = Reactant.to_rarray(plan_32)
+                U_sites_32_R = Reactant.to_rarray(U_sites_32)
+
+                do_solve_32(fact, rhs) = AbstractCosmologicalEmulators.solve(fact, rhs)
+                solve_32_R = Reactant.@compile sync=true do_solve_32(fact_32_R, U_sites_32_R)
+                @test Array(solve_32_R(fact_32_R, U_sites_32_R)) ≈
+                      AbstractCosmologicalEmulators.solve(plan_32.factorization, U_sites_32) atol=1e-5 rtol=1e-5
+
+                eval_plan_32(plan, rhs) = plan(rhs)
+                plan_mat_32_R = Reactant.@compile sync=true eval_plan_32(plan_32_R, U_sites_32_R)
+                @test Array(plan_mat_32_R(plan_32_R, U_sites_32_R)) ≈
+                      plan_32(U_sites_32) atol=1e-5 rtol=1e-5
+            end
+        end
+
+
+        @testset "Reusable spline object and plan gradients" begin
                 if SKIP_REACTANT_REUSABLE_SPLINES
                     @test_skip false
                 else
@@ -323,6 +594,31 @@ end
                         Reactant.synchronize(plan_grad_R)
                         @test Array(plan_grad_R) ≈ plan_grad_ref atol=1e-8 rtol=1e-8
                     end
+
+                    # Matrix plan Enzyme gradient test
+                    plan_mat = AbstractCosmologicalEmulators.CubicBSplinePlan(t, tq)
+                    plan_mat_R = Reactant.to_rarray(plan_mat)
+                    UR = Reactant.to_rarray(U)
+                    plan_loss_mat_host = U_ -> sum(plan_mat(U_))
+                    plan_loss_mat_R = U_ -> sum(plan_mat_R(U_))
+                    plan_grad_ref_mat = ForwardDiff.gradient(plan_loss_mat_host, copy(U))
+                    plan_grad_fun_mat = U_ -> Enzyme.gradient(Reverse, plan_loss_mat_R, U_)[1]
+                    plan_grad_compiled_mat = Reactant.@compile sync=true plan_grad_fun_mat(UR)
+                    plan_grad_R_mat = plan_grad_compiled_mat(UR)
+                    Reactant.synchronize(plan_grad_R_mat)
+                    @test Array(plan_grad_R_mat) ≈ plan_grad_ref_mat atol=1e-8 rtol=1e-8
+
+                    # Also test vector B-spline plan gradient
+                    plan_vec_bs = AbstractCosmologicalEmulators.CubicBSplinePlan(t, tq)
+                    plan_vec_bs_R = Reactant.to_rarray(plan_vec_bs)
+                    plan_loss_vec_host = u_ -> sum(plan_vec_bs(u_))
+                    plan_loss_vec_R = u_ -> sum(plan_vec_bs_R(u_))
+                    plan_grad_ref_vec = ForwardDiff.gradient(plan_loss_vec_host, copy(u))
+                    plan_grad_fun_vec = u_ -> Enzyme.gradient(Reverse, plan_loss_vec_R, u_)[1]
+                    plan_grad_compiled_vec = Reactant.@compile sync=true plan_grad_fun_vec(uR)
+                    plan_grad_R_vec = plan_grad_compiled_vec(uR)
+                    Reactant.synchronize(plan_grad_R_vec)
+                    @test Array(plan_grad_R_vec) ≈ plan_grad_ref_vec atol=1e-8 rtol=1e-8
                 end
             end
         end
