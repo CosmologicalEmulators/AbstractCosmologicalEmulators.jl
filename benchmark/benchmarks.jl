@@ -133,7 +133,11 @@ SUITE["akima_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
 # Get the extension (will be loaded due to dependencies above)
 const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
 
-if !isnothing(ext)
+# AirspeedVelocity runs this head script against the base revision too. The
+# legacy scalar-only model cannot execute these three-species cases, and its
+# physical workloads must not be reported as like-for-like comparisons.
+const has_three_mass_background = !isnothing(ext) && isdefined(ext, :ThermalNeutrinos)
+if has_three_mass_background
     # Create a test cosmology for benchmarking
     const test_cosmo = ext.w0waCDMCosmology(
         ln10Aₛ=3.044,
@@ -808,7 +812,7 @@ if !isnothing(ext)
 
     println("Gradient computation benchmarks added successfully")
 else
-    println("Warning: BackgroundCosmologyExt not loaded, skipping background benchmarks")
+    println("Three-mass background API unavailable in this revision; retaining non-cosmology benchmarks")
 end
 
 # --- Akima Interpolation Benchmarks ---
