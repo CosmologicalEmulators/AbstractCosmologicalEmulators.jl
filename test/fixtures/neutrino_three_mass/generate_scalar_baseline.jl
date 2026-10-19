@@ -1,3 +1,4 @@
+# HISTORICAL: generated the retired scalar-mν baseline (the scalar mode no longer exists; this script cannot run on the current API).
 # Freeze the legacy *scalar*-mν outputs of BackgroundCosmologyExt to plain text.
 #
 # Run BEFORE changing the extension (it was generated at develop d02354d):

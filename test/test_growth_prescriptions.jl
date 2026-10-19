@@ -19,18 +19,7 @@
             @test_throws ArgumentError f(1/1.010001-1,Ωcb,h)
         end
     end
-    @testset "Frozen Gerrit scalar reference" begin
-        for line in eachline(joinpath(@__DIR__,"fixtures/growth_prescriptions/jax_scalar_reference.txt"))
-            startswith(line,"#") && continue
-            mass,is_m,zref,eref,dref,fref = parse.(Float64,split(line))
-            species = is_m == 1 ? matter : cb
-            d,f = ext.D_f_z(zref,Ωcb,h;mν=mass,species,tol...)
-            @test ext.E_z(zref,Ωcb,h;mν=mass) ≈ eref rtol=2e-7
-            @test d ≈ dref rtol=5e-5
-            @test f ≈ fref rtol=5e-5
-        end
-    end
-    for mass in (0., .06, (0.,0.,0.), (0.,.0086,.0502)),
+    for mass in ((0.,0.,0.), (0.,.0086,.0502)),
         (Neff,preset) in ((3.044,:temperature),(3.044,:radiation))
         kw = (; mν=mass, Neff, neutrino_prescription=preset, tol...)
         @test ext.D_z(z,Ωcb,h;kw...) == ext.D_z(z,Ωcb,h;kw...,species=cb)
@@ -38,7 +27,7 @@
         @test d ≈ ext.D_z(z,Ωcb,h;kw...,species=matter)
         @test f ≈ ext.f_z(z,Ωcb,h;kw...,species=matter)
         @test all(isfinite,d) && all(isfinite,f)
-        if all(iszero,mass isa Number ? (mass,) : mass)
+        if all(iszero,mass)
             @test d ≈ ext.D_z(z,Ωcb,h;kw...) rtol=1e-12
             @test f ≈ ext.f_z(z,Ωcb,h;kw...) rtol=1e-12
         else

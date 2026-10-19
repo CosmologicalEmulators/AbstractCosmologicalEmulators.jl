@@ -12,8 +12,8 @@ module BackgroundCosmologyExt
 #    Reactant cannot trace into MLIR at present. Reactant does not yet
 #    support compilation of SciML solvers.
 #
-# 2. Global interpolants: the neutrino lookup tables `F_interpolant` and
-#    `dFdy_interpolant` below are stored in module-level `Ref`s and built at
+# 2. Global interpolants: the neutrino lookup tables `F_three_mass_interpolant`
+#    and `dFdy_three_mass_interpolant` below are stored in module-level `Ref`s and built at
 #    `__init__`. Reactant tracing would constant-fold them as host arrays,
 #    and the indirection through a global `Ref` produces runtime
 #    dispatch that MLIR cannot lower.
@@ -48,10 +48,6 @@ export S_of_K
 const c_0 = 2.99792458e5  # Speed of light in km/s
 
 # Global interpolants for neutrino calculations - will be initialized in __init__
-const F_interpolant = Ref{AkimaSpline}()
-const dFdy_interpolant = Ref{AkimaSpline}()
-# Finer tables used only by the three-mass path (legacy tables are kept unchanged
-# so scalar-mν outputs are reproduced bit-for-bit).
 const F_three_mass_interpolant = Ref{AkimaSpline}()
 const dFdy_three_mass_interpolant = Ref{AkimaSpline}()
 
@@ -62,19 +58,8 @@ include("rrules.jl")
 
 # Initialize interpolants when extension loads
 function __init__()
-    # Initialize F and dFdy interpolants for neutrino calculations
-    min_y = _get_y(0, 0)
-    max_y = _get_y(1, 10)
-
-    # Create F interpolant
-    y_grid_F = vcat(LinRange(min_y, 100, 100), LinRange(100.1, max_y, 1000))
-    F_grid = [_F(y) for y in y_grid_F]
-    F_interpolant[] = AkimaSpline(F_grid, y_grid_F)
-
-    # Create dFdy interpolant
-    y_grid_dF = vcat(LinRange(min_y, 10.0, 10000), LinRange(10.1, max_y, 10000))
-    dFdy_grid = [_dFdy(y) for y in y_grid_dF]
-    dFdy_interpolant[] = AkimaSpline(dFdy_grid, y_grid_dF)
+    min_y = 0.0
+    max_y = 10 / (8.617342e-5 * (0.71611 * 2.7255))  # y at mν = 1 eV, a = 10
 
     # Three-mass tables: max relative error vs direct quadrature ≲ 2e-7 for F (all y)
     # and ≲ 5e-7 for dF/dy at y ≥ 1 (dF/dy → 0 as y → 0); ~75 ms extra at load.

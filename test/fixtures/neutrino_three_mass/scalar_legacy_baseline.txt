@@ -1,3 +1,4 @@
+# HISTORICAL PROVENANCE ONLY: outputs of the retired scalar-mnu mode; no longer read by any test and not API evidence.
 # Legacy scalar-mnu outputs of BackgroundCosmologyExt (frozen before the three-mass change).
 # generator: test/fixtures/neutrino_three_mass/generate_scalar_baseline.jl
 # source commit: develop d02354d (+ unrelated local edits outside ext/BackgroundCosmologyExt)

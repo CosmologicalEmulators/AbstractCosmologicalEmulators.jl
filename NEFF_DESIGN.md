@@ -1,5 +1,11 @@
 # Neff in the three-mass background and growth paths
 
+> **Update (breaking): scalar `mν` retired.** This is a historical design record. The
+> analytic background/growth functions and cosmology constructors now accept only exactly
+> three explicit masses and reject scalars with a migration error; the default is the
+> massless triple. Sections below that mention the "legacy scalar path" describe the
+> state before this change. Emulator inputs still use the total mass.
+
 This file preserves the design and dated validation history. Sibling-directory
 paths below identify local investigation artifacts, not files required to run
 the package tests. The shipped API is documented in the README; reference text
@@ -68,7 +74,7 @@ power-spectrum validation. YHe was fixed explicitly to avoid BBN differences.
 Add `Neff=3.044` and `neutrino_prescription=:temperature` keywords to the
 background/distance/growth functions and matching cosmology fields. The new
 physics applies to the explicit three-mass vector/tuple path. Preserve the
-legacy scalar path at its default value; reject nonstandard Neff for scalar
+legacy scalar path at its default value (since retired); reject nonstandard Neff for scalar
 masses rather than silently assigning a new distribution. Document that
 Neff inference and differentiation use the three-mass path.
 

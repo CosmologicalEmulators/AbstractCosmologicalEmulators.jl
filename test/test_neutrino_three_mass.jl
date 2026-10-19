@@ -16,32 +16,113 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
     h = 0.67
     Ωcb0 = (0.0224 + 0.12) / h^2
 
-    @testset "Legacy scalar mν reproduces frozen pre-change outputs" begin
-        zs = [0.0, 0.5, 1.0, 2.0, 3.0, 5.0]
-        vec_cache = Dict{Any,Any}()
-        for r in _nu3_rows("scalar_legacy_baseline.txt")
-            Ωcb0_r, h_r, mν, w0, wa, Ωk0 = parse.(Float64, r[2:7])
-            q, z, ref = r[8], parse(Float64, r[9]), parse(Float64, r[10])
-            kw = (; mν, w0, wa, Ωk0)
-            if q in ("D_vec", "f_vec")
-                D, f = get!(() -> ext.D_f_z(zs, Ωcb0_r, h_r; kw...), vec_cache, r[1])
-                val = (q == "D_vec" ? D : f)[findfirst(==(z), zs)]
-            elseif q == "r_z_order120"
-                val = ext.r_z(z, Ωcb0_r, h_r; kw..., order=120)
-            else
-                val = getfield(ext, Symbol(q))(z, Ωcb0_r, h_r; kw...)
-            end
-            # background: arithmetic + interpolation only; growth: adaptive Tsit5 (reltol 1e-5),
-            # allow for ODE-solver version drift.
-            rtol = q in ("D_z", "f_z", "D_vec", "f_vec") ? 1e-8 : 1e-12
-            @test isapprox(val, ref; rtol, atol=1e-12)
+    # The scalar-mν mode (one Fermi-Dirac species carrying the total mass) was retired.
+    # scalar_legacy_baseline.txt is kept only as historical provenance, not as API evidence.
+    @testset "Scalar mν is rejected with a migration error" begin
+        z = [0.0, 0.5, 1.0]
+        scalars = (0, 0.0, 0.06, 1, 0.4f0, big(0.06))
+        calls = (
+            m -> ext.E_a(0.5, Ωcb0, h; mν=m), m -> ext.E_a([0.5, 1.0], Ωcb0, h; mν=m),
+            m -> ext.E_z(1.0, Ωcb0, h; mν=m), m -> ext._dlogEdloga(0.5, Ωcb0, h; mν=m),
+            m -> ext._Ωma(0.5, Ωcb0, h; mν=m),
+            m -> ext.r̃_z(1.0, Ωcb0, h; mν=m), m -> ext.r_z(z, Ωcb0, h; mν=m),
+            m -> ext.d̃M_z(1.0, Ωcb0, h; mν=m), m -> ext.dM_z(1.0, Ωcb0, h; mν=m),
+            m -> ext.d̃A_z(1.0, Ωcb0, h; mν=m), m -> ext.dA_z(1.0, Ωcb0, h; mν=m),
+            m -> ext.dL_z(1.0, Ωcb0, h; mν=m),
+            m -> ext.D_z(1.0, Ωcb0, h; mν=m), m -> ext.D_z(z, Ωcb0, h; mν=m),
+            m -> ext.f_z(1.0, Ωcb0, h; mν=m), m -> ext.f_z(z, Ωcb0, h; mν=m),
+            m -> ext.D_f_z(1.0, Ωcb0, h; mν=m), m -> ext.D_f_z(z, Ωcb0, h; mν=m),
+            m -> ext.D_z(1.0, Ωcb0, h; mν=m, species=ext.MatterGrowthApprox()),
+            m -> ext.E_z(1.0, Ωcb0, h; mν=m, Neff=5.0, neutrino_prescription=:radiation),
+        )
+        for m in scalars, call in calls
+            err = try; call(m); nothing; catch e; e; end
+            @test err isa ArgumentError
+            @test occursin("three", err.msg) && occursin("emulator", err.msg)
         end
+        # tracked scalars are rejected too (no silent Σm → split conversion)
+        @test_throws ArgumentError ForwardDiff.derivative(m -> ext.E_z(1.0, Ωcb0, h; mν=m), 0.06)
+        @test_throws ArgumentError ForwardDiff.derivative(m -> ext.D_z(1.0, Ωcb0, h; mν=m), 0.06)
+        # low-level helpers do not retain scalar physics either
+        @test_throws ArgumentError ext._neutrino_masses(0.06)
+        @test_throws ArgumentError ext._ΩνE2(1.0, 1e-4, 0.06)
+        @test_throws ArgumentError ext._dΩνE2da(1.0, 1e-4, 0.06)
+        @test_throws ArgumentError ext._neutrino_background(0.0, 3.044, :temperature)
+        # Empty query grids must not bypass input validation.
+        for f in (ext.r̃_z, ext.r_z, ext.dM_z, ext.dA_z, ext.dL_z)
+            @test_throws ArgumentError f(Float64[], Ωcb0, h; mν=0.06)
+            @test_throws ArgumentError f(Float64[], Ωcb0, h; mν=(0.01, 0.02))
+            @test isempty(f(Float64[], Ωcb0, h; mν=(0.01, 0.02, 0.03)))
+        end
+        for removed in (:F_interpolant, :dFdy_interpolant, :_get_y)
+            @test !isdefined(ext, removed)
+        end
+        # nothing converts the total mass to a split behind the user's back
+        @test ext.E_z(2.0, Ωcb0, h; mν=(0.06, 0.0, 0.0)) != ext.E_z(2.0, Ωcb0, h; mν=(0.02, 0.02, 0.02))
+    end
+
+    @testset "Cosmology constructors reject scalar and malformed masses" begin
+        mk(m) = w0waCDMCosmology(; h=h, ωb=0.0224, ωc=0.12, mν=m)
+        for bad in (0, 0.0, 0.06, 1)
+            @test_throws ArgumentError mk(bad)
+            @test_throws ArgumentError w0waCDMCosmology(3.0, 0.96, h, 0.0224, 0.12, 0.0, bad, -1.0, 0.0)
+            @test_throws ArgumentError w0waCDMCosmology(3.0, 0.96, h, 0.0224, 0.12, 0.0, bad, -1.0, 0.0, 3.044, :temperature)
+        end
+        for bad in ([0.1, 0.1], (0.1,), [0.1, 0.1, 0.1, 0.1], nothing, "0.06")
+            @test_throws ArgumentError mk(bad)
+        end
+        # the typed field cannot be reassigned to a scalar either
+        c = mk((0.02, 0.02, 0.02))
+        @test_throws MethodError (c.mν = 0.06)
+        # tuples and vectors are preserved, with independently typed fields (no Float64 coercion)
+        for m in ((0.0, 0.02, 0.05), [0.0, 0.02, 0.05], (0, 1 // 50, 0.05))
+            @test mk(m).mν === m || mk(m).mν == m
+        end
+        c32 = w0waCDMCosmology(; h=0.67f0, ωb=0.0224f0, mν=(0.01f0, 0.02f0, 0.03f0))
+        @test typeof(c32.h) === Float32 && typeof(c32.ωb) === Float32 && typeof(c32.ωc) === Float64
+        @test c32.mν === (0.01f0, 0.02f0, 0.03f0)
+        # explicit eleven-positional constructor
+        c11 = w0waCDMCosmology(3.0, 0.96, h, 0.0224, 0.12, 0.0, (0.01, 0.02, 0.03), -1.0, 0.0, 5.0, :radiation)
+        @test c11.Neff == 5.0 && c11.neutrino_prescription === :radiation
+    end
+
+    @testset "Default mass is the explicit massless triple" begin
+        c = w0waCDMCosmology()
+        @test c.mν === (0.0, 0.0, 0.0)
+        explicit = w0waCDMCosmology(; mν=(0.0, 0.0, 0.0))
+        z = [1.5, 0.2, 3.0, 0.7]
+        for f in (ext.E_z, ext.r_z, ext.dM_z, ext.dA_z, ext.dL_z, ext.D_z, ext.f_z)
+            @test f(z, c) == f(z, explicit)
+        end
+        om = (Ωcb0, h)
+        massless = (; mν=(0.0, 0.0, 0.0))
+        @test ext.E_z(z, om...) == ext.E_z(z, om...; massless...)
+        @test ext.E_a(0.5, om...) == ext.E_a(0.5, om...; massless...)
+        @test ext.r_z(z, om...) == ext.r_z(z, om...; massless...)
+        @test ext.D_z(z, om...) == ext.D_z(z, om...; massless...)
+        @test ext.f_z(z, om...) == ext.f_z(z, om...; massless...)
+        @test ext.D_f_z(z, om...) == ext.D_f_z(z, om...; massless...)
+        # three massless species: Neff = 3.044 radiation, CLASS-anchored photons
+        @test ext.E_z(0.0, om...) ≈ 1.0 atol = 1e-14
+    end
+
+    @testset "Constructor AD with triple masses" begin
+        build(x) = w0waCDMCosmology(; h=x[1], ωb=0.0224, ωc=0.12, mν=(x[2], x[3], x[4]), Neff=x[5])
+        loss(x) = ext.E_z(1.0, build(x)) + ext.r_z(1.0, build(x)) / 1e4
+        x = [0.67, 0.01, 0.02, 0.03, 3.5]
+        fd, mc = AutoForwardDiff(), AutoMooncake(; config=Mooncake.Config())
+        gfd = DifferentiationInterface.gradient(loss, fd, x)
+        gmc = DifferentiationInterface.gradient(loss, mc, x)
+        @test all(isfinite, gfd) && all(!iszero, gfd)
+        @test gmc ≈ gfd rtol=2e-6
+        # a tracked mass vector goes through the validated constructor as well
+        gv = ForwardDiff.gradient(m -> ext.E_z(1.0, w0waCDMCosmology(; h=h, ωb=0.0224, ωc=0.12, mν=m)), [0.01, 0.02, 0.03])
+        @test all(isfinite, gv) && all(!iszero, gv)
     end
 
     @testset "Definitions and limits" begin
         Ωγ0 = ext._Ωγ0(h, (0.0, 0.0, 0.0))
         @test Ωγ0 ≈ ext._ωγ_T_CMB / h^2
-        @test ext._Ωγ0(h, 0.06) == 2.469e-5 / h^2  # legacy scalar photon density untouched
         @test isapprox(ext._N_UR_THREE_MASS, 3.044 - 3 * (0.71611 / (4 / 11)^(1 / 3))^4; rtol=1e-14)
         # massless limit is exactly Neff = 3.044 radiation at every a
         for a in (1e-4, 0.1, 1.0)
@@ -63,9 +144,8 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
             @test ext.E_z(0.0, Ωcb0, h; mν=m) ≈ 1.0 atol = 1e-14
             @test ext.E_z(0.0, Ωcb0, h; mν=m, w0=-0.9, wa=-0.3, Ωk0=0.02) ≈ 1.0 atol = 1e-14
         end
-        # vectors and tuples are the same path; legacy scalar is a different model
+        # vectors and tuples are the same path
         @test ext.E_z(2.0, Ωcb0, h; mν=[0.01, 0.02, 0.03]) == ext.E_z(2.0, Ωcb0, h; mν=(0.01, 0.02, 0.03))
-        @test ext.E_z(2.0, Ωcb0, h; mν=[0.06, 0.0, 0.0]) != ext.E_z(2.0, Ωcb0, h; mν=0.06)
     end
 
     @testset "Input validation" begin

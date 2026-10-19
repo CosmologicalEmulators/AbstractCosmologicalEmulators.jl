@@ -1,3 +1,4 @@
+# HISTORICAL PROVENANCE ONLY: outputs of the retired scalar-mnu mode; no longer read by any test and not API evidence.
 # Gerrit growth-species-prescriptions 4a5871a; JAX 0.4.38 CPU x64
 # h=.67 omega_cb=.1424 w0=-1 wa=0 Omega_k=0; original tolerances
 # scalar_mass species_m z E D_unnormalized f

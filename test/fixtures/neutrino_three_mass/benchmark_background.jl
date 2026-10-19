@@ -1,6 +1,6 @@
 # BenchmarkTools timings of the background functions touched by the three-mass change.
 #   julia --project=<repo>/benchmark benchmark_background.jl <label>
-# Not part of the test suite. Three-mass cases are skipped if unsupported.
+# Not part of the test suite.
 using BenchmarkTools, Printf
 using OrdinaryDiffEqTsit5, SciMLSensitivity, Integrals, FastGaussQuadrature
 using DifferentiationInterface, ForwardDiff, Mooncake
@@ -35,7 +35,4 @@ function bench_cases(name, mν_of)
     end
 end
 
-bench_cases("scalar_mnu006", x -> 0.06)
-if isdefined(ext, :_neutrino_masses)
-    bench_cases("three_mass_NH", x -> [0.0, 0.0086, 0.05])
-end
+bench_cases("three_mass_NH", x -> [0.0, 0.0086, 0.05])

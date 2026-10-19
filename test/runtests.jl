@@ -23,7 +23,13 @@ using Reactant
 using AbstractCosmologicalEmulators
 
 # Focused runs: Pkg.test(test_args=["neutrino_three_mass"]) or ["extensions"]; no args runs everything.
-if "growth_prescriptions" in ARGS
+if "background" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    using .ext: AbstractCosmology, w0waCDMCosmology, E_z, E_a, r_z, D_z, f_z, dM_z, dA_z, dL_z, S_of_K, D_f_z
+    include("test_background.jl")
+elseif "official_artifacts" in ARGS
+    include("test_official_artifacts.jl")
+elseif "growth_prescriptions" in ARGS
     const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
     include("test_growth_prescriptions.jl")
 elseif "neutrino_neff" in ARGS

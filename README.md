@@ -88,17 +88,34 @@ D, f = background.D_f_z([0.0, 1.0, 3.0], cosmology)
 All three masses must be finite and non-negative; exact zeros are supported.
 At the default `Neff = 3.044`, this path uses three Fermi–Dirac species with
 `Tν/Tγ = 0.71611` and a small massless radiation remainder. It follows the
-CLASS thermal convention. Scalar `mν` retains the historical single-species
-approximation and is **not** equivalent to `(mν, 0, 0)`.
+CLASS thermal convention.
+
+**Breaking change: the scalar `mν` mode is retired.** The analytic background and
+growth functions (`E_a`, `E_z`, `r_z`, `dM_z`, `dA_z`, `dL_z`, `D_z`, `f_z`,
+`D_f_z`, …) and the `w0waCDMCosmology` constructors take **exactly three explicit
+physical masses** (tuple or vector, in eV). A scalar `mν` — including `0` and
+AD-tracked scalars — raises an `ArgumentError` with migration instructions; a total
+mass is never split for you. To migrate, choose a physical split, e.g.
+`mν=(0.02, 0.02, 0.02)` for a degenerate 0.06 eV total, or `(0.0, 0.0086, 0.0502)`.
+The retired scalar model was a single Fermi–Dirac species carrying the whole mass
+with about one third of the standard neutrino radiation, so it is not equivalent to
+any three-mass split.
+
+- The default is the explicit massless triple `mν=(0.0, 0.0, 0.0)` (three massless
+  species, `Neff = 3.044` radiation, photons at the CLASS `Tcmb`). Its radiation
+  content differs from the retired one-species scalar default (which used the fixed
+  photon density `Ωγ0 h² = 2.469e-5`); this is intentional.
+- The **neural emulators are unchanged**: `run_emulator` inputs and the training
+  data still use the **total** neutrino mass `Σmν`.
+- The nine-positional-argument cosmology constructor remains supported, now with a
+  three-mass `mν` argument.
+- This is a smooth-neutrino background (and the documented scale-independent growth
+  approximation), not a full Boltzmann or scale-dependent neutrino growth treatment.
 
 **Migration from older vector inputs:** vectors previously summed legacy
 species and could have arbitrary length. They now require exactly three masses,
 include the massless remainder, and use the photon density at the stated CLASS
-temperature rather than the historical scalar coefficient. Old vector outputs
-can therefore change. The scalar approximation carries approximately one third
-of standard early-time neutrino radiation; it is retained for compatibility,
-not offered as the complete three-species model. The historical nine-positional-
-argument cosmology constructor remains supported with the new field defaults.
+temperature. Old vector outputs can therefore change.
 
 The three-mass functions and cosmology object also accept `Neff` and
 `neutrino_prescription`:
@@ -121,7 +138,7 @@ E_direct = background.E_z(1.0, (0.022 + 0.12)/0.67^2, 0.67;
 
 Both choices retain fixed photon temperature and physical neutrino masses in eV,
 and agree at Neff = 3.044. Neff derivatives use the explicit three-mass path;
-nonstandard Neff is rejected for the legacy scalar mass input. These prescriptions
+all analytic neutrino inputs are three-mass. These prescriptions
 are explicit physical models, not a claim that the two solvers' defaults coincide.
 
 Growth functions also accept `reltol` and `abstol`. Historical defaults remain

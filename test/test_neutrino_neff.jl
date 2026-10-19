@@ -12,7 +12,7 @@ import ADTypes: AutoForwardDiff, AutoMooncake
         positional(m) = ext.w0waCDMCosmology(3., .96, h, .0224, .12, 0., m, -1., 0.)
         keyword(m) = ext.w0waCDMCosmology(ln10Aₛ=3., nₛ=.96, h=h, ωb=.0224, ωc=.12,
                                         ωk=0., mν=m, w0=-1., wa=0.)
-        p, k = positional(.06), keyword(.06)
+        p, k = positional(mass), keyword(mass)
         for name in fieldnames(typeof(p))
             @test getproperty(p, name) == getproperty(k, name)
         end
@@ -21,8 +21,8 @@ import ADTypes: AutoForwardDiff, AutoMooncake
         for f in (ext.E_z, ext.r_z, ext.D_z)
             @test f([0., .5, 1.], p) == f([0., .5, 1.], k)
         end
-        gp = ForwardDiff.derivative(m -> ext.E_z(1., positional(m)), .06)
-        gk = ForwardDiff.derivative(m -> ext.E_z(1., keyword(m)), .06)
+        gp = ForwardDiff.derivative(m -> ext.E_z(1., positional((m, .02, .03))), .01)
+        gk = ForwardDiff.derivative(m -> ext.E_z(1., keyword((m, .02, .03))), .01)
         @test isfinite(gp) && gp != 0
         @test gp == gk
     end
@@ -53,7 +53,7 @@ import ADTypes: AutoForwardDiff, AutoMooncake
             @test_throws ArgumentError ext.E_z(1.0, ocb, h; mν=mass, Neff=bad)
         end
         @test_throws ArgumentError ext.E_z(1.0, ocb, h; mν=mass, Neff=2.0, neutrino_prescription=:radiation)
-        @test_throws ArgumentError ext.E_z(1.0, ocb, h; mν=.06, Neff=5.0)
+        @test_throws ArgumentError ext.E_z(1.0, ocb, h; mν=.06, Neff=5.0)  # scalar mass: see migration tests
         @test_throws ArgumentError ext.E_z(1.0, ocb, h; mν=mass, neutrino_prescription=:unknown)
         ν = ext._neutrino_background(mass, 5.0, :radiation)
         @test ν.temperature_ratio == ext._T_NCDM_OVER_T_CMB
