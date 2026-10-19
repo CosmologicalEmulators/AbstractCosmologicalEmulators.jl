@@ -52,7 +52,10 @@ function _akima_coefficients(t::HostOrDeviceVec, m::DeviceVec)
 
     eps_akima = eps(eltype(m)) * 100
     mask = f12 .> eps_akima
-    safe_f12 = ifelse.(mask, f12, one(eltype(m)))
+    # Compiled reverse AD can discard a repeated ifelse denominator guard,
+    # leaving 0/0 in the inactive branch. The floor stays positive everywhere
+    # and equals f12 wherever the weighted branch is selected.
+    safe_f12 = max.(f12, eps_akima)
     weighted = (f1 .* m[2:n+1] .+ f2 .* m[3:n+2]) ./ safe_f12
     b = ifelse.(mask, weighted, b)
 
@@ -74,7 +77,7 @@ function _akima_coefficients(t::HostOrDeviceVec, m::DeviceMat)
 
     eps_akima = eps(eltype(m)) * 100
     mask = f12 .> eps_akima
-    safe_f12 = ifelse.(mask, f12, one(eltype(m)))
+    safe_f12 = max.(f12, eps_akima)
     weighted = (f1 .* m[2:n+1, :] .+ f2 .* m[3:n+2, :]) ./ safe_f12
     b = ifelse.(mask, weighted, b)
 
