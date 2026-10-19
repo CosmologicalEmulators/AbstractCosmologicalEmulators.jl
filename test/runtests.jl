@@ -22,6 +22,28 @@ using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 
+# Focused runs: Pkg.test(test_args=["neutrino_three_mass"]) or ["extensions"]; no args runs everything.
+if "reactant_akima" in ARGS
+    include("test_reactant_akima_edges.jl")
+elseif "background" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    using .ext: AbstractCosmology, w0waCDMCosmology, E_z, E_a, r_z, D_z, f_z, dM_z, dA_z, dL_z, S_of_K, D_f_z
+    include("test_background.jl")
+elseif "official_artifacts" in ARGS
+    include("test_official_artifacts.jl")
+elseif "growth_prescriptions" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    include("test_growth_prescriptions.jl")
+elseif "neutrino_neff" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    include("test_neutrino_neff.jl")
+elseif "neutrino_three_mass" in ARGS
+    const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+    using .ext: w0waCDMCosmology
+    include("test_neutrino_three_mass.jl")
+elseif "extensions" in ARGS
+    include("test_extensions.jl")
+else
 @testset "AbstractEmulators test" begin
     # Aqua.jl quality assurance tests
     include("test_aqua.jl")
@@ -58,6 +80,7 @@ using AbstractCosmologicalEmulators
 
     # Reactant extension spline equivalence tests
     include("test_ext_reactant.jl")
+    include("test_reactant_akima_edges.jl")
 
     # Cubic Spline interpolation tests
     include("test_cubic_spline.jl")
@@ -69,4 +92,5 @@ using AbstractCosmologicalEmulators
 
     # Chebyshev optimization tests
     include("test_chebyshev.jl")
+end
 end

@@ -70,6 +70,125 @@ Reactant caveats:
 - Call `to_reactant` on large `LuxEmulator` / `GenericEmulator` objects before compiling. This moves parameters, states, and normalization arrays to Reactant device arrays so they are passed as device inputs instead of being embedded as large MLIR constants.
 
 
+## Independent neutrino masses in background calculations
+
+After loading the `BackgroundCosmologyExt` dependencies, pass three mass-eigenstate
+masses in eV as `mν = (m1, m2, m3)` or a three-element vector:
+
+```julia
+using AbstractCosmologicalEmulators
+using OrdinaryDiffEqTsit5, Integrals, FastGaussQuadrature, SciMLSensitivity
+
+background = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+cosmology = background.w0waCDMCosmology(mν=(0.0, 0.0086, 0.0502))
+E = background.E_z([0.0, 1.0, 3.0], cosmology)
+D, f = background.D_f_z([0.0, 1.0, 3.0], cosmology)
+```
+
+All three masses must be finite and non-negative; exact zeros are supported.
+At the default `Neff = 3.044`, this path uses three Fermi–Dirac species with
+`Tν/Tγ = 0.71611` and a small massless radiation remainder. It follows the
+CLASS thermal convention.
+
+**Breaking change: the scalar `mν` mode is retired.** The analytic background and
+growth functions (`E_a`, `E_z`, `r_z`, `dM_z`, `dA_z`, `dL_z`, `D_z`, `f_z`,
+`D_f_z`, …) and the `w0waCDMCosmology` constructors take **exactly three explicit
+physical masses** (tuple or vector, in eV). A scalar `mν` — including `0` and
+AD-tracked scalars — raises an `ArgumentError` with migration instructions; a total
+mass is never split for you. To migrate, choose a physical split, e.g.
+`mν=(0.02, 0.02, 0.02)` for a degenerate 0.06 eV total, or `(0.0, 0.0086, 0.0502)`.
+The retired scalar model was a single Fermi–Dirac species carrying the whole mass
+with about one third of the standard neutrino radiation, so it is not equivalent to
+any three-mass split.
+
+- The default is the explicit massless triple `mν=(0.0, 0.0, 0.0)` (three massless
+  species, `Neff = 3.044` radiation, photons at the CLASS `Tcmb`). Its radiation
+  content differs from the retired one-species scalar default (which used the fixed
+  photon density `Ωγ0 h² = 2.469e-5`); this is intentional.
+- The **neural emulators are unchanged**: `run_emulator` inputs and the training
+  data still use the **total** neutrino mass `Σmν`.
+- The nine-positional-argument cosmology constructor remains supported, now with a
+  three-mass `mν` argument.
+- This is a smooth-neutrino background (and the documented scale-independent growth
+  approximation), not a full Boltzmann or scale-dependent neutrino growth treatment.
+
+**Migration from older vector inputs:** vectors previously summed legacy
+species and could have arbitrary length. They now require exactly three masses,
+include the massless remainder, and use the photon density at the stated CLASS
+temperature. Old vector outputs can therefore change.
+
+The three-mass functions and cosmology object also accept `Neff` and
+`neutrino_prescription`:
+
+```julia
+cosmology = background.w0waCDMCosmology(
+    mν=(0.01, 0.02, 0.03), Neff=2.0, neutrino_prescription=:temperature)
+E = background.E_z(1.0, cosmology)
+E_direct = background.E_z(1.0, (0.022 + 0.12)/0.67^2, 0.67;
+    mν=(0.01, 0.02, 0.03), Neff=2.0, neutrino_prescription=:temperature)
+```
+
+- `:temperature` (default): scale all three temperatures by
+  `(Neff/3.044)^(1/4)` and the reference massless remainder by `Neff/3.044`.
+  Neff must be finite and positive. This smoothly covers the intended `[2,5]`
+  domain; both number densities and nonrelativistic transitions change.
+- `:radiation`: keep the three temperatures fixed and change only the massless
+  remainder. This requires `Neff ≥ 3*(0.71611/(4/11)^(1/3))^4 ≈ 3.0396`;
+  smaller values raise an error rather than silently changing prescription.
+
+Both choices retain fixed photon temperature and physical neutrino masses in eV,
+and agree at Neff = 3.044. Neff derivatives use the explicit three-mass path;
+all analytic neutrino inputs are three-mass. These prescriptions
+are explicit physical models, not a claim that the two solvers' defaults coincide.
+
+Growth functions also accept `reltol` and `abstol`. Historical defaults remain
+`1e-5` and `1e-6`; for inference requiring accurate Neff growth derivatives, the
+focused ForwardDiff/prepared-Mooncake validation uses tighter tolerances:
+
+```julia
+D, f = background.D_f_z([0.0, 1.0, 3.0], cosmology;
+    reltol=1e-9, abstol=1e-11)
+```
+
+Growth queries must lie inside the actual integration domain
+`1/139 ≤ a=1/(1+z) ≤ 1.01`; otherwise they raise `ArgumentError`. Background
+and distance functions are not restricted to this growth-integration interval.
+
+`D_z`, `f_z`, and `D_f_z` default to the **smooth-neutrino cold+baryon growth
+approximation**, appropriate to scales well below the neutrino free-streaming
+length. They do not compute scale-dependent total-matter growth or accurately
+describe neutrino clustering on large scales. `D` retains the initial-condition
+normalization `D(aᵢ) = aᵢ` at `aᵢ = 1/139`, not `D(0) = 1`.
+CLASS reference diagnostics include both cold+baryon and total-matter growth;
+for total mass 0.75 eV, the largest tested large-scale discrepancies reach about
+5.5% in normalized growth factor and 3.5% in growth rate.
+Those diagnostics are comparisons with scale-dependent perturbation growth,
+not errors relative to CLASS's `scale_independent_growth_factor` and
+`scale_independent_growth_factor_f`, which implement the same cb-source ODE.
+
+The `species` keyword selects a concrete, zero-sized growth prescription:
+
+```julia
+D, f = background.D_f_z([0.0, 1.0, 3.0], cosmology;
+    species=background.CBGrowth())             # existing default
+Dapprox, fapprox = background.D_f_z([0.0, 1.0, 3.0], cosmology;
+    species=background.MatterGrowthApprox(),
+    reltol=1e-11, abstol=1e-13)
+```
+
+`MatterGrowthApprox` adds the mass-induced density
+`ρν(masses)-ρν(massless reference)` with the **same temperature, Neff and number
+of species**. It is not `ρν-3pν` and does not supply scale-dependent total-matter
+growth. Dispatch selects the source outside the numerical ODE parameter vector.
+ForwardDiff/prepared-Mooncake tests use the tighter settings above for this mode's
+small, cancellation-sensitive mass derivatives. Public defaults are unchanged.
+Cross-language fixtures and provenance are in `test/fixtures/growth_prescriptions/`.
+
+Plain-text background and growth references, their solver settings, and generation
+scripts are in `test/fixtures/neutrino_three_mass/`. The CAMB fixture uses its
+recorded 2.0.0 setup and a different thermal convention; its tests account for
+that difference rather than asserting that CLASS and CAMB defaults are identical.
+
 ## Official emulator artifacts
 
 The package ships an `Artifacts.toml` with the official `300303` mnuw0waCDM emulator pair. They are loaded automatically into the package-level emulator registry when the package is loaded:
