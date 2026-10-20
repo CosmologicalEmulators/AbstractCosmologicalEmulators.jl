@@ -392,7 +392,7 @@ function solve(fact::CubicBSplineFactorization, b::AbstractVector)
     end
     x = similar(b, promote_type(eltype(fact.bands), eltype(b)))
     copyto!(x, b)
-    _band_solve!(fact.bands, x)
+    _solve_band_vector!(fact.bands, x, b)
     return x
 end
 
@@ -403,10 +403,7 @@ function solve(fact::CubicBSplineFactorization, B_mat::AbstractMatrix)
     end
     X = similar(B_mat, promote_type(eltype(fact.bands), eltype(B_mat)))
     copyto!(X, B_mat)
-    for c in 1:size(X, 2)
-        v = view(X, :, c)
-        _band_solve!(fact.bands, v)
-    end
+    _solve_band_columns!(fact.bands, X, B_mat)
     return X
 end
 
@@ -427,6 +424,319 @@ function _band_solve!(B::AbstractMatrix, x::AbstractVector)
         end
     end
     return x
+end
+
+# -----------------------------------------------------------------------------
+# Dense-host fast paths (Float32/Float64 factor and RHS of the same type).
+#
+# Everything below is an internal optimization of `_band_solve!` and
+# `_band_solve_adjoint!`; the generic kernels above and below remain the
+# reference and the fallback. Dispatch is restricted on dense `Matrix`/`Vector`
+# storage of BOTH the factor and the right-hand side, so device and
+# non-dense methods are never intercepted.
+# -----------------------------------------------------------------------------
+
+const _HostFloat = Union{Float32,Float64}
+
+# Minimum number of right-hand sides for which the O(7n) structure scan is
+# repaid by the cheaper bordered kernels. Measured locally (one core, N=33 and
+# N=128, Float64): a single column is slower with classification, two or more
+# are faster. Single columns use the full-band kernel.
+const _BORDERED_MIN_RHS = 2
+
+# True when `B` is a 7×n factor to which the unchecked kernels may be applied
+# for an n-row right-hand side. Anything else is handled by the generic code,
+# which raises ordinary bounds errors for malformed factors.
+@inline _band_shape_ok(B::Matrix, n::Integer) = size(B, 1) == 7 && size(B, 2) == n
+
+# Exact structural test of the bordered-tridiagonal pattern, on actual factor
+# contents (never on N or the spline kind). Requires n >= 6; rows 1 and 7 zero;
+# row 2 zero except column 4; row 6 zero except column n-3; every used entry
+# finite and every pivot finite and nonzero. Zero tests are exact (`iszero`):
+# a tiny nonzero forbidden entry selects the general kernels. Entries that the
+# solvers never read (U[0,1] and L[n+1,n]) are not inspected.
+function _is_bordered_tridiagonal_factor(B::AbstractMatrix)
+    n = size(B, 2)
+    (size(B, 1) == 7 && n >= 6) || return false
+    @inbounds for j in 1:n
+        iszero(B[1, j]) && iszero(B[7, j]) || return false
+        if j == 4
+            isfinite(B[2, j]) || return false
+        else
+            iszero(B[2, j]) || return false
+        end
+        if j == n - 3
+            isfinite(B[6, j]) || return false
+        else
+            iszero(B[6, j]) || return false
+        end
+        d = B[4, j]
+        (isfinite(d) && !iszero(d)) || return false
+        (j == 1 || isfinite(B[3, j])) || return false
+        (j == n || isfinite(B[5, j])) || return false
+    end
+    return true
+end
+
+# Full-band substitutions on column `c` of `X`, in exactly the operation order
+# of `_band_solve!` / `_band_solve_adjoint!` (so results are bitwise equal),
+# with the fixed-width interior separated from the short boundary ranges.
+# Callers guarantee size(B) == (7, n) and size(X, 1) == n, 1 <= c <= size(X, 2).
+@inline function _full_band_solve_column!(B::Matrix, X::Matrix, c::Int, n::Int)
+    @inbounds begin
+        for j in 1:(n-3)
+            xj = X[j, c]
+            X[j+1, c] -= B[5, j] * xj
+            X[j+2, c] -= B[6, j] * xj
+            X[j+3, c] -= B[7, j] * xj
+        end
+        for j in max(1, n - 2):n
+            xj = X[j, c]
+            for i in (j+1):min(n, j+3)
+                X[i, c] -= B[4 + i - j, j] * xj
+            end
+        end
+        for j in n:-1:4
+            X[j, c] /= B[4, j]
+            xj = X[j, c]
+            X[j-3, c] -= B[1, j] * xj
+            X[j-2, c] -= B[2, j] * xj
+            X[j-1, c] -= B[3, j] * xj
+        end
+        for j in min(n, 3):-1:1
+            X[j, c] /= B[4, j]
+            xj = X[j, c]
+            for i in max(1, j-3):(j-1)
+                X[i, c] -= B[4 + i - j, j] * xj
+            end
+        end
+    end
+    return nothing
+end
+
+@inline function _full_band_solve_adjoint_column!(B::Matrix, X::Matrix, c::Int, n::Int)
+    @inbounds begin
+        for j in 1:min(n, 3)
+            s = X[j, c]
+            for i in max(1, j-3):(j-1)
+                s -= B[4 + i - j, j] * X[i, c]
+            end
+            X[j, c] = s / B[4, j]
+        end
+        for j in 4:n
+            s = X[j, c]
+            s -= B[1, j] * X[j-3, c]
+            s -= B[2, j] * X[j-2, c]
+            s -= B[3, j] * X[j-1, c]
+            X[j, c] = s / B[4, j]
+        end
+        for j in n:-1:max(1, n - 2)
+            s = X[j, c]
+            for i in (j+1):min(n, j+3)
+                s -= B[4 + i - j, j] * X[i, c]
+            end
+            X[j, c] = s
+        end
+        for j in (n-3):-1:1
+            s = X[j, c]
+            s -= B[5, j] * X[j+1, c]
+            s -= B[6, j] * X[j+2, c]
+            s -= B[7, j] * X[j+3, c]
+            X[j, c] = s
+        end
+    end
+    return nothing
+end
+
+# Bordered-tridiagonal column solves: only the main diagonal, the first
+# sub/superdiagonals, B[6, n-3] = L[n-1, n-3] and B[2, 4] = U[2, 4] are used.
+# Requires `_is_bordered_tridiagonal_factor(B)` and size(X, 1) == n >= 6.
+@inline function _bordered_solve_column!(B::Matrix, X::Matrix, c::Int, n::Int)
+    @inbounds begin
+        alpha = B[6, n-3]
+        beta = B[2, 4]
+        # L y = b
+        for j in 1:(n-4)
+            X[j+1, c] -= B[5, j] * X[j, c]
+        end
+        xj = X[n-3, c]
+        X[n-2, c] -= B[5, n-3] * xj
+        X[n-1, c] -= alpha * xj
+        X[n-1, c] -= B[5, n-2] * X[n-2, c]
+        X[n, c] -= B[5, n-1] * X[n-1, c]
+        # U x = y
+        for j in n:-1:5
+            X[j, c] /= B[4, j]
+            X[j-1, c] -= B[3, j] * X[j, c]
+        end
+        x4 = X[4, c] / B[4, 4]
+        X[4, c] = x4
+        X[2, c] -= beta * x4
+        X[3, c] -= B[3, 4] * x4
+        x3 = X[3, c] / B[4, 3]
+        X[3, c] = x3
+        X[2, c] -= B[3, 3] * x3
+        x2 = X[2, c] / B[4, 2]
+        X[2, c] = x2
+        X[1, c] -= B[3, 2] * x2
+        X[1, c] /= B[4, 1]
+    end
+    return nothing
+end
+
+@inline function _bordered_solve_adjoint_column!(B::Matrix, X::Matrix, c::Int, n::Int)
+    @inbounds begin
+        alpha = B[6, n-3]
+        beta = B[2, 4]
+        # U^T z = g
+        X[1, c] /= B[4, 1]
+        X[2, c] = (X[2, c] - B[3, 2] * X[1, c]) / B[4, 2]
+        X[3, c] = (X[3, c] - B[3, 3] * X[2, c]) / B[4, 3]
+        s = X[4, c]
+        s -= beta * X[2, c]
+        s -= B[3, 4] * X[3, c]
+        X[4, c] = s / B[4, 4]
+        for j in 5:n
+            X[j, c] = (X[j, c] - B[3, j] * X[j-1, c]) / B[4, j]
+        end
+        # L^T b = z
+        X[n-1, c] -= B[5, n-1] * X[n, c]
+        X[n-2, c] -= B[5, n-2] * X[n-1, c]
+        s = X[n-3, c]
+        s -= B[5, n-3] * X[n-2, c]
+        s -= alpha * X[n-1, c]
+        X[n-3, c] = s
+        for j in (n-4):-1:1
+            X[j, c] -= B[5, j] * X[j+1, c]
+        end
+    end
+    return nothing
+end
+
+# Generic column loops: the reference algorithm and the fallback.
+function _solve_band_columns_general!(B::AbstractMatrix, X::AbstractMatrix)
+    for c in 1:size(X, 2)
+        _band_solve!(B, view(X, :, c))
+    end
+    return X
+end
+
+function _solve_band_adjoint_columns_general!(B::AbstractMatrix, X::AbstractMatrix)
+    for c in 1:size(X, 2)
+        _band_solve_adjoint!(B, view(X, :, c))
+    end
+    return X
+end
+
+# Entry points. `X` is the call-owned working copy of `source`. The fast
+# methods require factor, working copy AND the caller's original RHS to be
+# dense matrices of one Float32/Float64 type; every other combination (mixed
+# types, Duals, BigFloat, views, ranges, device arrays) takes the general loop.
+_solve_band_columns!(B::AbstractMatrix, X::AbstractMatrix, source::AbstractMatrix) =
+    _solve_band_columns_general!(B, X)
+
+_solve_band_adjoint_columns!(B::AbstractMatrix, X::AbstractMatrix, source::AbstractMatrix) =
+    _solve_band_adjoint_columns_general!(B, X)
+
+function _solve_band_columns!(
+    B::Matrix{T},
+    X::Matrix{T},
+    source::Matrix{T},
+) where {T<:_HostFloat}
+    return _solve_band_columns_host!(
+        _full_band_solve_column!,
+        _bordered_solve_column!,
+        _solve_band_columns_general!,
+        B, X, source,
+    )
+end
+
+function _solve_band_adjoint_columns!(
+    B::Matrix{T},
+    X::Matrix{T},
+    source::Matrix{T},
+) where {T<:_HostFloat}
+    return _solve_band_columns_host!(
+        _full_band_solve_adjoint_column!,
+        _bordered_solve_adjoint_column!,
+        _solve_band_adjoint_columns_general!,
+        B, X, source,
+    )
+end
+
+# Vector right-hand sides: dense Float32/Float64 vectors reuse the column
+# kernels through a zero-copy n×1 reshape; everything else is unchanged.
+_solve_band_vector!(B::AbstractMatrix, x::AbstractVector, b::AbstractVector) =
+    _band_solve!(B, x)
+
+_solve_band_adjoint_vector!(B::AbstractMatrix, x::AbstractVector, b::AbstractVector) =
+    _band_solve_adjoint!(B, x)
+
+function _solve_band_vector!(
+    B::Matrix{T},
+    x::Vector{T},
+    b::Vector{T},
+) where {T<:_HostFloat}
+    _solve_band_columns!(B, reshape(x, :, 1), reshape(b, :, 1))
+    return x
+end
+
+function _solve_band_adjoint_vector!(
+    B::Matrix{T},
+    x::Vector{T},
+    b::Vector{T},
+) where {T<:_HostFloat}
+    _solve_band_adjoint_columns!(B, reshape(x, :, 1), reshape(b, :, 1))
+    return x
+end
+
+# Shared driver. Structure is classified once per call, outside the column
+# loop. Bordered path policy (see OPTIMIZATION_BSPLINE.md 5.4): skipping exact
+# zero couplings is only used for finite factors with nonzero pivots; a column
+# whose bordered result is not finite (non-finite input, or overflow) is
+# restored from the ORIGINAL right-hand side and recomputed by the general
+# algorithm. A non-finite input always yields a non-finite output entry (each
+# solution entry is only modified by finite-coefficient updates after being
+# divided by a finite nonzero pivot), so checking the result is sufficient.
+function _solve_band_columns_host!(
+    full_column!,
+    bordered_column!,
+    general!,
+    B::Matrix{T},
+    X::Matrix{T},
+    source::Matrix{T},
+) where {T}
+    n = size(X, 1)
+    if !_band_shape_ok(B, n) || size(source) != size(X)
+        return general!(B, X)
+    end
+    m = size(X, 2)
+    if m >= _BORDERED_MIN_RHS && _is_bordered_tridiagonal_factor(B)
+        for c in 1:m
+            bordered_column!(B, X, c, n)
+            if !_all_finite_column(X, c, n)
+                @inbounds for i in 1:n
+                    X[i, c] = source[i, c]
+                end
+                full_column!(B, X, c, n)
+            end
+        end
+    else
+        # single column, N < 6, or an outer-band entry is not exactly zero:
+        # full-band kernel
+        for c in 1:m
+            full_column!(B, X, c, n)
+        end
+    end
+    return X
+end
+
+@inline function _all_finite_column(X::Matrix, c::Int, n::Int)
+    ok = true
+    @inbounds for i in 1:n
+        ok &= isfinite(X[i, c])
+    end
+    return ok
 end
 
 # =============================================================================
@@ -629,17 +939,14 @@ end
 function solve_adjoint(fact::CubicBSplineFactorization, c_bar::AbstractVector)
     b_bar = similar(c_bar, promote_type(eltype(fact.bands), eltype(c_bar)))
     copyto!(b_bar, c_bar)
-    _band_solve_adjoint!(fact.bands, b_bar)
+    _solve_band_adjoint_vector!(fact.bands, b_bar, c_bar)
     return b_bar
 end
 
 function solve_adjoint(fact::CubicBSplineFactorization, c_bar_mat::AbstractMatrix)
     b_bar_mat = similar(c_bar_mat, promote_type(eltype(fact.bands), eltype(c_bar_mat)))
     copyto!(b_bar_mat, c_bar_mat)
-    for c in 1:size(b_bar_mat, 2)
-        v = view(b_bar_mat, :, c)
-        _band_solve_adjoint!(fact.bands, v)
-    end
+    _solve_band_adjoint_columns!(fact.bands, b_bar_mat, c_bar_mat)
     return b_bar_mat
 end
 

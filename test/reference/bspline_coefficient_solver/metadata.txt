@@ -1,0 +1,5 @@
+source_commit = af7944975f422af0271ebdfb03a6ba2395a5e2c8
+dtype = Float64
+rhs_columns = 5   # sin+cos, damped exp, randn, uniform(-1,1), zeros
+cases = power_n17, random_n33, cheb_n9, clustered_n7, random_n6
+files = <case>_{sites,rhs,coefficients,dense_coefficients,cotangent,adjoint,dense_adjoint}.txt

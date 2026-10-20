@@ -67,6 +67,7 @@ using AbstractCosmologicalEmulators
     # Cubic B-Spline interpolation tests
     include("test_cubic_b_spline_basis.jl")
     include("test_cubic_b_spline_solver.jl")
+    include("test_cubic_b_spline_host_solver.jl")
     include("test_cubic_b_spline.jl")
     include("test_cubic_b_spline_plan.jl")
     include("test_cubic_b_spline_ad.jl")
