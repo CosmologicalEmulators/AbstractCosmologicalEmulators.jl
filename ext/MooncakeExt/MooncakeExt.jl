@@ -305,6 +305,7 @@ function Mooncake.rrule!!(
             AbstractCosmologicalEmulators._collocation_geometry_vjp(
                 spline,
                 coefficients_bar,
+                plan.factorization,
             )
         AbstractCosmologicalEmulators._map_not_a_knot_bar!(sites_bar, knot_bar)
         plan_data.sites .+= sites_bar
@@ -346,7 +347,11 @@ function Mooncake.rrule!!(
                 output_bar,
             )
         u_bar, collocation_sites_bar, collocation_knot_bar =
-            AbstractCosmologicalEmulators._collocation_geometry_vjp(spline, c_bar)
+            AbstractCosmologicalEmulators._collocation_geometry_vjp(
+                spline,
+                c_bar,
+                plan.factorization,
+            )
         sites_bar .+= collocation_sites_bar
         knot_bar .+= collocation_knot_bar
         AbstractCosmologicalEmulators._map_not_a_knot_bar!(sites_bar, knot_bar)

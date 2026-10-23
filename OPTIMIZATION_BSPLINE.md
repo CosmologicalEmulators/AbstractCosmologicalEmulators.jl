@@ -1,5 +1,11 @@
 # Cubic B-spline coefficient optimization plan
 
+**Continuation:** Stage A/B is implemented. For the current baseline and the
+next reverse-mode/threading work, use
+[OPTIMIZATION_BSPLINE_NEXT_STEPS.md](OPTIMIZATION_BSPLINE_NEXT_STEPS.md).
+Host AD targets Mooncake and Zygote; Enzyme support is Reactant-only.
+The historical baseline and prerequisites below describe the original campaign.
+
 **Status: design for discussion, not implementation approval.**
 Written 2026-10-20. Scope: AbstractCosmologicalEmulators.jl (ACE), primarily
 ordinary Julia CPU coefficient construction and its reverse-mode derivative.

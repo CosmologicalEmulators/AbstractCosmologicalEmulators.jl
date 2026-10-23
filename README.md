@@ -56,6 +56,22 @@ because XLA cannot lower data-dependent Julia exceptions. Use `:clamp` or
 `:zero` for dynamic device queries. A fixed `CubicBSplinePlan` may use `:throw`
 because its fixed query points are validated during host plan construction.
 
+## Threads
+
+`set_threads(n)` is the single thread setting. It sets FFTW's thread count for
+FFT plans created afterwards (for example by `prepare_chebyshev_plan`), and the
+task budget for large dense `Float32`/`Float64` B-spline coefficient solves in
+`bspline_coefficients`, `plan(u)` and their Zygote/Mooncake pullbacks.
+Independent columns are split across tasks; each column is computed exactly as
+in the serial solve. Small batches, vectors and other element types stay serial.
+
+Julia's default thread pool is fixed at startup, so the B-spline budget is
+`min(n, Threads.nthreads(:default))`: start Julia with `--threads=N` or
+`JULIA_NUM_THREADS=N`. Without a call, large solves may use the whole default
+pool and FFTW keeps its own setting. If you already parallelize over chains or
+tasks, call `set_threads(1)`. `set_fft_threads` is deprecated and forwards to
+`set_threads`.
+
 ## Automatic differentiation compatibility
 
 The package is designed to be usable in differentiable cosmology pipelines. The interpolation and emulator utilities are tested with multiple AD systems, including:

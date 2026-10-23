@@ -276,10 +276,20 @@ using FiniteDifferences
     end
 
     @testset "FFTW Threads" begin
-        # Test that we can set the thread count without error
-        @test set_fft_threads(2) === nothing || typeof(set_fft_threads(2)) <: Any
-        # Reset to 1 to not affect other tests
-        set_fft_threads(1)
+        # set_threads configures FFTW; restore the previous state afterwards so
+        # later tests are not silently forced serial.
+        ACE = AbstractCosmologicalEmulators
+        fftw_before = ACE.FFTW.get_num_threads()
+        host_before = ACE._HOST_THREADS[]
+        try
+            @test set_threads(2) === nothing
+            @test ACE.FFTW.get_num_threads() == 2
+            @test (@test_deprecated set_fft_threads(1)) === nothing
+            @test ACE.FFTW.get_num_threads() == 1
+        finally
+            ACE.FFTW.set_num_threads(fftw_before)
+            ACE._HOST_THREADS[] = host_before
+        end
     end
 
     @testset "Mooncake FFTW rules" begin

@@ -1044,6 +1044,26 @@ end
     )
 end
 
+# The four local basis values at x as jets in (x, T[span-2:span+3]). They
+# depend on geometry only, not on the cotangent they are contracted with.
+@inline function _cubic_basis_jets(T, span, x, ::Type{V}) where {V}
+    return _cubic_basis_local_values(
+        _cubic_basis_jet(x, Val(1), V),
+        _cubic_basis_jet(T[span-2], Val(2), V),
+        _cubic_basis_jet(T[span-1], Val(3), V),
+        _cubic_basis_jet(T[span], Val(4), V),
+        _cubic_basis_jet(T[span+1], Val(5), V),
+        _cubic_basis_jet(T[span+2], Val(6), V),
+        _cubic_basis_jet(T[span+3], Val(7), V),
+    )
+end
+
+@inline function _contract_cubic_basis_jets(values, values_bar)
+    weighted = values_bar[1] * values[1] + values_bar[2] * values[2] +
+               values_bar[3] * values[3] + values_bar[4] * values[4]
+    return weighted.partials[1], ntuple(i -> weighted.partials[i+1], 6)
+end
+
 @inline function _cubic_basis_vjp(T, span, x, values_bar)
     V = promote_type(
         eltype(T),
@@ -1053,19 +1073,7 @@ end
         typeof(values_bar[3]),
         typeof(values_bar[4]),
     )
-
-    values = _cubic_basis_local_values(
-        _cubic_basis_jet(x, Val(1), V),
-        _cubic_basis_jet(T[span-2], Val(2), V),
-        _cubic_basis_jet(T[span-1], Val(3), V),
-        _cubic_basis_jet(T[span], Val(4), V),
-        _cubic_basis_jet(T[span+1], Val(5), V),
-        _cubic_basis_jet(T[span+2], Val(6), V),
-        _cubic_basis_jet(T[span+3], Val(7), V),
-    )
-    weighted = values_bar[1] * values[1] + values_bar[2] * values[2] +
-               values_bar[3] * values[3] + values_bar[4] * values[4]
-    return weighted.partials[1], ntuple(i -> weighted.partials[i+1], 6)
+    return _contract_cubic_basis_jets(_cubic_basis_jets(T, span, x, V), values_bar)
 end
 
 function _accumulate_local_knot_bar!(T_bar, span, local_bar)
@@ -1137,15 +1145,105 @@ function _evaluation_geometry_vjp(spline, query::AbstractVector, output_bar)
     return c_bar, sites_bar, knot_bar, query_bar
 end
 
-function _collocation_geometry_vjp(spline, c_bar)
+# Below this many right-hand sides the per-site strided `dot` reduction is kept:
+# an isolated pilot measured the streamed reduction slower at M = 7 and only
+# noisily faster at M = 256.
+const _STREAMED_GEOMETRY_MIN_COLUMNS = 512
+
+# Dense Float64 batches form the local entries Σ_s Λ[i,s] C[j,s], j = j0(i):j0(i)+3,
+# in one pass over the columns s instead of 4n strided dot products. Only the
+# summation order changes. Returns false, with zero outputs, when the inputs are
+# not eligible or the bound below fails; the caller then runs the original
+# reduction on the same Λ, so such inputs keep exactly their previous results.
+#
+# Overflow bound: A[k,i] accumulates fl(|fl(λc)|) and D[i,k,:] are the local
+# basis jet partials, which do not depend on Λ. In either summation order (any
+# tree, BLAS blocking or fused multiply-add), every intermediate of the
+# reduction, of the jet contraction, of the knot accumulation and of the callers'
+# not-a-knot mapping is at most G = Σ_i Σ_k A[k,i] (1 + Σ_d |D[i,k,d]|) in
+# magnitude, times the rounding growth ((1+u)/(1-u))^K with K < 2M + 34n ≤ 2^42,
+# which is below 1.001, plus underflow terms below 1. If the computed G is finite
+# and ≤ floatmax/2, no step in either order overflows and, without Inf operands,
+# none produces NaN, so both give finite results. Any NaN or Inf in the used
+# entries of Λ, C or D makes G nonfinite, since Inf * 0 is NaN.
+function _streamed_collocation_geometry!(sites_bar, knot_bar, spline, c_bar, Λ)
     c = spline.coefficients
     sites = spline.sites
-    fact = CubicBSplineFactorization(spline.basis, sites)
+    T = knot_vector(spline.basis)
+    (c isa Matrix{Float64} && c_bar isa Matrix{Float64} && Λ isa Matrix{Float64} &&
+     sites isa Vector{Float64} && T isa Vector{Float64} &&
+     sites_bar isa Vector{Float64} && knot_bar isa Vector{Float64}) || return false
+    n, M = size(c)
+    (size(Λ) == (n, M) && length(sites) == n &&
+     _STREAMED_GEOMETRY_MIN_COLUMNS <= M <= 2^40 && n <= 2^35) || return false
+
+    first = Vector{Int}(undef, n)
+    for i in 1:n
+        j = basis_row(spline.basis, sites[i]).indices[1]
+        1 <= j <= n - 3 || return false
+        first[i] = j
+    end
+
+    P = zeros(4, n)
+    A = zeros(4, n)
+    @inbounds for s in 1:M, i in 1:n
+        λ = Λ[i, s]
+        j = first[i]
+        p1 = λ * c[j, s]
+        p2 = λ * c[j+1, s]
+        p3 = λ * c[j+2, s]
+        p4 = λ * c[j+3, s]
+        P[1, i] += p1
+        P[2, i] += p2
+        P[3, i] += p3
+        P[4, i] += p4
+        A[1, i] += abs(p1)
+        A[2, i] += abs(p2)
+        A[3, i] += abs(p3)
+        A[4, i] += abs(p4)
+    end
+
+    G = 0.0
+    for i in 1:n
+        span = first[i] + 3
+        values = _cubic_basis_jets(T, span, sites[i], Float64)
+        for k in 1:4
+            G += A[k, i] * (1 + sum(abs, values[k].partials))
+        end
+        x_bar, local_knot_bar = _contract_cubic_basis_jets(
+            values,
+            (-P[1, i], -P[2, i], -P[3, i], -P[4, i]),
+        )
+        sites_bar[i] += x_bar
+        _accumulate_local_knot_bar!(knot_bar, span, local_knot_bar)
+    end
+    isfinite(G) && G <= floatmax(Float64) / 2 && return true
+    fill!(sites_bar, 0.0)
+    fill!(knot_bar, 0.0)
+    return false
+end
+
+# Ordinary splines do not retain their collocation factorization, so rebuild it.
+_collocation_geometry_vjp(spline, c_bar) = _collocation_geometry_vjp(
+    spline,
+    c_bar,
+    CubicBSplineFactorization(spline.basis, spline.sites),
+)
+
+# Plans pass their cached factorization of the same collocation matrix. It is
+# only read by the transpose solve; site and knot cotangents are still formed
+# from the live sites, basis and coefficients below.
+function _collocation_geometry_vjp(spline, c_bar, fact::CubicBSplineFactorization)
+    c = spline.coefficients
+    sites = spline.sites
     ordinates_bar = solve_adjoint(fact, c_bar)
     T = knot_vector(spline.basis)
     V = promote_type(eltype(c), eltype(c_bar), eltype(T), eltype(sites))
     sites_bar = zeros(V, length(sites))
     knot_bar = zeros(V, length(T))
+    if _streamed_collocation_geometry!(sites_bar, knot_bar, spline, c_bar, ordinates_bar)
+        return ordinates_bar, sites_bar, knot_bar
+    end
 
     for i in eachindex(sites)
         row = basis_row(spline.basis, sites[i])
@@ -1293,7 +1391,8 @@ function ChainRulesCore.rrule(
         if delta isa ChainRulesCore.AbstractZero
             return NoTangent(), ZeroTangent(), ZeroTangent()
         end
-        u_bar, sites_bar, knot_bar = _collocation_geometry_vjp(spline, delta)
+        u_bar, sites_bar, knot_bar =
+            _collocation_geometry_vjp(spline, delta, plan.factorization)
         _map_not_a_knot_bar!(sites_bar, knot_bar)
         plan_bar = Tangent{typeof(plan)}(
             sites=sites_bar,
@@ -1320,7 +1419,7 @@ function ChainRulesCore.rrule(::typeof(_apply_cubic_b_spline_plan), plan, u)
         c_bar, sites_bar, knot_bar, query_bar =
             _evaluation_geometry_vjp(spline, plan.stencil.query, delta)
         u_bar, collocation_sites_bar, collocation_knot_bar =
-            _collocation_geometry_vjp(spline, c_bar)
+            _collocation_geometry_vjp(spline, c_bar, plan.factorization)
         sites_bar .+= collocation_sites_bar
         knot_bar .+= collocation_knot_bar
         _map_not_a_knot_bar!(sites_bar, knot_bar)

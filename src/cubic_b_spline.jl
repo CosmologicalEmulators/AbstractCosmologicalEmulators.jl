@@ -698,6 +698,11 @@ end
 # algorithm. A non-finite input always yields a non-finite output entry (each
 # solution entry is only modified by finite-coefficient updates after being
 # divided by a finite nonzero pivot), so checking the result is sufficient.
+#
+# Columns are independent, so a large batch is split into contiguous column
+# blocks solved by separate tasks (see `_host_column_tasks`). Each task writes
+# only its own columns of X and reads B and source; every column is computed
+# exactly as in the serial loop.
 function _solve_band_columns_host!(
     full_column!,
     bordered_column!,
@@ -711,8 +716,34 @@ function _solve_band_columns_host!(
         return general!(B, X)
     end
     m = size(X, 2)
-    if m >= _BORDERED_MIN_RHS && _is_bordered_tridiagonal_factor(B)
-        for c in 1:m
+    # single column, N < 6, or an outer-band entry is not exactly zero:
+    # full-band kernel
+    bordered = m >= _BORDERED_MIN_RHS && _is_bordered_tridiagonal_factor(B)
+    ntasks = _host_column_tasks(n, m)
+    if ntasks == 1
+        _solve_host_column_block!(full_column!, bordered_column!, B, X, source, 1:m, bordered)
+    else
+        @sync for t in 1:ntasks
+            columns = (div((t - 1) * m, ntasks) + 1):div(t * m, ntasks)
+            Threads.@spawn _solve_host_column_block!(
+                full_column!, bordered_column!, B, X, source, columns, bordered)
+        end
+    end
+    return X
+end
+
+function _solve_host_column_block!(
+    full_column!,
+    bordered_column!,
+    B::Matrix{T},
+    X::Matrix{T},
+    source::Matrix{T},
+    columns::UnitRange{Int},
+    bordered::Bool,
+) where {T}
+    n = size(X, 1)
+    if bordered
+        for c in columns
             bordered_column!(B, X, c, n)
             if !_all_finite_column(X, c, n)
                 @inbounds for i in 1:n
@@ -722,13 +753,23 @@ function _solve_band_columns_host!(
             end
         end
     else
-        # single column, N < 6, or an outer-band entry is not exactly zero:
-        # full-band kernel
-        for c in 1:m
+        for c in columns
             full_column!(B, X, c, n)
         end
     end
-    return X
+    return nothing
+end
+
+# Minimum band-solve entries (rows × columns) per task before a solve is split:
+# about 0.2 ms of serial work at N = 81, far above task start-up cost.
+# Conservative until benchmarked; smaller solves stay serial.
+const _HOST_SOLVE_MIN_TASK_ENTRIES = 32_768
+
+# Number of column blocks for an n × m solve under the current budget, read once.
+function _host_column_tasks(n::Int, m::Int)
+    budget = _host_thread_budget()
+    budget <= 1 && return 1
+    return clamp(div(n * m, _HOST_SOLVE_MIN_TASK_ENTRIES), 1, min(budget, m))
 end
 
 @inline function _all_finite_column(X::Matrix, c::Int, n::Int)
