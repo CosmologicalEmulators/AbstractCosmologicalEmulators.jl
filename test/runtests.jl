@@ -28,8 +28,18 @@ using DataInterpolations
 using Reactant
 using AbstractCosmologicalEmulators
 
+if "require-jet-012" in ARGS
+    @test v"0.12" <= Base.pkgversion(JET) < v"0.13"
+end
+if "require-datainterpolations-10" in ARGS
+    @test v"10" <= Base.pkgversion(DataInterpolations) < v"11"
+end
+
 # Focused runs: Pkg.test(test_args=["neutrino_three_mass"]) or ["extensions"]; no args runs everything.
-if "reactant_akima" in ARGS
+if "dependency_bumps" in ARGS
+    include("test_type_stability.jl")
+    include("test_cubic_spline.jl")
+elseif "reactant_akima" in ARGS
     include("test_reactant_akima_edges.jl")
 elseif "background" in ARGS
     const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
