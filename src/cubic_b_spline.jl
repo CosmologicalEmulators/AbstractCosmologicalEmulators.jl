@@ -2,6 +2,11 @@
 # Cubic B-Spline Basis
 # =============================================================================
 
+# Branch on coordinates, never on ForwardDiff tangent components (including
+# nested Duals). Keep the active values themselves in all numerical arithmetic.
+@inline _bspline_primal(x) = x
+@inline _bspline_primal(x::Dual) = _bspline_primal(value(x))
+
 """
     CubicBSplineBasis{K}
 
@@ -28,26 +33,26 @@ function _validate_knot_vector(T::AbstractVector)
         throw(ArgumentError("Knot vector contains non-finite values."))
     end
 
-    if !issorted(T)
+    if !issorted(T; by=_bspline_primal)
         throw(ArgumentError("Knot vector must be nondecreasing."))
     end
 
-    if T[1] != T[4] || (M > 4 && T[4] == T[5])
+    if _bspline_primal(T[1]) != _bspline_primal(T[4]) || _bspline_primal(T[4]) == _bspline_primal(T[5])
         throw(ArgumentError("Left endpoint must have exactly multiplicity 4."))
     end
 
-    if T[end-3] != T[end] || (M > 4 && T[end-4] == T[end-3])
+    if _bspline_primal(T[end-3]) != _bspline_primal(T[end]) || _bspline_primal(T[end-4]) == _bspline_primal(T[end-3])
         throw(ArgumentError("Right endpoint must have exactly multiplicity 4."))
     end
 
     for a in 1:(M-4)
-        if T[a] == T[a+4]
+        if _bspline_primal(T[a]) == _bspline_primal(T[a+4])
             throw(ArgumentError("Knot sequence is degenerate: T[$a] == T[$(a+4)]."))
         end
     end
 
     for i in 5:(M-7)
-        if T[i] == T[i+3]
+        if _bspline_primal(T[i]) == _bspline_primal(T[i+3])
             throw(ArgumentError("Internal knot $(T[i]) has multiplicity > 3."))
         end
     end
@@ -73,7 +78,7 @@ function CubicBSplineBasis(; domain=nothing, internal_knots=nothing, knot_vector
     end
 
     xmin, xmax = domain
-    if xmin >= xmax || !isfinite(xmin) || !isfinite(xmax)
+    if _bspline_primal(xmin) >= _bspline_primal(xmax) || !isfinite(xmin) || !isfinite(xmax)
         throw(ArgumentError("Domain must have finite xmin < xmax"))
     end
 
@@ -132,11 +137,12 @@ end
     _find_cubic_span(T, x)
 """
 function _find_cubic_span(T, x)
+    x = _bspline_primal(x)
     n_basis = length(T) - 4
-    if x >= T[n_basis + 1]
+    if x >= _bspline_primal(T[n_basis + 1])
         return n_basis
     end
-    if x < T[4]
+    if x < _bspline_primal(T[4])
         return 4
     end
 
@@ -145,7 +151,7 @@ function _find_cubic_span(T, x)
 
     while low < high
         mid = (low + high) >> 1
-        if x < T[mid]
+        if x < _bspline_primal(T[mid])
             high = mid
         else
             low = mid + 1
@@ -155,19 +161,29 @@ function _find_cubic_span(T, x)
     return low - 1
 end
 
+@inline _bspline_difference(x, y, ::Type{V}) where {V} = convert(V, x) - convert(V, y)
+
+@inline function _bspline_difference(x::Integer, y::Integer, ::Type{V}) where {V}
+    # Exact relative coordinates avoid both machine-integer overflow and loss
+    # of small spacings when large absolute coordinates are rounded to floats.
+    W = widen(promote_type(signed(typeof(x)), signed(typeof(y))))
+    return convert(V, convert(W, x) - convert(W, y))
+end
+
 """
     _cubic_basis_values(T, span, x)
 """
 function _cubic_basis_values(T, span, x)
-    left1 = x - T[span]
-    right1 = T[span+1] - x
+    V = typeof(one(eltype(T)) * one(typeof(x)) / one(typeof(x)))
+    left1 = _bspline_difference(x, T[span], V)
+    right1 = _bspline_difference(T[span+1], x, V)
 
     temp = one(typeof(right1)) / (right1 + left1)
     N1_0 = right1 * temp
     N1_1 = left1 * temp
 
-    left2 = x - T[span-1]
-    right2 = T[span+2] - x
+    left2 = _bspline_difference(x, T[span-1], V)
+    right2 = _bspline_difference(T[span+2], x, V)
 
     temp = N1_0 / (right1 + left2)
     N2_0 = right1 * temp
@@ -177,8 +193,8 @@ function _cubic_basis_values(T, span, x)
     N2_1 = saved + right2 * temp
     N2_2 = left1 * temp
 
-    left3 = x - T[span-2]
-    right3 = T[span+3] - x
+    left3 = _bspline_difference(x, T[span-2], V)
+    right3 = _bspline_difference(T[span+3], x, V)
 
     temp = N2_0 / (right1 + left3)
     N3_0 = right1 * temp
@@ -215,7 +231,7 @@ function basis_row(basis::CubicBSplineBasis, x)
 
     V = typeof(one(eltype(T)) * one(typeof(x)) / one(typeof(x)))
 
-    if x < xmin || x > xmax
+    if _bspline_primal(x) < _bspline_primal(xmin) || _bspline_primal(x) > _bspline_primal(xmax)
         return CubicBSplineRow{Int, V}((1, 2, 3, 4), (zero(V), zero(V), zero(V), zero(V)))
     end
 
@@ -311,6 +327,9 @@ end
 
 A precomputed matrix factorization used to solve for cubic B-spline coefficients given a set of ordinate values.
 Construct via `CubicBSplineFactorization(basis, x)`.
+
+Raw LU storage is structural in reverse-mode AD. Use `CubicBSplinePlan` and
+`bspline_coefficients(plan, u)` to differentiate through interpolation sites.
 """
 struct CubicBSplineFactorization{F<:AbstractMatrix}
     bands::F
@@ -326,7 +345,7 @@ function _validate_bspline_sites(x::AbstractVector)
         throw(ArgumentError("Interpolation sites must be finite."))
     end
     for i in 1:(length(x)-1)
-        if x[i] >= x[i+1]
+        if _bspline_primal(x[i]) >= _bspline_primal(x[i+1])
             throw(ArgumentError("Interpolation sites must be strictly increasing."))
         end
     end
@@ -353,7 +372,9 @@ function CubicBSplineFactorization(basis::CubicBSplineBasis, xq::AbstractVector)
     for i in 1:n
         x = xq[i]
 
-        if x < T_vec[i] || x > T_vec[i+4]
+        xp = _bspline_primal(x)
+        left, right = _bspline_primal(T_vec[i]), _bspline_primal(T_vec[i+4])
+        if (i == 1 ? xp < left : xp <= left) || (i == n ? xp > right : xp >= right)
             throw(ArgumentError("Schoenberg-Whitney condition violated at site $i (x = $x, support = [$(T_vec[i]), $(T_vec[i+4])])."))
         end
 
@@ -369,7 +390,7 @@ function CubicBSplineFactorization(basis::CubicBSplineBasis, xq::AbstractVector)
     # Pivot-free LU Factorization (in-place Doolittle for band matrices)
     for k in 1:n
         pivot = B[4, k]
-        if abs(pivot) < eps(V) * 10
+        if abs(_bspline_primal(pivot)) < eps(V) * 10
             throw(LinearAlgebra.SingularException(k))
         end
 
@@ -802,7 +823,7 @@ end
 
 @inline function _apply_extrapolation(policy::ThrowExtrap, x, xmin, xmax)
     _validate_bspline_query(x)
-    if x < xmin || x > xmax
+    if _bspline_primal(x) < _bspline_primal(xmin) || _bspline_primal(x) > _bspline_primal(xmax)
         throw(ArgumentError("Query point $x is outside domain [$xmin, $xmax]"))
     end
     return x
@@ -810,7 +831,10 @@ end
 
 @inline function _apply_extrapolation(policy::ClampExtrap, x, xmin, xmax)
     _validate_bspline_query(x)
-    return clamp(x, xmin, xmax)
+    V = promote_type(typeof(x), typeof(xmin), typeof(xmax))
+    _bspline_primal(x) < _bspline_primal(xmin) && return convert(V, xmin)
+    _bspline_primal(x) > _bspline_primal(xmax) && return convert(V, xmax)
+    return convert(V, x)
 end
 
 @inline function _apply_extrapolation(policy::ZeroExtrap, x, xmin, xmax)
@@ -851,6 +875,10 @@ a series vector for matrix ordinates. A vector query returns a vector or an
 `nquery × nseries` matrix. Extrapolation policies are `:clamp`, `:throw`, and
 `:zero`.
 
+The spline owns a snapshot of its source sites; changing the original input
+cannot invalidate cached coefficients or derivatives. Do not mutate stored
+geometry. Endpoint equality selects the interior derivative in all AD backends.
+
 ForwardDiff, Zygote, and Mooncake support derivatives through ordinates, sites,
 and query coordinates on plain Julia arrays.
 
@@ -865,7 +893,7 @@ function CubicBSpline(
 )
     return _construct_cubic_b_spline(
         _bspline_dense_input(u),
-        _bspline_dense_input(x),
+        copy(_bspline_dense_input(x)),
         _get_extrapolation_policy(extrapolation),
     )
 end
@@ -978,6 +1006,8 @@ end
 (spline::CubicBSpline)(xq::AbstractVector) = _evaluate_cubic_b_spline(spline, _bspline_dense_input(xq))
 
 function solve_adjoint(fact::CubicBSplineFactorization, c_bar::AbstractVector)
+    n = size(fact.bands, 2)
+    length(c_bar) == n || throw(DimensionMismatch("RHS vector length ($(length(c_bar))) does not match factorization order ($n)."))
     b_bar = similar(c_bar, promote_type(eltype(fact.bands), eltype(c_bar)))
     copyto!(b_bar, c_bar)
     _solve_band_adjoint_vector!(fact.bands, b_bar, c_bar)
@@ -985,6 +1015,8 @@ function solve_adjoint(fact::CubicBSplineFactorization, c_bar::AbstractVector)
 end
 
 function solve_adjoint(fact::CubicBSplineFactorization, c_bar_mat::AbstractMatrix)
+    n = size(fact.bands, 2)
+    size(c_bar_mat, 1) == n || throw(DimensionMismatch("RHS matrix rows ($(size(c_bar_mat, 1))) does not match factorization order ($n)."))
     b_bar_mat = similar(c_bar_mat, promote_type(eltype(fact.bands), eltype(c_bar_mat)))
     copyto!(b_bar_mat, c_bar_mat)
     _solve_band_adjoint_columns!(fact.bands, b_bar_mat, c_bar_mat)
@@ -1041,6 +1073,10 @@ Applying the plan to a vector returns a query vector. Applying it to an
 `nsites × nseries` matrix returns an `nquery × nseries` matrix. Reverse-mode AD
 supports ordinates, sites, and fixed query coordinates.
 
+Source and query coordinates are independent owned snapshots, even when the
+same input array is passed twice. Changing the original arrays does not change
+the plan or its derivatives. Direct mutation of stored geometry is unsupported.
+
 The exported `plan(u)`, `bspline_coefficients(plan, u)`, and
 `bspline_basis(plan)` operations compose through plan construction. Raw LU
 factorization storage is structural and is not a differentiable public input.
@@ -1060,8 +1096,8 @@ function CubicBSplinePlan(
     extrapolation=:clamp,
 )
     return _construct_cubic_b_spline_plan(
-        _bspline_dense_input(x),
-        _bspline_dense_input(xq),
+        copy(_bspline_dense_input(x)),
+        copy(_bspline_dense_input(xq)),
         _get_extrapolation_policy(extrapolation),
     )
 end

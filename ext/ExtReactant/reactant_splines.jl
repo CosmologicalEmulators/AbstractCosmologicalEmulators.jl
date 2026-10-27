@@ -1018,7 +1018,9 @@ end
 function _apply_reactant_extrapolation(xq::DeviceVec, T, E)
     xmin = T[[4]]
     xmax = T[[length(T) - 3]]
-    if E === AbstractCosmologicalEmulators.ClampExtrap
+    if E === AbstractCosmologicalEmulators.ClampExtrap || E === AbstractCosmologicalEmulators.ZeroExtrap
+        # Bound before the recurrence. An outside polynomial can overflow even
+        # for finite queries; masking it afterwards cannot repair NaN adjoints.
         return clamp.(xq, xmin, xmax)
     elseif E === AbstractCosmologicalEmulators.ThrowExtrap
         error("Dynamic bounds checking (`extrapolation=:throw`) is not currently supported in Reactant compiled contexts because the XLA compiler cannot lower dynamic exceptions. Please use `extrapolation=:clamp` or `:zero`.")
@@ -1033,9 +1035,9 @@ function _apply_reactant_zero_mask(out, xq::DeviceVec, T, E)
         xmax = T[[length(T) - 3]]
         mask = (xq .>= xmin) .& (xq .<= xmax)
         if out isa DeviceMat
-            return out .* reshape(mask, :, 1)
+            return ifelse.(reshape(mask, :, 1), out, zero(eltype(out)))
         else
-            return out .* mask
+            return ifelse.(mask, out, zero(eltype(out)))
         end
     end
     return out

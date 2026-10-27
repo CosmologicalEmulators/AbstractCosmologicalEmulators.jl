@@ -1105,8 +1105,8 @@ function _evaluation_geometry_vjp(spline, query::AbstractVector, output_bar)
 
     for j in eachindex(query)
         q = query[j]
-        outside_left = q < xmin
-        outside_right = q > xmax
+        outside_left = _bspline_primal(q) < _bspline_primal(xmin)
+        outside_right = _bspline_primal(q) > _bspline_primal(xmax)
         if spline.extrapolation isa ZeroExtrap && (outside_left || outside_right)
             continue
         end
@@ -1135,9 +1135,9 @@ function _evaluation_geometry_vjp(spline, query::AbstractVector, output_bar)
         _accumulate_local_knot_bar!(knot_bar, span, local_knot_bar)
 
         if spline.extrapolation isa ClampExtrap && outside_left
-            sites_bar[1] += x_bar
+            knot_bar[4] += x_bar
         elseif spline.extrapolation isa ClampExtrap && outside_right
-            sites_bar[end] += x_bar
+            knot_bar[end-3] += x_bar
         else
             query_bar[j] += x_bar
         end
@@ -1289,8 +1289,8 @@ function _stencil_geometry_vjp(basis, xq, policy, w1_bar, w2_bar, w3_bar, w4_bar
     xmin, xmax = bspline_domain(basis)
     for i in eachindex(xq)
         q = xq[i]
-        outside_left = q < xmin
-        outside_right = q > xmax
+        outside_left = _bspline_primal(q) < _bspline_primal(xmin)
+        outside_right = _bspline_primal(q) > _bspline_primal(xmax)
         if policy isa ZeroExtrap && (outside_left || outside_right)
             continue
         end
@@ -1454,8 +1454,9 @@ function ChainRulesCore.rrule(
         if delta isa ChainRulesCore.AbstractZero
             return NoTangent(), ZeroTangent(), ZeroTangent(), NoTangent()
         end
-        sites_bar = _cotangent_field(delta, :sites, plan.sites)
-        knot_bar = _basis_knot_cotangent(delta, plan.basis)
+        # ProjectTo may return the incoming array; projection grants no ownership.
+        sites_bar = copy(_cotangent_field(delta, :sites, plan.sites))
+        knot_bar = copy(_basis_knot_cotangent(delta, plan.basis))
         # The pivot-free LU bands are storage, not an independent geometric
         # input. Exported coefficient differentiation is handled by the
         # bspline_coefficients rule above, which applies the implicit adjoint
@@ -1464,7 +1465,7 @@ function ChainRulesCore.rrule(
         if stencil_delta isa ChainRulesCore.AbstractZero
             query_bar = zero(query)
         else
-            query_bar = _cotangent_field(stencil_delta, :query, plan.stencil.query)
+            query_bar = copy(_cotangent_field(stencil_delta, :query, plan.stencil.query))
             stencil_knot_bar, stencil_query_bar = _stencil_geometry_vjp(
                 plan.basis,
                 plan.stencil.query,
@@ -1777,6 +1778,7 @@ function ChainRulesCore.rrule(::typeof(_basis_stencil), basis, xq, policy)
             ∂w3,
             ∂w4,
         )
+        ∂xq .+= _cotangent_field(Δ, :query, stencil.query)
         basis_bar = Tangent{typeof(basis)}(knot_vector=∂T)
         return NoTangent(), basis_bar, ChainRulesCore.ProjectTo(xq)(∂xq), NoTangent()
     end
@@ -1793,7 +1795,7 @@ function ChainRulesCore.rrule(::typeof(basis_row), basis, x)
         values_bar = _cotangent_field(Δ, :values, row.values)
         T = knot_vector(basis)
         xmin, xmax = bspline_domain(basis)
-        if x < xmin || x > xmax
+        if _bspline_primal(x) < _bspline_primal(xmin) || _bspline_primal(x) > _bspline_primal(xmax)
             return NoTangent(), Tangent{typeof(basis)}(
                 knot_vector=zeros(eltype(T), length(T)),
             ), zero(x)
@@ -1809,6 +1811,36 @@ function ChainRulesCore.rrule(::typeof(basis_row), basis, x)
         return NoTangent(), Tangent{typeof(basis)}(knot_vector=knot_bar), x_bar
     end
     return row, basis_row_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(basis_matrix), basis, xq; storage=:dense)
+    output = basis_matrix(basis, xq; storage=storage)
+    function basis_matrix_pullback(delta)
+        delta = ChainRulesCore.unthunk(delta)
+        if delta isa ChainRulesCore.AbstractZero
+            return NoTangent(), ZeroTangent(), ZeroTangent()
+        end
+        T = knot_vector(basis)
+        V = promote_type(eltype(T), eltype(xq), eltype(delta))
+        knot_bar = zeros(V, length(T))
+        query_bar = zeros(V, length(xq))
+        xmin, xmax = bspline_domain(basis)
+        for (i, x) in enumerate(xq)
+            if _bspline_primal(x) < _bspline_primal(xmin) || _bspline_primal(x) > _bspline_primal(xmax)
+                continue
+            end
+            row = basis_row(basis, x)
+            values_bar = ntuple(k -> delta[i, row.indices[k]], 4)
+            x_bar, local_knot_bar = _cubic_basis_vjp(T, row.indices[4], x, values_bar)
+            _accumulate_local_knot_bar!(knot_bar, row.indices[4], local_knot_bar)
+            query_bar[i] = x_bar
+        end
+        basis_bar = Tangent{typeof(basis)}(knot_vector=ChainRulesCore.ProjectTo(T)(knot_bar))
+        shaped_query_bar = xq isa Number ? only(query_bar) :
+                           xq isa Tuple ? Tuple(query_bar) : reshape(query_bar, size(xq))
+        return NoTangent(), basis_bar, ChainRulesCore.ProjectTo(xq)(shaped_query_bar)
+    end
+    return output, basis_matrix_pullback
 end
 
 function ChainRulesCore.rrule(::typeof(_evaluate_spline), c::AbstractVector, row::CubicBSplineRow)

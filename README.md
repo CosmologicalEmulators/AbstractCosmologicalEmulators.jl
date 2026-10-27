@@ -46,6 +46,17 @@ such as `log.(k)` before constructing the spline.
 
 ForwardDiff, Zygote, and Mooncake support derivatives through B-spline
 ordinates, interpolation sites, and query coordinates on plain Julia arrays.
+Splines and plans own snapshots of their constructor geometry, including
+independent source/query buffers when the same array is supplied twice. Do not
+mutate the stored geometry. Low-level basis and stencil objects borrow their
+coordinate arrays; those arrays must remain unchanged while the objects or
+their pullbacks are in use.
+
+Endpoint equality uses the interior derivative. Integer low-level coordinates
+support value evaluation without overflowing differences; use floating geometry
+for differentiation, shifting large integer offsets before conversion when
+needed to preserve small spacings.
+
 Reactant plans use a prepared dense interpolation operator and support Enzyme
 differentiation through compiled execution. The one-shot Reactant path supports
 fixed host sites with dynamic device ordinates and queries; fully dynamic device
@@ -55,6 +66,8 @@ In compiled Reactant evaluation, dynamic `extrapolation=:throw` is unsupported
 because XLA cannot lower data-dependent Julia exceptions. Use `:clamp` or
 `:zero` for dynamic device queries. A fixed `CubicBSplinePlan` may use `:throw`
 because its fixed query points are validated during host plan construction.
+Dynamic compiled queries must be finite; non-finite device inputs are outside
+this contract.
 
 ## Threads
 
