@@ -712,9 +712,9 @@ function _solve_band_adjoint_vector!(
 end
 
 # Shared driver. Structure is classified once per call, outside the column
-# loop. Bordered path policy (see OPTIMIZATION_BSPLINE.md 5.4): skipping exact
-# zero couplings is only used for finite factors with nonzero pivots; a column
-# whose bordered result is not finite (non-finite input, or overflow) is
+# loop. Skipping exact zero couplings can change IEEE propagation (0*Inf is
+# NaN), so the bordered path is only used for finite factors with nonzero pivots.
+# A column whose bordered result is not finite (non-finite input, or overflow) is
 # restored from the ORIGINAL right-hand side and recomputed by the general
 # algorithm. A non-finite input always yields a non-finite output entry (each
 # solution entry is only modified by finite-coefficient updates after being
