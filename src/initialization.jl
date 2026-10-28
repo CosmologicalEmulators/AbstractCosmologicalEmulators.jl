@@ -143,6 +143,15 @@ function _init_luxemulator(NN_dict::AbstractDict{String,Any}, weight)
     Description= nn_descript)
 end
 
+"""
+    init_emulator(NN_dict, weights, backend; validate=true, validate_weights=validate)
+
+Construct a trained `LuxEmulator` or `SimpleChainsEmulator` from an architecture
+dictionary and its flat trained weights. The dictionary describes input/output
+sizes, hidden layers, activations and emulator metadata. This does not apply
+normalization or postprocessing; use `AbstractCosmologicalEmulators.load_trained_emulator`
+for a complete on-disk artifact. Validation is enabled by default.
+"""
 function init_emulator(NN_dict::AbstractDict{String,Any}, weight, ::Type{LuxEmulator}; validate::Bool=true, validate_weights::Bool=validate)
     if validate
         validate_nn_dict_structure(NN_dict)
@@ -213,6 +222,23 @@ function _load_postprocessing(path::AbstractString, nn_dict::AbstractDict, postp
     end
 end
 
+"""
+    AbstractCosmologicalEmulators.load_trained_emulator(path; backend=LuxEmulator,
+        weights_file="weights.npy", inminmax_file="inminmax.npy",
+        outminmax_file="outminmax.npy", nn_setup_file="nn_setup.json",
+        postprocessing_file="postprocessing.jl", validate=true)
+
+Load an artifact directory into a [`GenericEmulator`](@ref). The files contain
+trained weights, input/output normalization ranges and architecture/metadata.
+Use the qualified name: this loader is not part of the exported namespace.
+
+An explicitly named built-in postprocessor in `nn_setup.json` takes precedence;
+an unknown identifier raises an error. With no named postprocessor, the loader
+evaluates `postprocessing.jl` if present, otherwise uses identity.
+Loading custom postprocessing executes Julia code: load only trusted
+artifacts. Validation is enabled by default; changing it does not make untrusted
+code safe.
+"""
 function load_trained_emulator(path::String;
                                backend=LuxEmulator,
                                weights_file="weights.npy",
