@@ -2,6 +2,8 @@ using Test
 using ForwardDiff, DifferentiationInterface, Mooncake
 import ADTypes: AutoForwardDiff, AutoMooncake
 
+include("test_neutrino_lookup_contract.jl")
+
 @testset "Neff background and CLASS growth ODE" begin
     h = .67
     ocb = (.0224 + .12) / h^2

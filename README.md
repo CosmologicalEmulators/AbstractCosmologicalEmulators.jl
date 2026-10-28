@@ -25,6 +25,58 @@ At the moment, the neural-network emulator backends supported here are based on 
 - Extension support for optional packages, including `Reactant.jl` and `Mooncake.jl`.
 
 
+## Analytic cosmology: quick start
+
+The analytic functions support three independently specified neutrino masses.
+They are separate from the trained neural emulators, whose input is still Σmν
+with the mass splitting fixed by the training data.
+
+```julia
+using AbstractCosmologicalEmulators
+using OrdinaryDiffEqTsit5, Integrals, FastGaussQuadrature, SciMLSensitivity
+
+bg = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
+cosmo = bg.w0waCDMCosmology(
+    h=0.67, ωb=0.0224, ωc=0.12,
+    mν=(0.0, 0.0086, 0.0502),  # individual masses in eV, not a total
+    Neff=3.044, neutrino_prescription=:temperature,
+)
+z = [0.0, 1.0, 3.0]
+E = bg.E_z(z, cosmo)
+χ = bg.r_z(z, cosmo)
+D, f = bg.D_f_z(z, cosmo; reltol=1e-9, abstol=1e-11)
+```
+
+| Function | Result |
+|---|---|
+| `E_z(z, cosmo)`, `E_a(a, cosmo)` | H/H₀, dimensionless |
+| `r_z(z, cosmo)` | Radial comoving distance χ, Mpc |
+| `dM_z(z, cosmo)` | Transverse comoving distance, Mpc |
+| `dA_z(z, cosmo)`, `dL_z(z, cosmo)` | Angular-diameter / luminosity distance, Mpc |
+| `D_z(z, cosmo)` | Growth factor, initialized with D(aᵢ)=aᵢ, **not** D(0)=1 |
+| `f_z(z, cosmo)` | Growth rate d ln D / d ln a |
+| `D_f_z(z, cosmo)` | `(D, f)` from one solve |
+
+The constructor takes **physical densities** ω_b=Ω_b h², ω_c=Ω_c h² and
+ω_k=Ω_k h². The direct function interface instead takes the **density fraction**
+Ω_cb=Ω_b+Ω_c, excluding neutrinos:
+
+```julia
+E_direct = bg.E_z(z, (0.0224 + 0.12)/0.67^2, 0.67;
+                  mν=(0.0, 0.0086, 0.0502), Neff=3.044)
+```
+
+Use scalar redshifts for scalar results and vectors for vector results.
+Neutrino momentum integrals are tabulated when the extension initializes;
+runtime expansion, distances, growth and their derivatives use those lookup
+tables, not repeated momentum integration.
+The default mass input is `(0, 0, 0)`; scalar masses are rejected, and no
+hierarchy or oscillation constraints are imposed. Growth is a scale-independent
+approximation, supported only for `1/139 ≤ a ≤ 1.01`. See
+[the neutrino and growth conventions below](#independent-neutrino-masses-in-background-calculations)
+for Neff prescriptions, growth sources and accuracy limitations. In the REPL,
+`?bg.w0waCDMCosmology`, `?bg.E_z` and `?bg.D_f_z` describe the callable API.
+
 ## Cubic B-Spline Interpolation
 
 The package provides differentiable not-a-knot cubic B-spline interpolation.
@@ -112,7 +164,7 @@ Example:
 using Reactant
 using AbstractCosmologicalEmulators
 
-emu_host = load_trained_emulator(path_to_emulator)
+emu_host = AbstractCosmologicalEmulators.load_trained_emulator(path_to_emulator)
 emu_dev = to_reactant(emu_host)
 
 x = Reactant.to_rarray(randn(input_dimension))
@@ -243,6 +295,59 @@ growth. Dispatch selects the source outside the numerical ODE parameter vector.
 ForwardDiff/prepared-Mooncake tests use the tighter settings above for this mode's
 small, cancellation-sensitive mass derivatives. Public defaults are unchanged.
 Cross-language fixtures and provenance are in `test/fixtures/growth_prescriptions/`.
+
+### Growth equations
+
+Let $x=\ln a$, use primes for derivatives with respect to $x$, and define
+$E(a)=H(a)/H_0$. Both prescriptions solve
+
+$$
+D'' + \left(2+\frac{d\ln E}{d\ln a}\right)D'
+-\frac{3}{2}\Omega_{\mathrm{src}}(a)D=0,
+\qquad f(a)=\frac{D'}{D}.
+$$
+
+**`CBGrowth()`** uses only the cold-dark-matter and baryon source:
+
+$$
+\Omega_{\mathrm{src}}(a)=\Omega_{cb}(a)
+=\frac{\Omega_{cb,0}a^{-3}}{E^2(a)},
+\qquad \Omega_{cb,0}=\Omega_{c,0}+\Omega_{b,0}.
+$$
+
+**`MatterGrowthApprox()`** adds the mass-induced neutrino density:
+
+$$
+\Delta\rho_\nu(a)=
+\rho_\nu(a;m_1,m_2,m_3)-\rho_\nu(a;0,0,0),
+$$
+
+$$
+\Omega_{\mathrm{src}}(a)=
+\frac{\Omega_{cb,0}a^{-3}+\Delta\rho_\nu(a)/\rho_{\mathrm{crit},0}}
+{E^2(a)},
+\qquad \rho_{\mathrm{crit},0}=\frac{3H_0^2}{8\pi G}.
+$$
+
+The two densities in the subtraction use the **same temperature, Neff and
+number of species**, including the same massless-radiation remainder. This is
+not $\rho_\nu-3p_\nu$ and does not evolve neutrino perturbations.
+In both prescriptions, $E(a)$ includes the full neutrino background, even when
+neutrinos are absent from the growth source. Neither prescription supplies
+scale-dependent massive-neutrino growth.
+
+Both use $D(a_i)=D'(a_i)=a_i$ at $a_i=1/139$; they do **not** normalize $D(1)=1$.
+The JAX equivalents are `species="cb"` and `species="m"`, respectively.
+
+### Internal thermal parameters
+
+`ThermalNeutrinos` is an internal, immutable bundle of the three masses,
+$T_\nu/T_\gamma$, and the effective massless-radiation count. The public
+Neff prescription determines these quantities before the inner numerical
+calculations. Passing the prepared bundle avoids repeating prescription
+selection and input validation at every integration node or ODE stage.
+Its parameterized fields retain AD-tracked numbers. It is neither a new
+physical model nor the lookup table, and callers need not construct it.
 
 Plain-text background and growth references, their solver settings, and generation
 scripts are in `test/fixtures/neutrino_three_mass/`. The CAMB fixture uses its
