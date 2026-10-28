@@ -378,6 +378,27 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 
 The test suite includes checks for emulator evaluation, interpolation, AD compatibility, extension loading, and Reactant compatibility.
 
+Numerical text fixtures are downloaded from the pinned
+[Zenodo archive (10.5281/zenodo.23718377)](https://doi.org/10.5281/zenodo.23718377).
+`test/Artifacts.toml` records the exact URL, archive SHA256 and artifact tree
+hash; `test/fixtures.sha256` lists the files restored into ignored test paths.
+Generators, tests and provenance metadata remain in git, and complete source
+snapshots are also preserved in the archive.
+
+`Pkg.test()` restores missing fixtures automatically, using Julia's artifact
+cache. CI has an explicit download step and caches that same artifact. Before
+running individual comparison scripts or going offline, prepare the data with:
+
+```bash
+julia --startup-file=no test/download_fixtures.jl
+```
+
+The first missing-fixture download requires network access. Cached/restored
+data can be reused offline. Failures stop testing rather than skipping checks;
+modified local fixtures are rejected, not overwritten. Only the listed data
+files are copied, never archived package source. Updating references requires a
+new archive version and corresponding artifact pin and per-file manifest.
+
 
 ## Roadmap to v1.0.0
 

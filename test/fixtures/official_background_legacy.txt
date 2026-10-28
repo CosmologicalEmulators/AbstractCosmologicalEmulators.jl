@@ -1,8 +1,0 @@
-# Frozen compatibility reference for the unchanged 300303 neural artifacts.
-# Source: ACE develop 8633d821c26f603673b6cc7c8ee5e63b8f42c8c9 BackgroundCosmologyExt,
-# evaluated from its immutable merged-tree archive 1c607d488fe5fc7972c98c5362ea7d0c5e6b78d6.
-# Frozen from the pre-retirement scalar implementation using Julia 1.12.6.
-# Historical scalar convention, default ODE tolerances, distance quadrature order 9.
-# This is NOT a reference for the new three-species analytic physics.
-# z H0 omega_b omega_c total_Mnu w0 wa H_z r_z D_z f_z
-1.35 68.5 0.0224 0.119 0.08 -1.25 0.65 146.43456755147258 4249.955775838359 0.4014666137497085 0.9173861201433127

@@ -1,6 +1,12 @@
 using Test
 
-if "bspline_review_host" in ARGS
+include("download_fixtures.jl")
+ReferenceFixtures.ensure_fixtures()
+include("test_fixture_download.jl")
+
+if "fixture_bootstrap" in ARGS
+    nothing # The restoration checks above are also part of every full run.
+elseif "bspline_review_host" in ARGS
     # Focused AD compatibility gate, without importing an unrelated compiler
     # backend. The default Pkg.test() path below still runs every extension.
     include("test_bspline_review_regressions.jl")
