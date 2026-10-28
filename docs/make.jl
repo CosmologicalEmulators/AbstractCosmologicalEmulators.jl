@@ -30,6 +30,7 @@ makedocs(
             "Automatic differentiation" => "autodiff.md",
             "Reactant" => "reactant.md",
             "Analytic cosmology" => "background.md",
+            "Neutrino thermal prescriptions" => "neutrinos.md",
         ],
         "API reference" => "api.md",
         "Development and validation" => "development.md",

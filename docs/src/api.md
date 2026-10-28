@@ -50,7 +50,7 @@ Private = false
 
 Load all four optional dependencies as described in [Analytic cosmology](background.md),
 then obtain the module with `Base.get_extension(AbstractCosmologicalEmulators,
-:BackgroundCosmologyExt)`. Its functions are not re-exported from ACE.
+:BackgroundCosmologyExt)`. Its functions are not re-exported from AbstractCosmologicalEmulators.jl.
 
 ```@meta
 CurrentModule = Main.BackgroundCosmologyExt

@@ -74,7 +74,7 @@ not supported under Reactant; host-validated fixed-query plans can use it. Do no
 assume these B-spline policies are keyword options on Akima or cubic splines.
 
 Apply coordinate transformations such as `log.(k)` yourself before constructing
-a spline. ACE does not silently change the interpolation variable or value scale.
+a spline. AbstractCosmologicalEmulators.jl does not silently change the interpolation variable or value scale.
 
 ### Low-level basis operations
 

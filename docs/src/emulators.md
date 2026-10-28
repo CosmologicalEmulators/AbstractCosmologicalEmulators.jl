@@ -29,8 +29,7 @@ The package registry contains the frozen `300303` mnuw0waCDM pair:
 
 ```@example emulator
 using AbstractCosmologicalEmulators
-const ACE = AbstractCosmologicalEmulators
-emu = ACE.trained_emulators["ACE_mnuw0wacdm_sigma8_basis"]
+emu = AbstractCosmologicalEmulators.trained_emulators["ACE_mnuw0wacdm_sigma8_basis"]
 # z, σ8, ns, H0, ω_b, ω_c, Σmν, w0, wa
 input = [1.35, 0.82, 0.97, 68.5, 0.0224, 0.119, 0.08, -1.25, 0.65]
 prediction = run_emulator(input, emu)

@@ -1,6 +1,6 @@
 # Reactant
 
-ACE's Reactant extension activates with `using Reactant`. The supported package
+The AbstractCosmologicalEmulators.jl Reactant extension activates with `using Reactant`. The supported package
 floor is **Reactant 0.2.290**: an older tested version, 0.2.232, generated invalid
 reverse IR for scalar zero-extrapolation spline queries. Do not lower the floor
 without repeating those tests.

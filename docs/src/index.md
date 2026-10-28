@@ -1,10 +1,10 @@
 # AbstractCosmologicalEmulators.jl
 
-**ACE.jl** is shorthand here for `AbstractCosmologicalEmulators.jl`, the shared
+**AbstractCosmologicalEmulators.jl** is the shared
 Julia runtime layer in the [CosmologicalEmulators](https://github.com/CosmologicalEmulators)
 ecosystem. The package name used in `Pkg` and `using` is **AbstractCosmologicalEmulators**.
 
-ACE supplies trained-emulator interfaces, normalization and postprocessing,
+AbstractCosmologicalEmulators.jl supplies trained-emulator interfaces, normalization and postprocessing,
 differentiable interpolation, and optional analytic-background calculations.
 It does not train emulators or replace a Boltzmann solver.
 
@@ -12,12 +12,13 @@ It does not train emulators or replace a Boltzmann solver.
 
 | Goal | Guide |
 |:--|:--|
-| Install ACE and run a first calculation | [Getting started](getting_started.md) |
+| Install AbstractCosmologicalEmulators.jl and run a first calculation | [Getting started](getting_started.md) |
 | Load a trained network or use the bundled artifacts | [Emulators and artifacts](emulators.md) |
 | Interpolate values, reuse grids, or work with batches | [Interpolation](interpolation.md) |
 | Prepare reverse-mode gradients for inference | [Automatic differentiation](autodiff.md) |
 | Compile supported emulator/spline kernels | [Reactant](reactant.md) |
 | Compute distances and approximate growth with three neutrino masses | [Analytic cosmology](background.md) |
+| Understand Neff, neutrino temperatures and matched CLASS comparisons | [Neutrino thermal prescriptions](neutrinos.md) |
 | Look up callable signatures and keyword contracts | [API reference](api.md) |
 | Run tests, build documentation, or update fixtures | [Development and validation](development.md) |
 

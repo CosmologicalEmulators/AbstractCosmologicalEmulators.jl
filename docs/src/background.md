@@ -57,6 +57,10 @@ for Neff prescriptions, growth sources and accuracy limitations. In the REPL,
 
 ## Independent neutrino masses in background calculations
 
+For the energy-density equations, the meaning of ``N_{\mathrm{eff}}``, and a
+comparison of the two thermal prescriptions against CLASS, see
+[Neutrino thermal prescriptions](neutrinos.md).
+
 After loading the `BackgroundCosmologyExt` dependencies, pass three mass-eigenstate
 masses in eV as `mν = (m1, m2, m3)` or a three-element vector:
 
@@ -183,9 +187,9 @@ D'' + \left(2+\frac{d\ln E}{d\ln a}\right)D'
 **`CBGrowth()`** uses only the cold-dark-matter and baryon source:
 
 ```math
-\Omega_{\mathrm{src}}(a)=\Omega_{cb}(a)
-=\frac{\Omega_{cb,0}a^{-3}}{E^2(a)},
-\qquad \Omega_{cb,0}=\Omega_{c,0}+\Omega_{b,0}.
+\Omega_{\mathrm{src}}(a)=\Omega_{\mathrm{cb}}(a)
+=\frac{\Omega_{\mathrm{cb},0}a^{-3}}{E^2(a)},
+\qquad \Omega_{\mathrm{cb},0}=\Omega_{\mathrm{c},0}+\Omega_{\mathrm{b},0}.
 ```
 
 **`MatterGrowthApprox()`** adds the mass-induced neutrino density:
@@ -197,7 +201,7 @@ D'' + \left(2+\frac{d\ln E}{d\ln a}\right)D'
 
 ```math
 \Omega_{\mathrm{src}}(a)=
-\frac{\Omega_{cb,0}a^{-3}+\Delta\rho_\nu(a)/\rho_{\mathrm{crit},0}}
+\frac{\Omega_{\mathrm{cb},0}a^{-3}+\Delta\rho_\nu(a)/\rho_{\mathrm{crit},0}}
 {E^2(a)},
 \qquad \rho_{\mathrm{crit},0}=\frac{3H_0^2}{8\pi G}.
 ```

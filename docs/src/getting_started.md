@@ -2,7 +2,7 @@
 
 ## Installation
 
-ACE supports Julia 1.10 and later. In your own project:
+AbstractCosmologicalEmulators.jl supports Julia 1.10 and later. In your own project:
 
 ```julia
 using Pkg
@@ -13,7 +13,7 @@ For development, activate the checkout and use `Pkg.instantiate()`. Examples on
 the development site describe the development API; an older registered release
 may not contain all of these features.
 
-Importing ACE loads the two [official emulator artifacts](emulators.md) into its
+Importing AbstractCosmologicalEmulators.jl loads the two [official emulator artifacts](emulators.md) into its
 registry. Their first installation needs network access and disk space; Julia's
 artifact cache is reused afterward. The interpolation examples below do not use
 the networks, but package initialization still loads those artifacts.
@@ -43,7 +43,7 @@ stored sites or queries. Matrix ordinates use **one function per column**.
 
 ## Optional extensions
 
-| Capability | Load these packages in addition to ACE |
+| Capability | Load these packages in addition to AbstractCosmologicalEmulators.jl |
 |:--|:--|
 | Native Mooncake rules | `Mooncake` |
 | Reactant kernels | `Reactant` |

@@ -54,8 +54,9 @@ workflow with its default `GITHUB_TOKEN` may not trigger further workflows;
 manual maintainer tags avoid that TagBot token limitation.
 
 The future organization-wide MultiDocumenter site will live in a **separate
-repository**. ACE continues to own its source pages and versioned builds; the hub
-can consume the published site without copying documentation source into ACE.
+repository**. AbstractCosmologicalEmulators.jl continues to own its source pages
+and versioned builds; the hub can consume the published site without copying
+documentation source into AbstractCosmologicalEmulators.jl.
 
 ## Running tests
 

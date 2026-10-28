@@ -12,7 +12,7 @@ package name. Native Julia AD and compiled Reactant AD are separate paths.
 
 Use ForwardDiff as an independent numerical check for reverse-mode gradients.
 Do not use Zygote to differentiate arbitrary mutating application code merely
-because ACE has ChainRules for its own internal operations.
+because AbstractCosmologicalEmulators.jl has ChainRules for its own internal operations.
 
 ## Prepared Mooncake gradients
 
