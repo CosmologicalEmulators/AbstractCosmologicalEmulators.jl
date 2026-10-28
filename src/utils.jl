@@ -296,10 +296,9 @@ function validate_cosmological_ranges(ranges::Matrix{Float64})
 end
 
 function validate_trained_weights(weights, nn_dict::AbstractDict{String,Any})
-    finite_mask = isfinite.(weights)
-    if !all(finite_mask)
-        nan_count = count(isnan.(weights))
-        inf_count = count(isinf.(weights))
+    if !all(isfinite, weights)
+        nan_count = count(isnan, weights)
+        inf_count = count(isinf, weights)
 
         throw(ArgumentError(
         "Invalid trained weights detected: " *
@@ -309,13 +308,13 @@ function validate_trained_weights(weights, nn_dict::AbstractDict{String,Any})
         ))
     end
 
-    max_weight = maximum(abs.(weights))
+    max_weight = maximum(abs, weights)
     if max_weight > 1e6
         @warn "Large weight magnitudes detected (max absolute value: $max_weight). " *
               "This may indicate training instability, poor normalization, or gradient explosion."
     end
 
-    if all(abs.(weights) .< 1e-10)
+    if all(x -> abs(x) < 1e-10, weights)
         @warn "All weights are very small (< 1e-10). " *
               "This may indicate the emulator was not properly trained."
     end
@@ -545,9 +544,6 @@ function (plan::AkimaSplinePlan)(u)
 end
 
 function akima_interpolation(u, t, t_new)
-    n = length(t)
-    dt = diff(t)
-
     m = _akima_slopes(u, t)
     b, c, d = _akima_coefficients(t, m)
 

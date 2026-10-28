@@ -228,6 +228,12 @@ Neutrinos enter the expansion separately; dark energy closes the density sum.
 See [`w0waCDMCosmology`](@ref) for masses, units and Neff prescriptions.
 """
 function E_a(a, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature)
+    return _E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)
+end
+
+# Positional implementations for internal calls: Zygote's keyword-call adjoint
+# cost grows with every forwarded keyword, and distances call E once per redshift.
+function _E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)
     masses = _neutrino_background(mν, Neff, neutrino_prescription)
     Ωγ0 = _Ωγ0(h, masses)
     Ων0 = _ΩνE2(1.0, Ωγ0, masses)::promote_type(Float64, typeof(Ωγ0), _neutrino_eltype(masses))
@@ -266,8 +272,9 @@ function E_z(z, cosmo::w0waCDMCosmology)
     return E_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
 end
 
-function _dlogEdloga_scalar(a::Number, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa)
-    return a * 0.5 / (_E_a_scalar(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa)^2) *
+function _dlogEdloga_scalar(a::Number, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa,
+                          E=_E_a_scalar(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa))
+    return a * 0.5 / E^2 *
            (-3(Ωcb0)a^-4 - 4Ωγ0 * a^-5 - 2Ωk0 * a^-3 + ΩΛ0 * _dρDEda(a, w0, wa) + _dΩνE2da(a, Ωγ0, mν))
 end
 
@@ -294,14 +301,34 @@ function _Ωma(a, cosmo::w0waCDMCosmology)
 end
 
 function r̃_z(z::Number, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    z_array, weigths_array = _transformed_weights(FastGaussQuadrature.gausslegendre, order, 0, z)
-    integrand_array = 1.0 ./ E_a(_a_z(z_array), Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription)
-    return dot(weigths_array, integrand_array)
+    return _r̃_z(z, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
 end
 
 function r̃_z(z::AbstractArray, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
+    return _r̃_z(z, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
+end
+
+function _r̃_z(z::Number, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
+    z_array, weigths_array = _transformed_weights(FastGaussQuadrature.gausslegendre, order, 0, z)
+    integrand_array = 1.0 ./ _E_a(_a_z(z_array), Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)
+    return dot(weigths_array, integrand_array)
+end
+
+function _r̃_z(z::AbstractArray, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
     masses = _neutrino_background(mν, Neff, neutrino_prescription)
-    return [r̃_z(zi, Ωcb0, h; mν=masses, w0=w0, wa=wa, Ωk0=Ωk0, order=order, Neff, neutrino_prescription) for zi in z]
+    nodes, weights = FastGaussQuadrature.gausslegendre(order)
+    Ωγ0 = _Ωγ0(h, masses)
+    Ων0 = _ΩνE2(1.0, Ωγ0, masses)::promote_type(Float64, typeof(Ωγ0), _neutrino_eltype(masses))
+    ΩΛ0 = 1.0 - (Ωγ0 + Ωcb0 + Ων0 + Ωk0)
+    return [_r̃_z_prepared(zi, nodes, weights, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, masses, w0, wa) for zi in z]
+end
+
+function _r̃_z_prepared(z, nodes, weights, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, masses, w0, wa)
+    # Same mapped rule and summation as the scalar path; only setup is shared.
+    z_array = z / 2.0 .* nodes .+ z / 2.0
+    weights_array = z / 2.0 .* weights
+    E = _E_a_scalar.(_a_z(z_array), Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, Ref(masses), w0, wa)
+    return dot(weights_array, 1.0 ./ E)
 end
 
 function r̃_z(z, cosmo::w0waCDMCosmology; order=9)
@@ -323,7 +350,7 @@ Curvature affects E(z); the additional transverse-curvature mapping belongs
 to [`dM_z`](@ref). Density and neutrino conventions match [`E_z`](@ref).
 """
 function r_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return c_0 * r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order, Neff, neutrino_prescription) / (100 * h)
+    return c_0 * _r̃_z(z, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription) / (100 * h)
 end
 
 function r_z(z, cosmo::w0waCDMCosmology; order=9)
@@ -460,13 +487,23 @@ function _growth_source(::MatterGrowthApprox, a, Ωcb0, h, mν, w0, wa, Ωk0)
     return (Ωcb0 / a^3 + _mass_induced_density(a, _Ωγ0(h, mν), mν)) / E^2
 end
 
+_growth_source(::CBGrowth, a, Ωcb0, Ωγ0, mν, E) = Ωcb0 * a^-3 / E^2
+_growth_source(::MatterGrowthApprox, a, Ωcb0, Ωγ0, mν, E) =
+    (Ωcb0 / a^3 + _mass_induced_density(a, Ωγ0, mν)) / E^2
+
 function _growth_rhs!(du, u, loga, Ωcb0, h, mν, w0, wa, Ωk0, species)
     a = exp(loga)
+    masses = _neutrino_background(mν, 3.044, :temperature)
+    Ωγ0 = _Ωγ0(h, masses)
+    Ων0 = _ΩνE2(1.0, Ωγ0, masses)::promote_type(Float64, typeof(Ωγ0), _neutrino_eltype(masses))
+    ΩΛ0 = 1.0 - (Ωγ0 + Ωcb0 + Ων0 + Ωk0)
+    E = _E_a_scalar(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, masses, w0, wa)
+    dlogE = _dlogEdloga_scalar(a, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, masses, w0, wa, E)
     D = u[1]
     dD = u[2]
     du[1] = dD
-    du[2] = -(2 + _dlogEdloga(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)) * dD +
-            1.5 * _growth_source(species, a, Ωcb0, h, mν, w0, wa, Ωk0) * D
+    du[2] = -(2 + dlogE) * dD +
+            1.5 * _growth_source(species, a, Ωcb0, Ωγ0, masses, E) * D
 end
 
 # p = [Ωcb0, h, w0, wa, Ωk0, m1, m2, m3, Tν/Tγ, N_ur]

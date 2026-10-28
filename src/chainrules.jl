@@ -1407,8 +1407,8 @@ function ChainRulesCore.rrule(
 end
 
 function ChainRulesCore.rrule(::typeof(_apply_cubic_b_spline_plan), plan, u)
-    output = _apply_cubic_b_spline_plan(plan, u)
     c = bspline_coefficients(plan, u)
+    output = _evaluate_stencil(plan.stencil, c)
     spline = CubicBSpline(plan.sites, plan.basis, c, plan.extrapolation)
     project_u = ChainRulesCore.ProjectTo(u)
     function plan_pullback(delta)

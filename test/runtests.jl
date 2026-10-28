@@ -6,11 +6,14 @@ include("test_fixture_download.jl")
 
 if "fixture_bootstrap" in ARGS
     nothing # The restoration checks above are also part of every full run.
+elseif "reactant_scalar" in ARGS
+    include("test_cubic_b_spline_scalar_reactant.jl")
 elseif "bspline_review_host" in ARGS
     # Focused AD compatibility gate, without importing an unrelated compiler
     # backend. The default Pkg.test() path below still runs every extension.
     include("test_bspline_review_regressions.jl")
     include("test_bspline_final_edges.jl")
+    include("test_performance_regressions.jl")
 else
 # Include all test dependencies at the top level
 using JSON
@@ -51,6 +54,7 @@ elseif "background" in ARGS
     const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
     using .ext: AbstractCosmology, w0waCDMCosmology, E_z, E_a, r_z, D_z, f_z, dM_z, dA_z, dL_z, S_of_K, D_f_z
     include("test_background.jl")
+    include("test_background_performance.jl")
 elseif "official_artifacts" in ARGS
     include("test_official_artifacts.jl")
 elseif "growth_prescriptions" in ARGS
@@ -135,6 +139,8 @@ else
 
     # Chebyshev optimization tests
     include("test_chebyshev.jl")
+    include("test_performance_regressions.jl")
+    include("test_background_performance.jl")
 end
 end
 end

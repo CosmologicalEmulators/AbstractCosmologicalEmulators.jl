@@ -1180,7 +1180,6 @@ function _evaluate_stencil(stencil::CubicBSplineStencil, c::AbstractMatrix)
     n_series = size(c, 2)
     V = typeof(zero(eltype(c)) * zero(eltype(stencil.w1)))
     out = similar(c, V, n_q, n_series)
-    fill!(out, zero(V))
 
     # Series-major loop order: each output column is contiguous in
     # column-major Julia arrays, so iterating over queries in the

@@ -327,13 +327,13 @@ function Mooncake.rrule!!(
 )
     plan = Mooncake.primal(plan_dual)
     u = Mooncake.primal(u_dual)
+    c = AbstractCosmologicalEmulators.bspline_coefficients(plan, u)
     output_dual = Mooncake.zero_fcodual(
-        AbstractCosmologicalEmulators._apply_cubic_b_spline_plan(plan, u),
+        AbstractCosmologicalEmulators._evaluate_stencil(plan.stencil, c),
     )
     output_bar = Mooncake.tangent(output_dual)
     plan_data = Mooncake.tangent(plan_dual).data
     function apply_plan_pullback(::Mooncake.NoRData)
-        c = AbstractCosmologicalEmulators.bspline_coefficients(plan, u)
         spline = AbstractCosmologicalEmulators.CubicBSpline(
             plan.sites,
             plan.basis,

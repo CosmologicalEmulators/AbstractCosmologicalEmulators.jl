@@ -14,9 +14,8 @@ module BackgroundCosmologyExt
 #
 # 2. Global interpolants: the neutrino lookup tables `F_three_mass_interpolant`
 #    and `dFdy_three_mass_interpolant` below are stored in module-level `Ref`s and built at
-#    `__init__`. Reactant tracing would constant-fold them as host arrays,
-#    and the indirection through a global `Ref` produces runtime
-#    dispatch that MLIR cannot lower.
+#    `__init__`. Their host interpolation path has not been validated for
+#    traced queries; concrete storage here improves host dispatch only.
 #
 # Consequence: `E_z`, `D_z`, `f_z`, `r_z`, `dM_z`, `dA_z`, `dL_z` should be
 # called on plain Julia hosts, not on Reactant traced arrays. They remain
@@ -48,8 +47,9 @@ export S_of_K
 const c_0 = 2.99792458e5  # Speed of light in km/s
 
 # Global interpolants for neutrino calculations - will be initialized in __init__
-const F_three_mass_interpolant = Ref{AkimaSpline}()
-const dFdy_three_mass_interpolant = Ref{AkimaSpline}()
+const BackgroundAkima = AkimaSpline{Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64}}
+const F_three_mass_interpolant = Ref{BackgroundAkima}()
+const dFdy_three_mass_interpolant = Ref{BackgroundAkima}()
 
 # Include utility functions and background cosmology functionality
 include("utils.jl")

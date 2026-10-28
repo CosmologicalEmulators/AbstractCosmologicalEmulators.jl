@@ -1,6 +1,6 @@
 using Test
-using ForwardDiff, DifferentiationInterface, Mooncake
-import ADTypes: AutoForwardDiff, AutoMooncake
+using ForwardDiff, DifferentiationInterface, Mooncake, Zygote
+import ADTypes: AutoForwardDiff, AutoMooncake, AutoZygote
 
 include("test_neutrino_lookup_contract.jl")
 
@@ -121,6 +121,64 @@ include("test_neutrino_lookup_contract.jl")
                     @test reused != gmc
                 end
             end
+        end
+    end
+
+    @testset "Internal positional calls: Zygote parity and validation" begin
+        z = [1.5, .2, 3.0, .7]
+        # Ωcb0, h, m1, m2, m3, Neff, w0, wa, Ωk0. Curvature stays nonzero: exactly at Ωk0 = 0 the
+        # backends already disagree for transverse distances (S_of_K), independently of this path.
+        x = [.31, .67, 0.0, .02, .05, 4.0, -.9, .1, .02]
+        changed = ([.29, .71, .01, .025, .06, 3.5, -1.1, -.2, -.03], [.34, .64, 0., 0., 0., 4.5, -1., 0., -.01])
+        for policy in (:temperature, :radiation)
+            kw(v) = (; mν=v[3:5], Neff=v[6], neutrino_prescription=policy, w0=v[7], wa=v[8], Ωk0=v[9])
+            growth = (; reltol=1e-11, abstol=1e-13)
+            funcs = (v -> sum(ext.E_z(z, v[1], v[2]; kw(v)...)),
+                     v -> ext.r_z(1.2, v[1], v[2]; kw(v)...),
+                     v -> sum(ext.r_z(z, v[1], v[2]; kw(v)...)),
+                     v -> sum(ext.dL_z(z, v[1], v[2]; kw(v)...)),
+                     v -> sum(ext.D_z(z, v[1], v[2]; kw(v)..., growth...)),
+                     v -> sum(ext.f_z(z, v[1], v[2]; kw(v)..., growth..., species=ext.MatterGrowthApprox())))
+            for f in funcs
+                fd, zy, mc = AutoForwardDiff(), AutoZygote(), AutoMooncake(; config=Mooncake.Config())
+                pfd, pzy, pmc = prepare_gradient(f, fd, x), prepare_gradient(f, zy, x), prepare_gradient(f, mc, x)
+                for point in (x, changed...)
+                    gfd = DifferentiationInterface.gradient(f, pfd, fd, point)
+                    gzy = DifferentiationInterface.gradient(f, pzy, zy, point)
+                    gmc = DifferentiationInterface.gradient(f, pmc, mc, point)
+                    @test all(isfinite, gzy)
+                    @test all(isapprox.(gzy, gfd; rtol=2e-6, atol=1e-10))
+                    @test all(isapprox.(gzy, gmc; rtol=2e-6, atol=1e-10))
+                    @test Zygote.gradient(f, point)[1] == gzy
+                end
+                @test all(!iszero, DifferentiationInterface.gradient(f, pzy, zy, x)[[1, 2, 4, 5, 6]])
+            end
+        end
+
+        # Preserve the local common-mass-coordinate checks with an explicit split.
+        common_mass = (v -> sum(ext.r_z(z, v[1], v[2]; mν=(v[3],v[3],v[3]), w0=v[4], wa=v[5], Ωk0=v[6])),
+                       v -> sum(ext.D_z(z, v[1], v[2]; mν=(v[3],v[3],v[3]), w0=v[4], wa=v[5], Ωk0=v[6], reltol=1e-11, abstol=1e-13)))
+        for f in common_mass, point in ([.3, .67, .02, -1., 0., .2], [.32, .7, 0., -.9, .1, -.1])
+            @test all(isapprox.(Zygote.gradient(f, point)[1], ForwardDiff.gradient(f, point); rtol=2e-6, atol=1e-10))
+        end
+
+        # Keyword wrappers and their positional implementations are the same computation.
+        a = [.3, .6, 1.]
+        for (m, neff, policy) in (((.02,.02,.02), 3.044, :temperature), (mass, 4.0, :radiation))
+            args = (ocb, h, m, -.9, .1, .02, neff, policy)
+            kws = (; mν=m, w0=-.9, wa=.1, Ωk0=.02, Neff=neff, neutrino_prescription=policy)
+            @test ext.E_a(a, ocb, h; kws...) == ext._E_a(a, args...)
+            @test ext.E_a(.5, ocb, h; kws...) == ext._E_a(.5, args...)
+            @test ext.r̃_z(z, ocb, h; kws..., order=12) == ext._r̃_z(z, ocb, h, m, -.9, .1, .02, 12, neff, policy)
+        end
+
+        # Validation still runs on every public distance and growth entry point.
+        bad = ((; mν=mass, Neff=0.0), (; mν=mass, Neff=NaN), (; mν=mass, neutrino_prescription=:unknown),
+               (; mν=mass, Neff=2.0, neutrino_prescription=:radiation), (; mν=.06, Neff=5.0),
+               (; mν=(.01, .02)), (; mν=(.01, -.02, .03)))
+        for kws in bad, f in (ext.E_z, ext.r_z, ext.dM_z, ext.dL_z, ext.D_z, ext.f_z)
+            @test_throws ArgumentError f(z, ocb, h; kws...)
+            @test_throws ArgumentError f(1.0, ocb, h; kws...)
         end
     end
 end
