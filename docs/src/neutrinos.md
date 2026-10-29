@@ -101,8 +101,8 @@ r=r_{\mathrm{ref}}s^{1/4},\qquad
 N_{\mathrm{ur}}=N_{\mathrm{ur,ref}}s.
 ```
 
-Both terms in the relativistic density therefore scale by ``s``. The supported
-input domain requires finite ``N_{\mathrm{eff}}>0``. Increasing it heats the
+Both terms in the relativistic density therefore scale by ``s``. Input
+validation requires finite ``N_{\mathrm{eff}}>0``. Increasing it heats the
 three species; decreasing it cools them. In particular,
 
 ```math
@@ -115,6 +115,11 @@ Thus varying `Neff` also changes the late-time massive-neutrino density at fixed
 masses, and shifts when each species becomes nonrelativistic. At
 ``N_{\mathrm{eff}}=4``, temperatures increase by about 7.07% and massive-species
 number densities by about 22.73% relative to the reference.
+
+Input acceptance is not an accuracy guarantee over all masses, temperatures
+and scale factors. The saved CLASS tests sample ``N_{\mathrm{eff}}=2,3.044,5``
+for this prescription; the figure adds a case at 4. Neither those tests nor
+the positivity check certify arbitrary extreme inputs.
 
 ## Fixed temperatures, variable massless radiation
 
@@ -224,3 +229,12 @@ The image records AbstractCosmologicalEmulators.jl source `36ae66b`. Broader num
 CLASS generation settings are maintained under
 `test/fixtures/neutrino_neff/` and `test/fixtures/neutrino_three_mass/`.
 The PNG/SVG are hosted in the repository's `images` issue, not stored in Git.
+
+### Reproduce this figure
+
+The [figure sources and instructions](https://github.com/CosmologicalEmulators/AbstractCosmologicalEmulators.jl/tree/develop/docs/figures/neutrinos)
+include the actual CLASS generator, both implementation evaluators, the plotting
+script, provenance and all six frozen text arrays. Replot from those arrays
+without rerunning CLASS, or regenerate into a separate output directory to
+compare against them. These are the scripts for **this** figure; the broader
+test-fixture generators above use other grids and cosmologies.

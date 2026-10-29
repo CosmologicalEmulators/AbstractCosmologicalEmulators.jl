@@ -1,0 +1,61 @@
+{
+  "CLASS_version": "v3.3.4",
+  "jax_version": "0.6.2",
+  "mass_eV": [
+    0.01,
+    0.02,
+    0.03
+  ],
+  "Neff": 4,
+  "baseline_Neff": 3.044,
+  "density_definition": "rho_nu = sum of all ncdm densities plus ur; units rho_crit,0",
+  "grid": "Selected native CLASS background rows; baseline interpolated in log(a), log(quantity)",
+  "CLASS_parameters": {
+    "temperature": {
+      "h": 0.67,
+      "omega_b": 0.0224,
+      "omega_cdm": 0.12,
+      "T_cmb": 2.7255,
+      "YHe": 0.245,
+      "N_ncdm": 3,
+      "m_ncdm": "0.01,0.02,0.03",
+      "T_ncdm": "0.766714319146159,0.766714319146159,0.766714319146159",
+      "deg_ncdm": "1,1,1",
+      "N_ur": 0.0057754501307199155,
+      "tol_ncdm_bg": 1e-12,
+      "tol_background_integration": 1e-12,
+      "background_integration_stepsize": 0.01
+    },
+    "radiation": {
+      "h": 0.67,
+      "omega_b": 0.0224,
+      "omega_cdm": 0.12,
+      "T_cmb": 2.7255,
+      "YHe": 0.245,
+      "N_ncdm": 3,
+      "m_ncdm": "0.01,0.02,0.03",
+      "T_ncdm": "0.71611,0.71611,0.71611",
+      "deg_ncdm": "1,1,1",
+      "N_ur": 0.9603951175494778,
+      "tol_ncdm_bg": 1e-12,
+      "tol_background_integration": 1e-12,
+      "background_integration_stepsize": 0.01
+    }
+  },
+  "CLASS_grid_refinement_temperature": {
+    "rho": 3.552713678800501e-15,
+    "H": 1.7763568394002505e-15
+  },
+  "CLASS_grid_refinement_radiation": {
+    "rho": 3.552713678800501e-15,
+    "H": 1.7763568394002505e-15
+  },
+  "baseline_interpolation_refinement": {
+    "rho": 3.552713678800501e-15,
+    "H": 1.887379141862766e-15
+  },
+  "git": {
+    "AbstractCosmologicalEmulators.jl": "36ae66be6c1d96b0bd93b49bada40ff09a13d2ff",
+    "jaxace": "b4d4508cd7451c51fd3a7451bca3902afcd8796c"
+  }
+}
