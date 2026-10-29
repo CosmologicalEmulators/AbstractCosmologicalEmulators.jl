@@ -106,7 +106,145 @@ SUITE["cubic_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
     plan = CubicSplinePlan(t, t_new)
 )
 
+SUITE["cubic_b_spline"] = BenchmarkGroup(["b_spline"])
+
+SUITE["cubic_b_spline"]["basis_row_search"] = @benchmarkable AbstractCosmologicalEmulators.basis_row(basis, xq) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    xq = 4500.0
+)
+
+SUITE["cubic_b_spline"]["basis_row_preselected"] = @benchmarkable AbstractCosmologicalEmulators._cubic_basis_values(basis.knot_vector, span, xq) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    xq = 4500.0;
+    span = AbstractCosmologicalEmulators._find_cubic_span(basis.knot_vector, xq)
+)
+
+SUITE["cubic_b_spline"]["basis_stencil_512_to_8999"] = @benchmarkable AbstractCosmologicalEmulators.basis_stencil(basis, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["factorization_512"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, t) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2])
+)
+
+SUITE["cubic_b_spline"]["solve_vector_512"] = @benchmarkable AbstractCosmologicalEmulators.solve(fact, u) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    fact = AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, t);
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40))
+)
+
+SUITE["cubic_b_spline"]["solve_matrix_512x10"] = @benchmarkable AbstractCosmologicalEmulators.solve(fact, U) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    fact = AbstractCosmologicalEmulators.CubicBSplineFactorization(basis, t);
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    U = repeat(u, 1, 10)
+)
+
+SUITE["cubic_b_spline"]["construct_512"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSpline(u, t) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40))
+)
+
+SUITE["cubic_b_spline"]["eval_scalar"] = @benchmarkable spline_obj(xq) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    spline_obj = AbstractCosmologicalEmulators.CubicBSpline(u, t);
+    xq = 4500.0
+)
+
+SUITE["cubic_b_spline"]["eval_vector_8999"] = @benchmarkable spline_obj(t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    spline_obj = AbstractCosmologicalEmulators.CubicBSpline(u, t);
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_construct_512_to_8999"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new)
+)
+
+SUITE["cubic_b_spline"]["plan_construct_128"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new) setup = (
+    k = 0:127;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 127) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_apply_128"] = @benchmarkable plan(u) setup = (
+    k = 0:127;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 127) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new)
+)
+
+SUITE["cubic_b_spline"]["plan_construct_3000"] = @benchmarkable AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new) setup = (
+    k = 0:2999;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 2999) .+ 1) .* (9000 - 2));
+    t_new = collect(2.0:9000.0)
+)
+
+SUITE["cubic_b_spline"]["plan_apply_3000"] = @benchmarkable plan(u) setup = (
+    k = 0:2999;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 2999) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    plan = AbstractCosmologicalEmulators.CubicBSplinePlan(t, t_new)
+)
+
+# Compile Reactant in setup to measure pure steady-state execution time
+using Reactant
+function synchronized_reactant_call(f, args...)
+    result = f(args...)
+    Reactant.synchronize(result)
+    return result
+end
+
+SUITE["cubic_b_spline"]["reactant_stencil"] = @benchmarkable synchronized_reactant_call(compiled_f, c_R) setup = (
+    k = 0:511;
+    t = sort(2 .+ 0.5 .* (cos.(pi .* k ./ 511) .+ 1) .* (9000 - 2));
+    u = @. exp(-t / 3000) * (1 + 0.1 * sin(t / 40));
+    t_new = collect(2.0:9000.0);
+    basis = AbstractCosmologicalEmulators.CubicBSplineBasis(domain=(first(t), last(t)), internal_knots=t[3:end-2]);
+    stencil = AbstractCosmologicalEmulators.basis_stencil(basis, t_new);
+    f(c) = AbstractCosmologicalEmulators._evaluate_stencil(stencil, c);
+    c_R = Reactant.to_rarray(u);
+    compiled_f = Reactant.@compile sync=true f(c_R)
+)
+
 SUITE["akima_spline"] = BenchmarkGroup(["interpolation"])
+
+# AirspeedVelocity also runs this script against the pre-feature baseline.
+# Keep all sixteen B-spline cases on the head; absent baseline results are
+# reported as missing, not fabricated timings or a comparison against zero.
+if !isdefined(AbstractCosmologicalEmulators, :CubicBSplineBasis)
+    delete!(SUITE, "cubic_b_spline")
+end
 
 SUITE["akima_spline"]["pure_512_to_8999"] = @benchmarkable akima_interpolation(u, t, t_new) setup = (
     k = 0:511;
@@ -133,7 +271,11 @@ SUITE["akima_spline"]["plan_512_to_8999"] = @benchmarkable plan(u) setup = (
 # Get the extension (will be loaded due to dependencies above)
 const ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
 
-if !isnothing(ext)
+# AirspeedVelocity runs this head script against the base revision too. The
+# legacy scalar-only model cannot execute these three-species cases, and its
+# physical workloads must not be reported as like-for-like comparisons.
+const has_three_mass_background = !isnothing(ext) && isdefined(ext, :ThermalNeutrinos)
+if has_three_mass_background
     # Create a test cosmology for benchmarking
     const test_cosmo = ext.w0waCDMCosmology(
         ln10Aₛ=3.044,
@@ -141,7 +283,7 @@ if !isnothing(ext)
         h=0.7,
         ωb=0.022,
         ωc=0.12,
-        mν=0.06,
+        mν=(0.02, 0.02, 0.02),
         w0=-1.0,
         wa=0.0
     )
@@ -365,17 +507,17 @@ if !isnothing(ext)
     # Helper functions for gradient computation (inspired by test functions)
     function D_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(ext.D_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function f_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(ext.f_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function r_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(ext.r_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     # Create benchmark groups for gradients
@@ -383,7 +525,7 @@ if !isnothing(ext)
 
     # Test parameters
     const z_grad_array = Array(LinRange(0.0, 10.0, 100))
-    const x_grad_params = [0.3, 0.67, 0.06, -1.0, 0.0, 0.2]  # [Ωcb0, h, mν, w0, wa, Ωk0]
+    const x_grad_params = [0.3, 0.67, 0.02, -1.0, 0.0, 0.2]  # [Ωcb0, h, mν (per species), w0, wa, Ωk0]
 
     # --- Forward computation benchmarks ---
     SUITE["gradients"]["forward_D_z"] = @benchmarkable D_z_x($z_grad_array, $x_grad_params)
@@ -643,17 +785,17 @@ if !isnothing(ext)
 
     function D_z_single(x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        ext.D_z(z_single, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+        ext.D_z(z_single, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)
     end
 
     function f_z_single(x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        ext.f_z(z_single, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+        ext.f_z(z_single, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)
     end
 
     function r_z_single(x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        ext.r_z(z_single, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0)
+        ext.r_z(z_single, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)
     end
 
     SUITE["gradients"]["single_z"] = BenchmarkGroup(["scalar"])
@@ -768,7 +910,7 @@ if !isnothing(ext)
     SUITE["gradients"]["parameter_sensitivity"] = BenchmarkGroup(["params"])
 
     # Standard ΛCDM (w0=-1, wa=0, Ωk0=0) with preparation
-    const x_lcdm = [0.3, 0.67, 0.06, -1.0, 0.0, 0.0]
+    const x_lcdm = [0.3, 0.67, 0.02, -1.0, 0.0, 0.0]
     SUITE["gradients"]["parameter_sensitivity"]["lcdm_D_z"] = @benchmarkable begin
         gradient!(f, grad, prep, backend, params)
     end setup = (
@@ -781,7 +923,7 @@ if !isnothing(ext)
     )
 
     # w0waCDM (varying dark energy) with preparation
-    const x_w0wa = [0.3, 0.67, 0.06, -0.8, 0.3, 0.0]
+    const x_w0wa = [0.3, 0.67, 0.02, -0.8, 0.3, 0.0]
     SUITE["gradients"]["parameter_sensitivity"]["w0wa_D_z"] = @benchmarkable begin
         gradient!(f, grad, prep, backend, params)
     end setup = (
@@ -794,7 +936,7 @@ if !isnothing(ext)
     )
 
     # Curved universe with preparation
-    const x_curved = [0.3, 0.67, 0.06, -1.0, 0.0, 0.1]
+    const x_curved = [0.3, 0.67, 0.02, -1.0, 0.0, 0.1]
     SUITE["gradients"]["parameter_sensitivity"]["curved_D_z"] = @benchmarkable begin
         gradient!(f, grad, prep, backend, params)
     end setup = (
@@ -808,7 +950,7 @@ if !isnothing(ext)
 
     println("Gradient computation benchmarks added successfully")
 else
-    println("Warning: BackgroundCosmologyExt not loaded, skipping background benchmarks")
+    println("Three-mass background API unavailable in this revision; retaining non-cosmology benchmarks")
 end
 
 # --- Akima Interpolation Benchmarks ---

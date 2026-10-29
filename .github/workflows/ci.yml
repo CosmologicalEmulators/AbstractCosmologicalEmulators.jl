@@ -36,12 +36,14 @@ jobs:
           cache-name: cache-artifacts
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('test/Artifacts.toml') }}
           restore-keys: |
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
+      - name: Download and verify reference fixtures
+        run: julia --startup-file=no test/download_fixtures.jl
       # Work around Julia 1.10 parallel-precompilation hangs in the large
       # test environment. Julia 1.11 and 1.12 retain parallel precompilation.
       - name: Serialize test precompilation on Julia 1.10
@@ -51,6 +53,11 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
         with:
           coverage: ${{ matrix.version == '1.12' && matrix.os == 'ubuntu-latest' }}
+          # JET 0.12 requires Julia >=1.12. Older runtimes must retain a valid
+          # older JET, including on future CompatHelper branches.
+          force_latest_compatible_version: ${{ matrix.version == '1.12' && 'auto' || 'false' }}
+          # These arguments assert versions; they do not select a reduced suite.
+          test_args: ${{ matrix.version == '1.12' && 'require-jet-012 require-datainterpolations-10' || '' }}
       # Only process and upload coverage once, on the latest Julia release job
       - uses: julia-actions/julia-processcoverage@v1
         if: matrix.version == '1.12' && matrix.os == 'ubuntu-latest'

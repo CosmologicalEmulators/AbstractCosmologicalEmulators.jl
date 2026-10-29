@@ -169,8 +169,9 @@ function chebyshev_decomposition(plan::ChebyshevPlan{ND, P, T}, f_vals::Abstract
     dummy_c = _chebyshev_decomposition_single(plan, copy(selectdim(f_reshaped, PR+1, 1)))
     c_reshaped = similar(f_reshaped, eltype(dummy_c), size(dummy_c)..., size(f_reshaped, PR+1))
     
-    # Process each batch
-    for i in 1:size(f_reshaped, PR+1)
+    # The first transform already supplied the output shape and type.
+    selectdim(c_reshaped, PR+1, 1) .= dummy_c
+    for i in 2:size(f_reshaped, PR+1)
         # We MUST use copy() to ensure contiguous memory for FFTW plan application
         f_slice = copy(selectdim(f_reshaped, PR+1, i))
         selectdim(c_reshaped, PR+1, i) .= _chebyshev_decomposition_single(plan, f_slice)

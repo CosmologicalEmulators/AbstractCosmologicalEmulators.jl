@@ -12,11 +12,10 @@ module BackgroundCosmologyExt
 #    Reactant cannot trace into MLIR at present. Reactant does not yet
 #    support compilation of SciML solvers.
 #
-# 2. Global interpolants: the neutrino lookup tables `F_interpolant` and
-#    `dFdy_interpolant` below are stored in module-level `Ref`s and built at
-#    `__init__`. Reactant tracing would constant-fold them as host arrays,
-#    and the indirection through a global `Ref` produces runtime
-#    dispatch that MLIR cannot lower.
+# 2. Global interpolants: the neutrino lookup tables `F_three_mass_interpolant`
+#    and `dFdy_three_mass_interpolant` below are stored in module-level `Ref`s and built at
+#    `__init__`. Their host interpolation path has not been validated for
+#    traced queries; concrete storage here improves host dispatch only.
 #
 # Consequence: `E_z`, `D_z`, `f_z`, `r_z`, `dM_z`, `dA_z`, `dL_z` should be
 # called on plain Julia hosts, not on Reactant traced arrays. They remain
@@ -41,14 +40,16 @@ export AbstractCosmology, w0waCDMCosmology
 export E_z, E_a
 export r_z, dM_z, dA_z, dL_z
 export D_z, f_z, D_f_z
+export CBGrowth, MatterGrowthApprox
 export S_of_K
 
 # Constants
 const c_0 = 2.99792458e5  # Speed of light in km/s
 
 # Global interpolants for neutrino calculations - will be initialized in __init__
-const F_interpolant = Ref{AkimaSpline}()
-const dFdy_interpolant = Ref{AkimaSpline}()
+const BackgroundAkima = AkimaSpline{Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64}}
+const F_three_mass_interpolant = Ref{BackgroundAkima}()
+const dFdy_three_mass_interpolant = Ref{BackgroundAkima}()
 
 # Include utility functions and background cosmology functionality
 include("utils.jl")
@@ -57,20 +58,15 @@ include("rrules.jl")
 
 # Initialize interpolants when extension loads
 function __init__()
-    # Initialize F and dFdy interpolants for neutrino calculations
-    min_y = _get_y(0, 0)
-    max_y = _get_y(1, 10)
+    min_y = 0.0
+    max_y = 10 / (8.617342e-5 * (0.71611 * 2.7255))  # y at mν = 1 eV, a = 10
 
-    # Create F interpolant
-    y_grid_F = vcat(LinRange(min_y, 100, 100), LinRange(100.1, max_y, 1000))
-    F_grid = [_F(y) for y in y_grid_F]
-    F_interpolant[] = AkimaSpline(F_grid, y_grid_F)
-
-    # Create dFdy interpolant
-    y_grid_dF = vcat(LinRange(min_y, 10.0, 10000), LinRange(10.1, max_y, 10000))
-    dFdy_grid = [_dFdy(y) for y in y_grid_dF]
-    dFdy_interpolant[] = AkimaSpline(dFdy_grid, y_grid_dF)
-
+    # Three-mass tables: max relative error vs direct quadrature ≲ 2e-7 for F (all y)
+    # and ≲ 5e-7 for dF/dy at y ≥ 1 (dF/dy → 0 as y → 0); ~75 ms extra at load.
+    y_grid_3ν = vcat(LinRange(min_y, 10.0, 2001), LinRange(10.0, 100.0, 901)[2:end],
+                     LinRange(100.0, 1000.0, 451)[2:end], exp.(LinRange(log(1000.0), log(max_y), 401))[2:end])
+    F_three_mass_interpolant[] = AkimaSpline([_F(y) for y in y_grid_3ν], y_grid_3ν)
+    dFdy_three_mass_interpolant[] = AkimaSpline([_dFdy(y) for y in y_grid_3ν], y_grid_3ν)
 end
 
 end # module BackgroundCosmologyExt

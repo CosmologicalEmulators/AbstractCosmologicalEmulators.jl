@@ -18,9 +18,9 @@ using Mooncake
 if !isnothing(ext)
     # Helper check functions for testing accuracy
     # These use high-precision integration for verification
-    function r̃_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
-        p = [Ωcb0, h, mν, w0, wa, Ωk0]
-        f(x, p) = 1 / E_a(ext._a_z(x), p[1], p[2]; mν=p[3], w0=p[4], wa=p[5], Ωk0=p[6])
+    function r̃_z_check(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0)
+        p = [Ωcb0, h, w0, wa, Ωk0]
+        f(x, p) = 1 / E_a(ext._a_z(x), p[1], p[2]; mν=mν, w0=p[3], wa=p[4], Ωk0=p[5])
         domain = (zero(eltype(z)), z) # (lb, ub)
         prob = IntegralProblem(f, domain, p; reltol=1e-12)
         sol = solve(prob, QuadGKJL())[1]
@@ -29,39 +29,53 @@ if !isnothing(ext)
 
     function D_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        # Discrete ForwardDiff and continuous reverse ODE sensitivities converge
+        # separately. Resolve the solver error before comparing them at 1e-10.
+        sum(D_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0,
+                    reltol=1e-14, abstol=1e-16))
     end
 
     function f_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(f_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0,
+                    reltol=1e-14, abstol=1e-16))
     end
 
     function r_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(r_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
-    function r_z_check(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0, Ωk0=0.0)
+    function r_z_check(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0)
         c_0 = 2.99792458e5  # Speed of light in km/s
         return c_0 * r̃_z_check(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0) / (100 * h)
     end
     # Test parameters setup
     Ωcb0 = 0.3
     h = 0.67
-    mν = 0.06
+    mν_triple = (0.02, 0.02, 0.02)
     w0 = -1.1
     wa = 0.2
     Ωk0 = 0.2
 
     # Create test cosmology struct
-    mycosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=0.06, w0=-2.0, wa=1.0, ωk=0.0)
+    mycosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.636, ωb=0.02237, ωc=0.1, mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0, ωk=0.0)
+
+    # Expected three-mass densities written out independently of the extension constants:
+    # three FD species (deg 1, T_ncdm = 0.71611 T_cmb, CLASS k_B) + N_ur = 3.044 - 3 (0.71611/(4/11)^(1/3))^4
+    # massless, both × Ωγ0 / a⁴. Uses the extension's three-mass F, dF/dy tables.
+    nu3_y(m, a) = m * a / (1.3806504e-23 / 1.602176487e-19 * 0.71611 * 2.7255)
+    nu3_ur = (3.044 - 3 * (0.71611 / (4 / 11)^(1 / 3))^4) * 7 / 8 * (4 / 11)^(4 / 3)
+    nu3_fd(a, m) = 15 / π^4 * 0.71611^4 * sum(mi -> ext.F_three_mass_interpolant[](nu3_y(mi, a)), m)
+    nu3_ρ(a, Ωγ0, m) = Ωγ0 / a^4 * (nu3_fd(a, m) + nu3_ur)
+    nu3_dρda(a, Ωγ0, m) = Ωγ0 * (-4 / a^5 * (nu3_fd(a, m) + nu3_ur) + 15 / π^4 * 0.71611^4 / a^4 *
+                                  sum(mi -> ext.dFdy_three_mass_interpolant[](nu3_y(mi, a)) * nu3_y(mi, a) / a, m))
 
     @testset "Background cosmology tests" begin
-        @test isapprox(ext._get_y(0.0, 1.0), 0.0)
         @test isapprox(ext._dFdy(0.0), 0.0)
-        @test isapprox(ext._ΩνE2(1.0, 1e-4, 1.0) * 3, ext._ΩνE2(1.0, 1e-4, ones(3)))
-        @test isapprox(ext._dΩνE2da(1.0, 1e-4, 1.0) * 3, ext._dΩνE2da(1.0, 1e-4, ones(3)))
+        # Three masses: see nu3_ρ / nu3_dρda (three FD species at 0.71611 T_cmb + massless N_ur).
+        @test isapprox(ext._ΩνE2(1.0, 1e-4, ones(3)), nu3_ρ(1.0, 1e-4, (1.0, 1.0, 1.0)); rtol=1e-14)
+        @test isapprox(ext._dΩνE2da(1.0, 1e-4, ones(3)), nu3_dρda(1.0, 1e-4, (1.0, 1.0, 1.0)); rtol=1e-14)
         @test isapprox(ext._ρDE_z(0.0, -1.0, 1.0), 1.0)
         @test isapprox(E_a(1.0, Ωcb0, h), 1.0)
         @test isapprox(E_a(1.0, mycosmo), 1.0)
@@ -182,11 +196,11 @@ if !isnothing(ext)
         # Additional test with different cosmology parameters to ensure robustness
         @testset "Multiple cosmologies - structure vs direct" begin
             # Create different test cosmologies
-            cosmo1 = w0waCDMCosmology(ln10Aₛ=3.044, nₛ=0.965, h=0.7, ωb=0.022, ωc=0.12, mν=0.0, w0=-1.0, wa=0.0)
-            cosmo2 = w0waCDMCosmology(ln10Aₛ=2.9, nₛ=0.97, h=0.65, ωb=0.024, ωc=0.11, mν=0.1, w0=-0.8, wa=-0.3)
-            cosmo3 = w0waCDMCosmology(ln10Aₛ=3.1, nₛ=0.955, h=0.75, ωb=0.021, ωc=0.13, mν=0.2, w0=-1.2, wa=0.5)
-            cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=1.0, ωk=0.1)
-            cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=0.06, w0=-2.0, wa=-1.0, ωk=-0.1)
+            cosmo1 = w0waCDMCosmology(ln10Aₛ=3.044, nₛ=0.965, h=0.7, ωb=0.022, ωc=0.12, mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0)
+            cosmo2 = w0waCDMCosmology(ln10Aₛ=2.9, nₛ=0.97, h=0.65, ωb=0.024, ωc=0.11, mν=(0.02, 0.03, 0.05), w0=-0.8, wa=-0.3)
+            cosmo3 = w0waCDMCosmology(ln10Aₛ=3.1, nₛ=0.955, h=0.75, ωb=0.021, ωc=0.13, mν=(0.05, 0.05, 0.1), w0=-1.2, wa=0.5)
+            cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0, ωk=0.1)
+            cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=(0.02, 0.02, 0.02), w0=-2.0, wa=-1.0, ωk=-0.1)
 
             test_cosmologies = [cosmo1, cosmo2, cosmo3, cosmo4]
             test_redshifts = [0.5, 1.5, 3.0]
@@ -208,12 +222,11 @@ if !isnothing(ext)
                 end
             end
         end
-        @test isapprox(r_z(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), r_z_check(3.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), rtol=1e-6)
-        @test isapprox(r_z(10.0, 0.14 / 0.67^2, 0.67; mν=0.4, w0=-1.9, wa=0.7), 10161.232807937273, rtol=2e-4)
-        @test isapprox(dA_z(0.0, Ωcb0, h; mν=mν, w0=w0, wa=wa), 0.0, rtol=1e-6)
+        @test isapprox(r_z(3.0, Ωcb0, h; mν=mν_triple, w0=w0, wa=wa), r_z_check(3.0, Ωcb0, h; mν=mν_triple, w0=w0, wa=wa), rtol=1e-6)
+        @test isapprox(dA_z(0.0, Ωcb0, h; mν=mν_triple, w0=w0, wa=wa), 0.0, rtol=1e-6)
         @test isapprox(dA_z(0.0, mycosmo), 0.0)
-        @test D_z(1.0, mycosmo) == D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
-        @test f_z(1.0, mycosmo) == f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=0.06, w0=-2.0, wa=1.0)
+        @test D_z(1.0, mycosmo) == D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0)
+        @test f_z(1.0, mycosmo) == f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0)
     end
 
     @testset "Gradient tests (DifferentiationInterface)" begin
@@ -296,151 +309,15 @@ if !isnothing(ext)
     end
 
 
-    @testset "CLASS comparison tests" begin
-        # Comparison with CLASS results for specific cosmology
-        # Parameters: Ωcb0 = 0.14/0.67^2, h = 0.67, mν = 0.4, w0 = -1.9, wa = 0.7
-        Ωcb0_class = 0.14 / 0.67^2
-        h_class = 0.67
-        mν_class = 0.4
-        w0_class = -1.9
-        wa_class = 0.7
-
-        # z = 0.0 values
-        @testset "z = 0.0" begin
-            @test isapprox(D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1.0, rtol=1e-6)
-            @test isapprox(f_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.5336534234376753, rtol=2e-5)
-            @test isapprox(E_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 67.00000032897867, rtol=1e-6)
-            @test isapprox(r_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
-            @test isapprox(dL_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
-            @test isapprox(dA_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.0, atol=1e-10)
-        end
-
-        # z = 1.0 values
-        @testset "z = 1.0" begin
-            @test isapprox(D_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.5713231567487467, rtol=4e-5)
-            @test isapprox(f_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.951063970660909, rtol=2e-4)
-            @test isapprox(E_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 110.69104662880478, rtol=1e-4)
-            @test isapprox(r_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 3796.313631546915, rtol=1e-4)
-            @test isapprox(dL_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 7592.627263093831, rtol=1e-4)
-            @test isapprox(dA_z(1.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1898.1568157734582, rtol=1e-4)
-        end
-
-        # z = 2.0 values
-        @testset "z = 2.0" begin
-            @test isapprox(D_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) / D_z(0.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.38596027450669235, rtol=1e-4)
-            @test isapprox(f_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 0.9763011446824891, rtol=2e-4)
-            @test isapprox(E_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class) * 100 * h_class, 198.43712939715508, rtol=2e-4)
-            @test isapprox(r_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 5815.253842752389, rtol=1e-4)
-            @test isapprox(dL_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 17445.761528257153, rtol=1e-4)
-            @test isapprox(dA_z(2.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class), 1938.4179475841324, rtol=1e-4)
-        end
-
-        @testset "z =1200.0" begin
-            @test isapprox(r_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=120), 14405.271466533255, rtol=2e-3)
-            @test isapprox(dL_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=120), 17300731.03130642, rtol=2e-3)
-            @test isapprox(dA_z(1200.0, Ωcb0_class, h_class; mν=mν_class, w0=w0_class, wa=wa_class, order=120), 11.9943975574798, rtol=2e-3)
-        end
-    end
-
-    @testset "CLASS comparison tests - cosmology 2" begin
-        # Second cosmology parameters
-        # h = 0.6, Ωb h² = 0.02, Ωc h² = 0.16, mν = 0.2, w0 = -0.9, wa = -0.7
-        Ωcb0_class2 = (0.02 + 0.16) / 0.6^2  # Total Ωcb0
-        h_class2 = 0.6
-        mν_class2 = 0.2
-        w0_class2 = -0.9
-        wa_class2 = -0.7
-
-        # z = 0.0 values
-        @testset "z = 0.0" begin
-            @test isapprox(D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1.0, rtol=1e-6)
-            @test isapprox(f_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.682532170290542, rtol=2e-5)
-            @test isapprox(E_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 60.00000540313085, rtol=1e-6)
-            @test isapprox(r_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
-            @test isapprox(dL_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
-            @test isapprox(dA_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.0, atol=1e-10)
-        end
-
-        # z = 1.0 values
-        @testset "z = 1.0" begin
-            @test isapprox(D_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.5608386428835493, rtol=4e-5)
-            @test isapprox(f_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.9428198389771597, rtol=2e-4)
-            @test isapprox(E_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 126.63651334029939, rtol=1e-4)
-            @test isapprox(r_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 3477.5826389146628, rtol=1e-4)
-            @test isapprox(dL_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 6955.1652778293255, rtol=1e-4)
-            @test isapprox(dA_z(1.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1738.7913194573318, rtol=1e-4)
-        end
-
-        # z = 2.0 values
-        @testset "z = 2.0" begin
-            @test isapprox(D_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) / D_z(0.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.378970688908124, rtol=1e-4)
-            @test isapprox(f_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 0.981855910972107, rtol=2e-4)
-            @test isapprox(E_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2) * 100 * h_class2, 224.06947149941828, rtol=2e-4)
-            @test isapprox(r_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 5254.860436794502, rtol=1e-4)
-            @test isapprox(dL_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 15764.581310383495, rtol=1e-4)
-            @test isapprox(dA_z(2.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2), 1751.6201455981693, rtol=1e-4)
-        end
-
-        @testset "z = 1200.0" begin
-            @test isapprox(r_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=120), 12906.201419127055, rtol=2e-3)
-            @test isapprox(dL_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=120), 15500347.904371575, rtol=2e-3)
-            @test isapprox(dA_z(1200.0, Ωcb0_class2, h_class2; mν=mν_class2, w0=w0_class2, wa=wa_class2, order=120), 10.746212672045832, rtol=2e-3)
-        end
-    end
-
-    @testset "CLASS comparison tests - cosmology 3" begin
-        # Second cosmology parameters
-        # h = 0.6, Ωb h² = 0.02, Ωc h² = 0.16, mν = 0.2, w0 = -0.9, wa = -0.7,
-        Ωcb0_class3 = (0.02 + 0.18) / 1.0^2  # Total Ωcb0
-        h_class3 = 1.0
-        mν_class3 = 0.34
-        w0_class3 = -0.2
-        wa_class3 = -2.6
-        Ωk0_class3 = 0.1 / 1.0^2
-
-        # z = 0.0 values
-        @testset "z = 0.0" begin
-            @test isapprox(D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1.0, rtol=1e-6)
-            @test isapprox(f_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.398474183923441, rtol=2e-4)
-            @test isapprox(E_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 100.0, rtol=1e-6)
-            @test isapprox(r_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
-            @test isapprox(dL_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
-            @test isapprox(dA_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.0, atol=1e-10)
-        end
-
-        # z = 1.0 values
-        @testset "z = 1.0" begin
-            @test isapprox(D_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.689689041142467, rtol=4e-5)
-            @test isapprox(f_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.727435001392173, rtol=2e-4)
-            @test isapprox(E_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 168.660901702244558, rtol=1e-4)
-            @test isapprox(r_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 2207.200798324237894, rtol=1e-4)
-            @test isapprox(dL_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 4454.390532901412371, rtol=1e-4)
-            @test isapprox(dA_z(1.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1113.597633225352638, rtol=1e-4)
-        end
-
-        # z = 2.0 values
-        @testset "z = 2.0" begin
-            @test isapprox(D_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) / D_z(0.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.495032404840887, rtol=1e-4)
-            @test isapprox(f_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 0.882324793082423, rtol=2e-4)
-            @test isapprox(E_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3) * 100 * h_class3, 259.543469580456815, rtol=2e-4)
-            @test isapprox(r_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 3655.526633299333753, rtol=1e-4)
-            @test isapprox(dL_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 11240.362895970827594, rtol=1e-4)
-            @test isapprox(dA_z(2.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3), 1248.929210663426375, rtol=1e-4)
-        end
-
-        # z = 2.0 values
-        @testset "z = 1200.0" begin
-            @test isapprox(r_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=120), 10695.833449050964, rtol=2e-3)
-            @test isapprox(dL_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=120), 15749661.605665019, rtol=2e-3)
-            @test isapprox(dA_z(1200.0, Ωcb0_class3, h_class3; mν=mν_class3, w0=w0_class3, wa=wa_class3, Ωk0=Ωk0_class3, order=120), 10.919058989604848, rtol=2e-3)
-        end
-    end
+    # The scalar-mν CLASS comparison block was removed with the scalar mode (it
+    # validated a single-species approximation, not a physical three-mass split).
+    # CLASS/CAMB comparisons now live in test_neutrino_three_mass.jl.
 
     @testset "Missing coverage tests" begin
-        test_cosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0)
+        test_cosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0)
 
         # Test cosmology with positive curvature to hit S_of_K positive branch
-        positive_curve_cosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=0.0, w0=-1.0, wa=0.0, ωk=0.05)
+        positive_curve_cosmo = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=0.67, ωb=0.02, ωc=0.11, mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, ωk=0.05)
 
         @test ext._F(0.5) > 0.0
         @test isapprox(ext._a_z(0.0), 1.0)
@@ -496,7 +373,7 @@ if !isnothing(ext)
             @test d̃M_positive > 0
 
             # Test dM_z (physical units) with direct parameters
-            dM_direct = dM_z(z_test, 0.3, 0.67; mν=0.06, w0=-1.0, wa=0.0, Ωk0=0.01)
+            dM_direct = dM_z(z_test, 0.3, 0.67; mν=(0.02, 0.02, 0.02), w0=-1.0, wa=0.0, Ωk0=0.01)
             @test isfinite(dM_direct)
             @test dM_direct > 0
 
@@ -537,16 +414,18 @@ if !isnothing(ext)
         @testset "Vector neutrino mass coverage" begin
             # Test with 3 equal masses (degenerate hierarchy)
             mν_degenerate = [0.1, 0.1, 0.1]
-            Ωγ0_test = 2.469e-5 / 0.67^2
+            Ωγ0_test = ext._ωγ_T_CMB / 0.67^2
 
             ΩνE2_degenerate = ext._ΩνE2(0.5, Ωγ0_test, mν_degenerate)
             @test isfinite(ΩνE2_degenerate)
             @test ΩνE2_degenerate > 0
-            @test isapprox(ΩνE2_degenerate, ext._ΩνE2(0.5, Ωγ0_test, 0.1) * 3, rtol=1e-10)
+            @test ΩνE2_degenerate == ext._ΩνE2(0.5, Ωγ0_test, (0.1, 0.1, 0.1))
+            @test isapprox(ΩνE2_degenerate, nu3_ρ(0.5, Ωγ0_test, (0.1, 0.1, 0.1)); rtol=1e-14)
 
             dΩνE2da_degenerate = ext._dΩνE2da(0.5, Ωγ0_test, mν_degenerate)
             @test isfinite(dΩνE2da_degenerate)
-            @test isapprox(dΩνE2da_degenerate, ext._dΩνE2da(0.5, Ωγ0_test, 0.1) * 3, rtol=1e-10)
+            @test dΩνE2da_degenerate == ext._dΩνE2da(0.5, Ωγ0_test, (0.1, 0.1, 0.1))
+            @test isapprox(dΩνE2da_degenerate, nu3_dρda(0.5, Ωγ0_test, (0.1, 0.1, 0.1)); rtol=1e-14)
 
             # Test with normal hierarchy approximation
             mν_normal = [0.0, 0.008, 0.05]
@@ -577,13 +456,11 @@ if !isnothing(ext)
     end
 
     @testset "Interpolant initialization tests" begin
-        # Test that the global interpolants are properly initialized
-        @test isdefined(ext, :F_interpolant)
-        @test isdefined(ext, :dFdy_interpolant)
-        @test !isnothing(ext.F_interpolant[])
-        @test !isnothing(ext.dFdy_interpolant[])
-        @test isa(ext.F_interpolant[], AkimaSpline)
-        @test isa(ext.dFdy_interpolant[], AkimaSpline)
+        # Only the three-mass lookup tables exist; the legacy scalar tables are gone.
+        @test !isdefined(ext, :F_interpolant)
+        @test !isdefined(ext, :dFdy_interpolant)
+        @test isa(ext.F_three_mass_interpolant[], AkimaSpline)
+        @test isa(ext.dFdy_three_mass_interpolant[], AkimaSpline)
     end
 
     @testset "Type stability tests" begin
@@ -597,7 +474,7 @@ if !isnothing(ext)
         @test mycosmo.h == 0.636
         @test mycosmo.ωb == 0.02237
         @test mycosmo.ωc == 0.1
-        @test mycosmo.mν == 0.06
+        @test mycosmo.mν == (0.02, 0.02, 0.02)
         @test mycosmo.w0 == -2.0
         @test mycosmo.wa == 1.0
     end
@@ -818,7 +695,7 @@ if !isnothing(ext)
             # E_z function
             function E_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                E_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                E_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             E_grad = ForwardDiff.gradient(E_z_x, x)
@@ -835,7 +712,7 @@ if !isnothing(ext)
             # r_z function (comoving distance)
             function r_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                r_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             r_grad = ForwardDiff.gradient(r_z_x, x)
@@ -845,7 +722,7 @@ if !isnothing(ext)
             # dA_z function (angular diameter distance)
             function dA_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                dA_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                dA_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             dA_grad = ForwardDiff.gradient(dA_z_x, x)
@@ -855,7 +732,7 @@ if !isnothing(ext)
             # D_z function (growth factor)
             function D_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                D_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             D_grad = ForwardDiff.gradient(D_z_x, x)
@@ -865,7 +742,7 @@ if !isnothing(ext)
             # f_z function (growth rate)
             function f_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                f_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             f_grad = ForwardDiff.gradient(f_z_x, x)
@@ -879,7 +756,7 @@ if !isnothing(ext)
 
             # E_z function works with Zygote
             function E_z_simple(Ωcb0, h)
-                E_z(z, Ωcb0, h; mν=0.0, w0=-1.0, wa=0.0)
+                E_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0)
             end
 
             Ωcb0 = 0.3
@@ -908,7 +785,7 @@ if !isnothing(ext)
             # Test ForwardDiff with vector output
             function multi_D_z(x)
                 Ω, h_val = x
-                sum(D_z(z_array, Ω, h_val; mν=0.0, w0=-1.0, wa=0.0))
+                sum(D_z(z_array, Ω, h_val; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0))
             end
 
             grad_multi = ForwardDiff.gradient(multi_D_z, [Ωcb0, h])
@@ -934,7 +811,7 @@ if !isnothing(ext)
                 ln10As, ns, h, ωb, ωc, mν, w0, wa = params
                 cosmo = w0waCDMCosmology(
                     ln10Aₛ = ln10As, nₛ = ns, h = h,
-                    ωb = ωb, ωc = ωc, mν = mν,
+                    ωb = ωb, ωc = ωc, mν = (mν, mν, mν),
                     w0 = w0, wa = wa
                 )
                 return D_z(z_fixed, cosmo)
@@ -944,7 +821,7 @@ if !isnothing(ext)
             function D_z_direct_params(params)
                 ln10As, ns, h, ωb, ωc, mν, w0, wa = params
                 Ωcb0 = (ωb + ωc) / h^2
-                return D_z(z_fixed, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                return D_z(z_fixed, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             @testset "ForwardDiff with cosmology struct" begin
@@ -1009,7 +886,7 @@ if !isnothing(ext)
                 ln10As, ns, h, ωb, ωc, mν, w0, wa = params
                 cosmo = w0waCDMCosmology(
                     ln10Aₛ = ln10As, nₛ = ns, h = h,
-                    ωb = ωb, ωc = ωc, mν = mν,
+                    ωb = ωb, ωc = ωc, mν = (mν, mν, mν),
                     w0 = w0, wa = wa
                 )
                 return f_z(z_fixed, cosmo)
@@ -1018,7 +895,7 @@ if !isnothing(ext)
             function f_z_direct_params(params)
                 ln10As, ns, h, ωb, ωc, mν, w0, wa = params
                 Ωcb0 = (ωb + ωc) / h^2
-                return f_z(z_fixed, Ωcb0, h; mν=mν, w0=w0, wa=wa)
+                return f_z(z_fixed, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             @testset "f_z: struct vs direct parameters" begin
@@ -1037,7 +914,7 @@ if !isnothing(ext)
         vec_cosmo = w0waCDMCosmology(
             ln10Aₛ=3.0, nₛ=0.96, h=0.67,
             ωb=0.02237, ωc=0.12, ωk=0.01,
-            mν=0.06, w0=-1.0, wa=0.0
+            mν=(0.02, 0.02, 0.02), w0=-1.0, wa=0.0
         )
 
         # Test arrays
@@ -1287,19 +1164,15 @@ if !isnothing(ext)
     #
     # These testsets verify two specific claims raised during the architectural
     # audit:
-    #   (a) `_growth_solver` and friends are type-stable on the scalar-mν path
-    #       (the only path actually exercised by user code today).
+    #   (a) `_growth_solver` and friends are type-stable on the default-massless-triple path
+    #       (the default call signature).
     #   (b) The neutrino-density helpers `_ΩνE2` / `_dΩνE2da` produce gradients
     #       that agree with central finite differences via both ForwardDiff
     #       (using two distinct Akima interpolants for value vs derivative).
     # =========================================================================
-    @testset "Audit: _growth_solver type stability (scalar mν)" begin
-        # The default w0waCDMCosmology uses scalar mν=0.0; this is the typical
-        # call signature. We verify type stability via Base.return_types and a
-        # @inferred guard. Vector-mν is NOT tested here because:
-        #   - `promote_type(Float64, Vector{Float64}) === Any`
-        #   - the resulting `T[Ωcb0, mν, h, ...]` constructor errors out
-        #     (a known limitation; tracked separately).
+    @testset "Audit: _growth_solver type stability (default massless triple)" begin
+        # The default mν is the explicit massless triple (0.0, 0.0, 0.0). We verify
+        # type stability via Base.return_types and an @inferred guard.
         z_scalar = 0.5
         z_vector = [0.1, 0.5, 1.0]
         Ωcb0 = 0.27
@@ -1320,7 +1193,7 @@ if !isnothing(ext)
 
         # Inner kernels exercised inside the ODE RHS
         @test Base.return_types(ext._dlogEdloga, (Float64, Float64, Float64))[1] === Float64
-        @test Base.return_types(ext._ΩνE2, (Float64, Float64, Float64))[1] === Float64
+        @test Base.return_types(ext._ΩνE2, (Float64, Float64, NTuple{3,Float64}))[1] === Float64
         @test Base.return_types(ext._ΩνE2, (Float64, Float64, Vector{Float64}))[1] === Float64
     end
 
@@ -1333,23 +1206,23 @@ if !isnothing(ext)
         # interpolant accuracy (~1e-5).
         a = 0.5
         Ωγ0 = 5.5e-5
-        mν_scalar = 0.06
+        mν_tuple = (0.06, 0.05, 0.04)
         mν_vector = [0.06, 0.0, 0.0]
 
-        # ---- Scalar mν, derivative w.r.t. a ----
-        v_scalar = ext._ΩνE2(a, Ωγ0, mν_scalar)
-        @test isfinite(v_scalar) && v_scalar > 0
+        # ---- Tuple mν, derivative w.r.t. a ----
+        v_tuple = ext._ΩνE2(a, Ωγ0, mν_tuple)
+        @test isfinite(v_tuple) && v_tuple > 0
 
-        fd_a    = central_fdm(5, 1)(x -> ext._ΩνE2(x, Ωγ0, mν_scalar), a)
-        fwd_a   = ForwardDiff.derivative(x -> ext._ΩνE2(x, Ωγ0, mν_scalar), a)
-        zyg_a   = Zygote.gradient(x -> ext._ΩνE2(x, Ωγ0, mν_scalar), a)[1]
+        fd_a    = central_fdm(5, 1)(x -> ext._ΩνE2(x, Ωγ0, mν_tuple), a)
+        fwd_a   = ForwardDiff.derivative(x -> ext._ΩνE2(x, Ωγ0, mν_tuple), a)
+        zyg_a   = Zygote.gradient(x -> ext._ΩνE2(x, Ωγ0, mν_tuple), a)[1]
         @test isapprox(fwd_a, fd_a; rtol=1e-8)
         @test isapprox(zyg_a, fd_a; rtol=1e-8)
 
-        # ---- Scalar mν, derivative w.r.t. mν ----
-        fd_m  = central_fdm(5, 1)(m -> ext._ΩνE2(a, Ωγ0, m), mν_scalar)
-        fwd_m = ForwardDiff.derivative(m -> ext._ΩνE2(a, Ωγ0, m), mν_scalar)
-        zyg_m = Zygote.gradient(m -> ext._ΩνE2(a, Ωγ0, m), mν_scalar)[1]
+        # ---- Tuple mν, derivative w.r.t. one mass ----
+        fd_m  = central_fdm(5, 1)(m -> ext._ΩνE2(a, Ωγ0, (m, 0.05, 0.04)), 0.06)
+        fwd_m = ForwardDiff.derivative(m -> ext._ΩνE2(a, Ωγ0, (m, 0.05, 0.04)), 0.06)
+        zyg_m = Zygote.gradient(m -> ext._ΩνE2(a, Ωγ0, (m, 0.05, 0.04)), 0.06)[1]
         @test isapprox(fwd_m, fd_m; rtol=1e-8)
         @test isapprox(zyg_m, fd_m; rtol=1e-8)
 
@@ -1387,9 +1260,9 @@ if !isnothing(ext)
 
         # ---- Analytical _dΩνE2da vs FD-of-_ΩνE2 (cross-interpolant check) ----
         # The two routines route through *different* Akima interpolants
-        # (F_interpolant vs dFdy_interpolant), so we only require agreement
+        # (F_three_mass vs dFdy_three_mass), so we only require agreement
         # at the level of Akima truncation error (~1e-5).
-        analytical_s = ext._dΩνE2da(a, Ωγ0, mν_scalar)
+        analytical_s = ext._dΩνE2da(a, Ωγ0, mν_tuple)
         @test isapprox(analytical_s, fd_a; rtol=1e-5)
 
         analytical_v = ext._dΩνE2da(a, Ωγ0, mν_vector)
