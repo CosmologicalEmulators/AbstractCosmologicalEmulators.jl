@@ -70,3 +70,51 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
           verbose: true
+  lower-bounds:
+    name: Lowest compatible dependencies - Julia 1.12 - ${{ github.event_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      # Julia >=1.12 supports the locked Pkg.test environment used here.
+      # The ordinary matrix above separately checks older Julia runtimes.
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1.12'
+      - uses: actions/cache@v5
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-lower-bounds-artifacts-${{ hashFiles('test/Artifacts.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-lower-bounds-artifacts-
+            ${{ runner.os }}-test-cache-artifacts-
+      # Resolve a jointly compatible minimum, including optional extensions.
+      # v2.7.0 also locks [extras]/[targets].test by promoting resolved test
+      # dependencies in this disposable checkout; do not exclude any backend.
+      - name: Resolve lowest compatible dependencies
+        uses: julia-actions/julia-downgrade-compat@30b83cf94e89744fcbd7ea5496be4967d6fbe540 # v2.7.0
+        with:
+          projects: '.'
+          mode: alldeps
+          julia_version: '1.12'
+      - uses: julia-actions/julia-buildpkg@v1
+      - name: Record resolved dependency versions
+        run: julia --startup-file=no --project=. -e 'using Pkg; Pkg.status(; mode=Pkg.PKGMODE_MANIFEST)'
+      - name: Download and verify reference fixtures
+        run: julia --startup-file=no test/download_fixtures.jl
+      - name: Test the locked lower-bound environment
+        uses: julia-actions/julia-runtest@v1
+        with:
+          coverage: false
+          allow_reresolve: false
+          force_latest_compatible_version: false
+          # No latest-version assertions or reduced-suite test_args here.
+      - name: Preserve lower-bound resolution
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lower-bounds-environment-${{ github.event_name }}
+          path: |
+            Project.toml
+            Manifest.toml
+          if-no-files-found: warn
