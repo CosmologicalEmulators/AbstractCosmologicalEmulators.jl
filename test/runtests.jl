@@ -14,6 +14,9 @@ elseif "bspline_review_host" in ARGS
     include("test_bspline_review_regressions.jl")
     include("test_bspline_final_edges.jl")
     include("test_performance_regressions.jl")
+elseif "lux_mlp_mooncake" in ARGS
+    include("test_lux_mlp_mooncake.jl")
+    include("test_lux_mlp_preferences.jl")
 else
 # Include all test dependencies at the top level
 using JSON
@@ -100,6 +103,8 @@ else
 
     # LuxEmulator automatic differentiation tests
     include("test_lux_emulator_autodiff.jl")
+    include("test_lux_mlp_mooncake.jl")
+    include("test_lux_mlp_preferences.jl")
 
     # Akima interpolation tests
     include("test_akima_interpolation.jl")

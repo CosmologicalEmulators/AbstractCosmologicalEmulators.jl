@@ -1,0 +1,6 @@
+Julia 1.12.5
+AbstractCosmologicalEmulators 0.12.0
+Reference source /project/rrg-wperciva/mbonici/mapse_validation/20261108_mooncake/vjp-control-b-v3/upstream
+Lux 1.31.5; ForwardDiff 1.4.7
+Deterministic parameters, inputs and seeds: cases.jl; Lux preference none.
+Primal from unchanged package; input VJP from independent ForwardDiff.

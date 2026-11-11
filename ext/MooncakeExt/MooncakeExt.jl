@@ -410,4 +410,6 @@ end
 # Register it for Mooncake
 Mooncake.@from_chainrules Mooncake.MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.run_emulator), Any, AbstractCosmologicalEmulators.LuxEmulator}
 
+include("lux_mlp.jl")
+
 end # module MooncakeExt
