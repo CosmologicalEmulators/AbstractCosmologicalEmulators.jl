@@ -243,6 +243,41 @@ end
         end
     end
 
+    @testset "Abstract parameter fields retain native input gradients" begin
+        concrete = make_emulator(rng, Float32)
+        model, ps, st = concrete.Model, concrete.Parameters, concrete.States
+        D = typeof(concrete.Description)
+        x = randn(rng, 3, 4)
+        seed = randn(rng, 2, 4)
+        raw = p -> sum(seed .* first(Lux.apply(model, p, ps, st)))
+        expected = ForwardDiff.gradient(raw, x)
+        for P in (Any, NamedTuple, NamedTuple{keys(ps)})
+            emu = ACE.LuxEmulator{typeof(model),P,typeof(st),D}(model, ps, st, D())
+            @test isconcretetype(typeof(emu))
+            @test !isconcretetype(fieldtype(typeof(emu), :Parameters))
+            @test Ext._native_mlp_supported(emu, x)
+            fc, ec = Mooncake.zero_fcodual(ACE.run_emulator), Mooncake.zero_fcodual(emu)
+            # The native-only fixture trips if this fallback reaches ForwardDiff.
+            for rule in (Mooncake.rrule!!, Mooncake.build_rrule(ACE.run_emulator, x, emu))
+                @test rule === Mooncake.rrule!!
+                dx = zero(x)
+                output, back = rule(fc, Mooncake.CoDual(x, dx), ec)
+                @test back isa Ext._LuxMLPInputPullback
+                Mooncake.tangent(output) .= seed
+                back(Mooncake.NoRData())
+                @test all(isapprox.(dx, expected; rtol=1e-9, atol=1e-11))
+            end
+            cache = Mooncake.prepare_pullback_cache(ACE.run_emulator, x, emu)
+            y, (_, dx, _) = Mooncake.value_and_pullback!!(cache, seed, ACE.run_emulator, x, emu)
+            @test y == ACE.run_emulator(x, concrete)
+            @test all(isapprox.(dx, expected; rtol=1e-9, atol=1e-11))
+            loss = p -> sum(seed .* ACE.run_emulator(p, emu))
+            backend = AutoMooncake()
+            prep = prepare_gradient(loss, backend, x)
+            @test all(isapprox.(gradient(loss, prep, backend, x), expected; rtol=1e-9, atol=1e-11))
+        end
+    end
+
     @testset "Prepared frozen-inference rules" begin
         @test Ext._FROZEN_MLP_RULE_HOOKS
         fc = Mooncake.zero_fcodual(ACE.run_emulator)

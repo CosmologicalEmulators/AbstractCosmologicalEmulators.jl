@@ -195,8 +195,8 @@ function (rule::_FrozenLuxMLPRule{sig,P})(
 end
 
 # `build_primitive_rrule` is a documented hook; the copy integration and
-# `__verify_sig` are internal and require compatibility coverage. Without them, or on versions
-# whose call sites call `rrule!!` directly (<= 0.5.24), the direct rule applies.
+# `__verify_sig` are internal and require compatibility coverage. The supported
+# Mooncake range starts at 0.5.67, where nested and root calls use the builder.
 const _FROZEN_MLP_RULE_HOOKS = all(name -> isdefined(Mooncake, name),
     (:build_primitive_rrule, :_copy, :__verify_sig))
 
@@ -205,9 +205,13 @@ const _FROZEN_MLP_RULE_HOOKS = all(name -> isdefined(Mooncake, name),
         sig::Type{<:Tuple{typeof(AbstractCosmologicalEmulators.run_emulator),_MLPFloatArray,
                           AbstractCosmologicalEmulators.LuxEmulator}},
     )
-        # Abstractly typed signatures keep the stateless direct rule.
+        # A concrete emulator type can still declare Parameters as Any or an
+        # abstract NamedTuple. Those fields cannot hold a concretely typed
+        # frozen binding in our invariant Ref; retain the direct native rule.
         isconcretetype(sig) || return Mooncake.rrule!!
-        return _FrozenLuxMLPRule{sig,fieldtype(fieldtype(sig, 3), :Parameters)}()
+        P = fieldtype(fieldtype(sig, 3), :Parameters)
+        isconcretetype(P) || return Mooncake.rrule!!
+        return _FrozenLuxMLPRule{sig,P}()
     end
 
     # Each copied rule (another preparation, Mooncake's per-thread copies)

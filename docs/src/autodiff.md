@@ -53,9 +53,11 @@ rule of each signature, and therefore its binding, until Mooncake's caches are
 emptied. Separate preparations never share a binding, and activations,
 preactivations and cotangents always belong to a single call, so several live
 pullbacks and replayed seeds are independent. Direct `Mooncake.rrule!!` calls
-own copies of their reverse weights instead. Mooncake versions whose AD call
-sites do not use `Mooncake.build_primitive_rrule` (0.5.24 and earlier) use that
-direct rule throughout. `GenericEmulator` input normalization, output scaling
+own copies of their reverse weights instead. Emulators with abstractly declared
+parameter fields also use the direct native rule, without prepared weight reuse.
+This integration requires Mooncake 0.5.67 or newer within the 0.5 series. Its Julia
+requirements include Julia 1.10.8+, 1.11.6+, and 1.12.1+ within those release series.
+`GenericEmulator` input normalization, output scaling
 and input-dependent postprocessing remain differentiated by the enclosing
 backend.
 
