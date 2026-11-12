@@ -17,6 +17,12 @@ elseif "bspline_review_host" in ARGS
 elseif "lux_mlp_mooncake" in ARGS
     include("test_lux_mlp_mooncake.jl")
     include("test_lux_mlp_preferences.jl")
+elseif "lowlevel_spline_pullbacks" in ARGS
+    include("test_lowlevel_spline_pullbacks.jl")
+elseif "extension_boundaries" in ARGS
+    include("test_extension_boundary_contracts.jl")
+elseif "aqua" in ARGS
+    include("test_aqua.jl")
 else
 # Include all test dependencies at the top level
 using JSON
@@ -79,6 +85,7 @@ else
 
     # Extension tests
     include("test_extensions.jl")
+    include("test_extension_boundary_contracts.jl")
 
     # Official artifact tests
     include("test_official_artifacts.jl")
@@ -132,6 +139,7 @@ else
     include("test_cubic_b_spline_streamed_geometry.jl")
     include("test_threads.jl")
     include("test_cubic_b_spline_gaps.jl")
+    include("test_lowlevel_spline_pullbacks.jl")
     include("test_cubic_b_spline_dense_operator.jl")
     include("test_cubic_b_spline_one_shot_reactant.jl")
     include("test_cubic_b_spline_scalar_reactant.jl")

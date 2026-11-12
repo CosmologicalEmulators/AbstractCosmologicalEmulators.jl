@@ -31,7 +31,8 @@ MooncakeExt = ["Mooncake"]
 [compat]
 ADTypes = "1.21.0"
 Adapt = "3, 4"
-Aqua = "0.8"
+# Older piracy checks access TypeName.mt, removed in Julia 1.12.
+Aqua = "0.8.14"
 Artifacts = "1.10"
 ChainRulesCore = "1.26"
 DataInterpolations = "6, 8, 9, 10"

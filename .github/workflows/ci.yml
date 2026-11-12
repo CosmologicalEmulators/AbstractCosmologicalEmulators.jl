@@ -41,6 +41,15 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
+      # Artifacts alone do not avoid the 20–36 minute dependency precompile
+      # seen on macOS. Preserve compiled packages separately; include the
+      # matrix and architecture, and leave cache deletion permissions off.
+      - uses: julia-actions/cache@d10a6fd8f31b12404a54613ebad242900567f2b9 # v2
+        with:
+          cache-name: compiled-tests-${{ runner.arch }}
+          cache-artifacts: false
+          cache-registries: false
+          delete-old-caches: false
       - uses: julia-actions/julia-buildpkg@v1
       - name: Download and verify reference fixtures
         run: julia --startup-file=no test/download_fixtures.jl
