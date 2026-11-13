@@ -295,6 +295,13 @@ if has_three_mass_background
     const w0_test = test_cosmo.w0
     const wa_test = test_cosmo.wa
 
+    # The public background API takes only a w0waCDMCosmology. Coordinate conversion from
+    # density fractions: ωb + ωc = Ωcb0 h², ωk = Ωk0 h² (masses pass through untouched).
+    function bench_cosmo(Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0)
+        ωc = Ωcb0 * h^2
+        return ext.w0waCDMCosmology(; h=h, ωb=zero(ωc), ωc=ωc, ωk=Ωk0 * h^2, mν=mν, w0=w0, wa=wa)
+    end
+
     # Create benchmark group for Background extension
     SUITE["background"] = BenchmarkGroup(["cosmology", "distances", "growth"])
 
@@ -303,8 +310,9 @@ if has_three_mass_background
         z = 1.0
     )
 
-    SUITE["background"]["E_z_direct"] = @benchmarkable ext.E_z(z, $Ωcb0_test, $h_test;
-        mν=$mν_test, w0=$w0_test, wa=$wa_test) setup = (
+    # Construct the struct from density fractions, then evaluate (replaces the removed direct overload).
+    SUITE["background"]["E_z_construct_struct"] = @benchmarkable ext.E_z(z, bench_cosmo($Ωcb0_test, $h_test;
+        mν=$mν_test, w0=$w0_test, wa=$wa_test)) setup = (
         z = 1.0
     )
 
@@ -317,8 +325,9 @@ if has_three_mass_background
         z = 1.0
     )
 
-    SUITE["background"]["dL_z_direct"] = @benchmarkable ext.dL_z(z, $Ωcb0_test, $h_test;
-        mν=$mν_test, w0=$w0_test, wa=$wa_test) setup = (
+    # Construct the struct from density fractions, then evaluate (replaces the removed direct overload).
+    SUITE["background"]["dL_z_construct_struct"] = @benchmarkable ext.dL_z(z, bench_cosmo($Ωcb0_test, $h_test;
+        mν=$mν_test, w0=$w0_test, wa=$wa_test)) setup = (
         z = 1.0
     )
 
@@ -335,8 +344,9 @@ if has_three_mass_background
         z = 1.0
     )
 
-    SUITE["background"]["D_z_direct"] = @benchmarkable ext.D_z(z, $Ωcb0_test, $h_test;
-        mν=$mν_test, w0=$w0_test, wa=$wa_test) setup = (
+    # Construct the struct from density fractions, then evaluate (replaces the removed direct overload).
+    SUITE["background"]["D_z_construct_struct"] = @benchmarkable ext.D_z(z, bench_cosmo($Ωcb0_test, $h_test;
+        mν=$mν_test, w0=$w0_test, wa=$wa_test)) setup = (
         z = 1.0
     )
 
@@ -507,17 +517,17 @@ if has_three_mass_background
     # Helper functions for gradient computation (inspired by test functions)
     function D_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.D_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(ext.D_z(z, bench_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)))
     end
 
     function f_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.f_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(ext.f_z(z, bench_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)))
     end
 
     function r_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(ext.r_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(ext.r_z(z, bench_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)))
     end
 
     # Create benchmark groups for gradients
@@ -785,17 +795,17 @@ if has_three_mass_background
 
     function D_z_single(x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        ext.D_z(z_single, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)
+        ext.D_z(z_single, bench_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function f_z_single(x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        ext.f_z(z_single, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)
+        ext.f_z(z_single, bench_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     function r_z_single(x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        ext.r_z(z_single, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)
+        ext.r_z(z_single, bench_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
     end
 
     SUITE["gradients"]["single_z"] = BenchmarkGroup(["scalar"])

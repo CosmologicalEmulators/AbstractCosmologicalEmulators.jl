@@ -3,35 +3,43 @@
     z = [0., 1., .5, 5., 3.]
     Ωcb, h = .1424/.67^2, .67
     tol = (; reltol=1e-9, abstol=1e-11)
+    # Test-only coordinate conversion with ωb + ωc = Ωcb h² (roundoff-level difference only);
+    # masses and Neff pass through untouched.
+    function growth_cosmo(; mν=(0.,0.,0.), Neff=3.044, neutrino_prescription=:temperature)
+        ωc = Ωcb * h^2
+        return ext.w0waCDMCosmology(; h=h, ωb=zero(ωc), ωc=ωc, mν=mν, Neff=Neff,
+                                    neutrino_prescription=neutrino_prescription)
+    end
     @testset "Explicit integration domain" begin
         for f in (ext.D_z,ext.f_z,ext.D_f_z)
             for bad in (139.,1100.,-.1,-1.,NaN,Inf)
-                @test_throws ArgumentError f(bad,Ωcb,h)
-                @test_throws ArgumentError f([0.,bad],Ωcb,h)
+                @test_throws ArgumentError f(bad,growth_cosmo())
+                @test_throws ArgumentError f([0.,bad],growth_cosmo())
             end
         end
-        @test ext.D_z(138.,Ωcb,h) ≈ 1/139 atol=1e-14
-        @test ext.f_z(138.,Ωcb,h) ≈ 1. atol=1e-14
+        @test ext.D_z(138.,growth_cosmo()) ≈ 1/139 atol=1e-14
+        @test ext.f_z(138.,growth_cosmo()) ≈ 1. atol=1e-14
         lower_z = 1/1.01-1
         for f in (ext.D_z,ext.f_z,ext.D_f_z)
-            result = f(lower_z,Ωcb,h)
+            result = f(lower_z,growth_cosmo())
             @test result isa Tuple ? all(x -> all(isfinite,x),result) : all(isfinite,result)
-            @test_throws ArgumentError f(1/1.010001-1,Ωcb,h)
+            @test_throws ArgumentError f(1/1.010001-1,growth_cosmo())
         end
     end
     for mass in ((0.,0.,0.), (0.,.0086,.0502)),
         (Neff,preset) in ((3.044,:temperature),(3.044,:radiation))
-        kw = (; mν=mass, Neff, neutrino_prescription=preset, tol...)
-        @test ext.D_z(z,Ωcb,h;kw...) == ext.D_z(z,Ωcb,h;kw...,species=cb)
-        d,f = ext.D_f_z(z,Ωcb,h;kw...,species=matter)
-        @test d ≈ ext.D_z(z,Ωcb,h;kw...,species=matter)
-        @test f ≈ ext.f_z(z,Ωcb,h;kw...,species=matter)
+        kw = tol
+        gc = growth_cosmo(; mν=mass, Neff, neutrino_prescription=preset)
+        @test ext.D_z(z,gc;kw...) == ext.D_z(z,gc;kw...,species=cb)
+        d,f = ext.D_f_z(z,gc;kw...,species=matter)
+        @test d ≈ ext.D_z(z,gc;kw...,species=matter)
+        @test f ≈ ext.f_z(z,gc;kw...,species=matter)
         @test all(isfinite,d) && all(isfinite,f)
         if all(iszero,mass)
-            @test d ≈ ext.D_z(z,Ωcb,h;kw...) rtol=1e-12
-            @test f ≈ ext.f_z(z,Ωcb,h;kw...) rtol=1e-12
+            @test d ≈ ext.D_z(z,gc;kw...) rtol=1e-12
+            @test f ≈ ext.f_z(z,gc;kw...) rtol=1e-12
         else
-            @test all(d .> ext.D_z(z,Ωcb,h;kw...))
+            @test all(d .> ext.D_z(z,gc;kw...))
         end
         cosmo = ext.w0waCDMCosmology(h=h,ωb=.0224,ωc=.12,mν=mass,Neff=Neff,neutrino_prescription=preset)
         @test d ≈ ext.D_z(z,cosmo;tol...,species=matter)
@@ -40,7 +48,7 @@
     end
     @testset "Neff and mass derivatives, $preset" for preset in (:temperature,:radiation)
         x = [.01,.02,.03,3.5]
-        loss(x) = sum(ext.D_z(z,Ωcb,h;mν=x[1:3],Neff=x[4],neutrino_prescription=preset,
+        loss(x) = sum(ext.D_z(z,growth_cosmo(;mν=x[1:3],Neff=x[4],neutrino_prescription=preset);
                               species=matter,reltol=1e-11,abstol=1e-13))
         forward = ForwardDiff.gradient(loss,x)
         backend = AutoMooncake(;config=Mooncake.Config())
@@ -74,9 +82,9 @@
     end
     @testset "Massless source reduction away from the reference Neff" begin
         for (n,policy) in ((2.,:temperature),(5.,:temperature),(5.,:radiation))
-            kw = (;mν=(0.,0.,0.),Neff=n,neutrino_prescription=policy,tol...)
-            dc,fc = ext.D_f_z(z,Ωcb,h;kw...,species=cb)
-            dm,fm = ext.D_f_z(z,Ωcb,h;kw...,species=matter)
+            gc = growth_cosmo(;mν=(0.,0.,0.),Neff=n,neutrino_prescription=policy)
+            dc,fc = ext.D_f_z(z,gc;tol...,species=cb)
+            dm,fm = ext.D_f_z(z,gc;tol...,species=matter)
             @test dm ≈ dc rtol=1e-12
             @test fm ≈ fc rtol=1e-12
         end

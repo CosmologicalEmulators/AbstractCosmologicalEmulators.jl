@@ -1,6 +1,7 @@
 """Regenerate matched CLASS background and jaxace values, saved as text.
 
-CLASS settings follow test/fixtures/neutrino_neff/generate_class_reference.py.
+CLASS settings follow test/fixtures/neutrino_neff/generate_class_reference.py
+in the reference archive https://doi.org/10.5281/zenodo.24203113.
 Density residuals use CLASS's native background rows, not interpolated densities.
 """
 import json

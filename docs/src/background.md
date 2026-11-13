@@ -35,14 +35,29 @@ D, f = bg.D_f_z(z, cosmo; reltol=1e-9, abstol=1e-11)
 | `f_z(z, cosmo)` | Growth rate d ln D / d ln a |
 | `D_f_z(z, cosmo)` | `(D, f)` from one solve |
 
+All nine functions above accept **only** a query and a `w0waCDMCosmology`.
 The constructor takes **physical densities** ω_b=Ω_b h², ω_c=Ω_c h² and
-ω_k=Ω_k h². The direct function interface instead takes the **density fraction**
-Ω_cb=Ω_b+Ω_c, excluding neutrinos:
+ω_k=Ω_k h², not density fractions. To start from the density fraction
+Ω_cb=Ω_b+Ω_c (excluding neutrinos) and Ω_k, build the struct with
+ω_b+ω_c=Ω_cb h² and ω_k=Ω_k h²:
 
 ```@example background
-E_direct = bg.E_z(z, (0.0224 + 0.12)/0.67^2, 0.67;
-                  mν=(0.0, 0.0086, 0.0502), Neff=3.044)
+h, Ωcb, Ωk = 0.67, (0.0224 + 0.12)/0.67^2, 0.0
+from_fractions = bg.w0waCDMCosmology(
+    h=h, ωb=0.0, ωc=Ωcb*h^2, ωk=Ωk*h^2,
+    mν=(0.0, 0.0086, 0.0502), Neff=3.044)
+E_fractions = bg.E_z(z, from_fractions)
 ```
+
+!!! warning "Breaking change: struct-only background API"
+    The former overloads taking explicit density fractions, such as
+    `E_z(z, Ωcb0, h; mν=..., w0=..., wa=..., Ωk0=...)` (and likewise for
+    `E_a`, `r_z`, `dM_z`, `dA_z`, `dL_z`, `D_z`, `f_z`, `D_f_z`), were removed
+    without compatibility aliases; calling them raises a `MethodError`.
+    Construct a `w0waCDMCosmology` and pass it instead, as above. The keywords
+    `order`, `reltol`, `abstol` and `species` are unchanged. Inside a function
+    being differentiated, construct the struct inside the closure.
+    `S_of_K(Ωk0, r)` remains a low-level curvature-map utility.
 
 Use scalar redshifts for scalar results and vectors for vector results.
 Neutrino momentum integrals are tabulated when the extension initializes;
@@ -106,15 +121,13 @@ species and could have arbitrary length. They now require exactly three masses,
 include the massless remainder, and use the photon density at the stated CLASS
 temperature. Old vector outputs can therefore change.
 
-The three-mass functions and cosmology object also accept `Neff` and
+The three-mass cosmology object also accepts `Neff` and
 `neutrino_prescription`:
 
 ```@example background
 cosmology = background.w0waCDMCosmology(
     mν=(0.01, 0.02, 0.03), Neff=2.0, neutrino_prescription=:temperature)
 E = background.E_z(1.0, cosmology)
-E_direct = background.E_z(1.0, (0.022 + 0.12)/0.67^2, 0.67;
-    mν=(0.01, 0.02, 0.03), Neff=2.0, neutrino_prescription=:temperature)
 ```
 
 - `:temperature` (default): scale all three temperatures by
@@ -171,7 +184,10 @@ of species**. It is not `ρν-3pν` and does not supply scale-dependent total-ma
 growth. Dispatch selects the source outside the numerical ODE parameter vector.
 ForwardDiff/prepared-Mooncake tests use the tighter settings above for this mode's
 small, cancellation-sensitive mass derivatives. Public defaults are unchanged.
-Cross-language fixtures and provenance are in `test/fixtures/growth_prescriptions/`.
+Cross-language fixtures, generators and provenance are archived under
+`test/fixtures/growth_prescriptions/` in the
+[Zenodo reference archive](https://doi.org/10.5281/zenodo.24203113).
+Tests automatically restore the required data files; see [Development and validation](development.md).
 
 ### Growth equations
 
@@ -227,7 +243,8 @@ Its parameterized fields retain AD-tracked numbers. It is neither a new
 physical model nor the lookup table, and callers need not construct it.
 
 Plain-text background and growth references, their solver settings, and generation
-scripts are in `test/fixtures/neutrino_three_mass/`. The CAMB fixture uses its
+scripts are under `test/fixtures/neutrino_three_mass/` in the
+[Zenodo reference archive](https://doi.org/10.5281/zenodo.24203113). The CAMB fixture uses its
 recorded 2.0.0 setup and a different thermal convention; its tests account for
 that difference rather than asserting that CLASS and CAMB defaults are identical.
 

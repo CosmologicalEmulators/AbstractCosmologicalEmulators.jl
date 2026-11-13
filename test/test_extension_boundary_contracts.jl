@@ -49,7 +49,10 @@ evaluate(plan, values) = plan(values)
         for masses in ((0.0,0.0,0.0),(0.01,0.02,0.03)), a in (0.1,0.5,1.0)
             kwargs = (;mν=masses, w0=-0.9, wa=0.1, Ωk0=0.01)
             actual = background._dlogEdloga(a,0.3,0.67;kwargs...)
-            reference = a * ForwardDiff.derivative(x -> log(background.E_a(x,0.3,0.67;kwargs...)),a)
+            # Struct with ωb+ωc = 0.3*0.67², ωk = 0.01*0.67² reproduces the same Ωcb0, Ωk0.
+            cosmo = background.w0waCDMCosmology(; h=0.67, ωb=0.0, ωc=0.3*0.67^2, ωk=0.01*0.67^2,
+                                                  mν=masses, w0=-0.9, wa=0.1)
+            reference = a * ForwardDiff.derivative(x -> log(background.E_a(x,cosmo)),a)
             # Massive-neutrino F and dF/dy use independently interpolated
             # tables, not an exact derivative pair. Match the established
             # cross-table budget in test_neutrino_three_mass.jl, not an

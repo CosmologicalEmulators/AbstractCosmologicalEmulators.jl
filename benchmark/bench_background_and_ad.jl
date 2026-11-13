@@ -23,10 +23,13 @@ end
 function main()
     z=collect(range(0.,5.;length=50));x=[.31,.67,.06,-.9,.1,.01]
     kw(x)=(;mν=(x[3]/6,x[3]/3,x[3]/2),w0=x[4],wa=x[5],Ωk0=x[6])
-    ef=x->bg.E_z(z,x[1],x[2];kw(x)...)
-    rf=x->bg.r_z(z,x[1],x[2];kw(x)...,order=100)
-    r9=x->bg.r_z(z,x[1],x[2];kw(x)...,order=9)
-    df=x->bg.D_f_z(z,x[1],x[2];kw(x)...,reltol=1e-6,abstol=1e-8)
+    # Public struct API; the cosmology is constructed inside each (differentiated) closure.
+    # ωb+ωc = Ωcb0 h², ωk = Ωk0 h².
+    cosmo(x)=(ωc=x[1]*x[2]^2;bg.w0waCDMCosmology(;h=x[2],ωb=zero(ωc),ωc,ωk=kw(x).Ωk0*x[2]^2,mν=kw(x).mν,w0=kw(x).w0,wa=kw(x).wa))
+    ef=x->bg.E_z(z,cosmo(x))
+    rf=x->bg.r_z(z,cosmo(x);order=100)
+    r9=x->bg.r_z(z,cosmo(x);order=9)
+    df=x->bg.D_f_z(z,cosmo(x);reltol=1e-6,abstol=1e-8)
     backend=AutoMooncake(;config=Mooncake.Config())
     loss=x->sum(first(df(x)));prep=prepare_gradient(loss,backend,x)
     gf=x->DifferentiationInterface.gradient(loss,prep,backend,x)

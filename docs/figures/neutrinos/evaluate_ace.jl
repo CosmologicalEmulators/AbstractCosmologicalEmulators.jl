@@ -16,8 +16,8 @@ for policy in (:temperature, :radiation)
     # Density is an internal diagnostic, evaluated through its actual
     # lookup implementation; H uses the public background API.
     rho = [bg._ΩνE2(ai, photon, thermal) for ai in a]
-    H = 100h .* bg.E_a(a, (ωb + ωc)/h^2, h;
-                       mν=masses, Neff=4.0, neutrino_prescription=policy)
+    cosmology = bg.w0waCDMCosmology(; h, ωb, ωc, mν=masses, Neff=4.0, neutrino_prescription=policy)
+    H = 100h .* bg.E_a(a, cosmology)
     open(joinpath(output, "ace_$policy.txt"), "w") do io
         println(io, "# a rho_nu_over_rhocrit0 H_km_s_Mpc")
         for row in eachrow(hcat(a, rho, H))

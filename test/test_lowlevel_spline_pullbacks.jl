@@ -18,6 +18,21 @@ end
     plan = ACE.CubicBSplinePlan(sites, query)
     basis, stencil = plan.basis, plan.stencil
 
+    @testset "Local basis jet zero and scalar multiplication" begin
+        for T in (Float32, Float64)
+            Jet = ACE._CubicBasisJet{T}
+            z = zero(Jet)
+            @test z.value === zero(T)
+            @test z.partials === ntuple(_ -> zero(T), 7)
+            jet = Jet(T(1.25), ntuple(i -> T(i) / T(8), 7))
+            for scale in (zero(T), T(2), T(-3.25))
+                left, right = scale * jet, jet * scale
+                @test left.value === right.value === scale * jet.value
+                @test left.partials === right.partials === map(p -> scale * p, jet.partials)
+            end
+        end
+    end
+
     @testset "Akima flat-slope fallback derivatives" begin
         t = collect(0.0:6.0)
         # Exactly representable equal slopes select the documented averaging
@@ -120,6 +135,20 @@ end
             coefficients, solve_back = rrule(ACE.solve, fact, u)
             zero_seed(solve_back)
             @test ACE.basis_matrix(basis, sites) * coefficients ≈ u rtol=1e-11 atol=1e-12
+            seed = reshape(collect(range(-0.7, 1.1; length=length(u))), size(u))
+            saved = copy(seed)
+            dense_reference = transpose(ACE.basis_matrix(basis, sites)) \ seed
+            for cotangent in (seed, ChainRulesCore.Thunk(() -> seed))
+                function_bar, factorization_bar, input_bar = solve_back(cotangent)
+                @test function_bar isa AbstractZero
+                @test factorization_bar isa AbstractZero
+                @test input_bar ≈ dense_reference rtol=1e-11 atol=1e-12
+                @test seed == saved
+                # Replaying a pullback must not overwrite a previous result.
+                previous = copy(input_bar)
+                solve_back(2 .* seed)
+                @test input_bar == previous
+            end
             spline, construct_back = rrule(ACE._construct_cubic_b_spline, u, sites, ACE.ClampExtrap())
             zero_seed(construct_back)
             @test ACE.bspline_basis(spline) === spline.basis

@@ -4,15 +4,21 @@ using AbstractCosmologicalEmulators, FastGaussQuadrature, Integrals
 using OrdinaryDiffEqTsit5, SciMLSensitivity
 const BG = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
 
-# Preserve the public parameter-destructuring callers: replacing them with a
-# keyword-building helper hid the nested-thunk regression in Zygote 0.7.17/18.
+# Keep the parameter-vector-destructuring callers; the struct is constructed
+# inside the differentiated function from ωb+ωc = Ωcb0*h², ωk = Ωk0*h².
+# This exercises the struct-only public path; it does not by itself show that the
+# historical Zygote 0.7.17/18 nested-thunk regression still fails.
 function scalar_distance(x)
     Ωcb0, h, mν, w0, wa, Ωk0 = x
-    BG.r_z(1.0, Ωcb0, h; mν=(mν,mν,mν), w0=w0, wa=wa, Ωk0=Ωk0)
+    cosmo = BG.w0waCDMCosmology(; h=h, ωb=zero(Ωcb0 * h^2), ωc=Ωcb0 * h^2, ωk=Ωk0 * h^2,
+                                  mν=(mν,mν,mν), w0=w0, wa=wa)
+    BG.r_z(1.0, cosmo)
 end
 function summed_distance(z, x)
     Ωcb0, h, mν, w0, wa, Ωk0 = x
-    sum(BG.r_z(z, Ωcb0, h; mν=(mν,mν,mν), w0=w0, wa=wa, Ωk0=Ωk0))
+    cosmo = BG.w0waCDMCosmology(; h=h, ωb=zero(Ωcb0 * h^2), ωc=Ωcb0 * h^2, ωk=Ωk0 * h^2,
+                                  mν=(mν,mν,mν), w0=w0, wa=wa)
+    sum(BG.r_z(z, cosmo))
 end
 
 @testset "Public distance AD caller regression" begin

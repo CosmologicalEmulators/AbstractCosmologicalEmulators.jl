@@ -1,4 +1,6 @@
 /fixtures/growth_prescriptions/jax_scalar_reference.txt
+# Frozen Lux outputs/provenance are restored from the pinned Zenodo artifact.
+/reference/lux_mlp/*.txt
 /fixtures/growth_prescriptions/julia_growth_reference.txt
 /fixtures/neutrino_neff/class_neff_reference.txt
 /fixtures/neutrino_neff/pre_neff_baseline.txt

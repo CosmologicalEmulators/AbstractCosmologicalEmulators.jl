@@ -29,6 +29,10 @@ E_radiation = bg.E_z(z, radiation)
 hcat(z, E_temperature, E_radiation)
 ```
 
+The background functions take only a `w0waCDMCosmology`; the former overloads
+with explicit density-fraction arguments were removed (see the
+[breaking-change note](background.md)). Masses and `Neff` are struct fields.
+
 ## Energy density and the meaning of Neff
 
 Let ``a=1/(1+z)``, with photon temperature
@@ -226,8 +230,9 @@ passing a zero `m_ncdm`; keep the same total relativistic density. The figure
 uses three positive masses, so that conversion is not needed here.
 
 The image records AbstractCosmologicalEmulators.jl source `36ae66b`. Broader numerical references and their
-CLASS generation settings are maintained under
-`test/fixtures/neutrino_neff/` and `test/fixtures/neutrino_three_mass/`.
+CLASS generation settings and scripts are archived under
+`test/fixtures/neutrino_neff/` and `test/fixtures/neutrino_three_mass/` in the
+[Zenodo reference archive](https://doi.org/10.5281/zenodo.24203113).
 The PNG/SVG are hosted in the repository's `images` issue, not stored in Git.
 
 ### Reproduce this figure

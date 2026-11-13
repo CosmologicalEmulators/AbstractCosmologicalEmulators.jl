@@ -16,24 +16,37 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
     h = 0.67
     Ωcb0 = (0.0224 + 0.12) / h^2
 
+    # Test-only coordinate conversion: density fractions to the public struct with
+    # ωb + ωc = Ωcb0 h² and ωk = Ωk0 h² (roundoff-level difference only). Masses
+    # pass through untouched, so mass derivatives and validation are retained.
+    function nu3_cosmo(Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0,
+                       Neff=3.044, neutrino_prescription=:temperature)
+        ωc = Ωcb0 * h^2
+        return w0waCDMCosmology(; h=h, ωb=zero(ωc), ωc=ωc, ωk=Ωk0 * h^2, mν=mν,
+                                w0=w0, wa=wa, Neff=Neff, neutrino_prescription=neutrino_prescription)
+    end
+
     # The scalar-mν mode (one Fermi-Dirac species carrying the total mass) was retired.
     # scalar_legacy_baseline.txt is kept only as historical provenance, not as API evidence.
     @testset "Scalar mν is rejected with a migration error" begin
         z = [0.0, 0.5, 1.0]
         scalars = (0, 0.0, 0.06, 1, 0.4f0, big(0.06))
+        # Public calls now construct the struct, which rejects a scalar mass; the
+        # private kernels (_dlogEdloga, _Ωma, _r̃_z, _E_a) keep their own checks.
         calls = (
-            m -> ext.E_a(0.5, Ωcb0, h; mν=m), m -> ext.E_a([0.5, 1.0], Ωcb0, h; mν=m),
-            m -> ext.E_z(1.0, Ωcb0, h; mν=m), m -> ext._dlogEdloga(0.5, Ωcb0, h; mν=m),
+            m -> ext.E_a(0.5, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.E_a([0.5, 1.0], nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.E_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext._dlogEdloga(0.5, Ωcb0, h; mν=m),
             m -> ext._Ωma(0.5, Ωcb0, h; mν=m),
-            m -> ext.r̃_z(1.0, Ωcb0, h; mν=m), m -> ext.r_z(z, Ωcb0, h; mν=m),
-            m -> ext.d̃M_z(1.0, Ωcb0, h; mν=m), m -> ext.dM_z(1.0, Ωcb0, h; mν=m),
-            m -> ext.d̃A_z(1.0, Ωcb0, h; mν=m), m -> ext.dA_z(1.0, Ωcb0, h; mν=m),
-            m -> ext.dL_z(1.0, Ωcb0, h; mν=m),
-            m -> ext.D_z(1.0, Ωcb0, h; mν=m), m -> ext.D_z(z, Ωcb0, h; mν=m),
-            m -> ext.f_z(1.0, Ωcb0, h; mν=m), m -> ext.f_z(z, Ωcb0, h; mν=m),
-            m -> ext.D_f_z(1.0, Ωcb0, h; mν=m), m -> ext.D_f_z(z, Ωcb0, h; mν=m),
-            m -> ext.D_z(1.0, Ωcb0, h; mν=m, species=ext.MatterGrowthApprox()),
-            m -> ext.E_z(1.0, Ωcb0, h; mν=m, Neff=5.0, neutrino_prescription=:radiation),
+            m -> ext._r̃_z(1.0, Ωcb0, h, m, -1.0, 0.0, 0.0, 9, 3.044, :temperature),
+            m -> ext.r̃_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.r_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.d̃M_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.dM_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.d̃A_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.dA_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.dL_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.D_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.D_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.f_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.f_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.D_f_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.D_f_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
+            m -> ext.D_z(1.0, nu3_cosmo(Ωcb0, h; mν=m); species=ext.MatterGrowthApprox()),
+            m -> ext.E_z(1.0, nu3_cosmo(Ωcb0, h; mν=m, Neff=5.0, neutrino_prescription=:radiation)),
         )
         for m in scalars, call in calls
             err = try; call(m); nothing; catch e; e; end
@@ -41,8 +54,8 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
             @test occursin("three", err.msg) && occursin("emulator", err.msg)
         end
         # tracked scalars are rejected too (no silent Σm → split conversion)
-        @test_throws ArgumentError ForwardDiff.derivative(m -> ext.E_z(1.0, Ωcb0, h; mν=m), 0.06)
-        @test_throws ArgumentError ForwardDiff.derivative(m -> ext.D_z(1.0, Ωcb0, h; mν=m), 0.06)
+        @test_throws ArgumentError ForwardDiff.derivative(m -> ext.E_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), 0.06)
+        @test_throws ArgumentError ForwardDiff.derivative(m -> ext.D_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), 0.06)
         # low-level helpers do not retain scalar physics either
         @test_throws ArgumentError ext._neutrino_masses(0.06)
         @test_throws ArgumentError ext._ΩνE2(1.0, 1e-4, 0.06)
@@ -50,15 +63,21 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
         @test_throws ArgumentError ext._neutrino_background(0.0, 3.044, :temperature)
         # Empty query grids must not bypass input validation.
         for f in (ext.r̃_z, ext.r_z, ext.dM_z, ext.dA_z, ext.dL_z)
-            @test_throws ArgumentError f(Float64[], Ωcb0, h; mν=0.06)
-            @test_throws ArgumentError f(Float64[], Ωcb0, h; mν=(0.01, 0.02))
-            @test isempty(f(Float64[], Ωcb0, h; mν=(0.01, 0.02, 0.03)))
+            @test_throws ArgumentError f(Float64[], nu3_cosmo(Ωcb0, h; mν=0.06))
+            @test_throws ArgumentError f(Float64[], nu3_cosmo(Ωcb0, h; mν=(0.01, 0.02)))
+            # right shape, invalid value: rejected at evaluation even for an empty grid
+            @test_throws ArgumentError f(Float64[], nu3_cosmo(Ωcb0, h; mν=(0.01, -0.02, 0.03)))
+            @test isempty(f(Float64[], nu3_cosmo(Ωcb0, h; mν=(0.01, 0.02, 0.03))))
+        end
+        # The removed density-fraction overloads are rejected, not aliased.
+        for f in (ext.E_a, ext.E_z, ext.r_z, ext.dM_z, ext.dA_z, ext.dL_z, ext.D_z, ext.f_z, ext.D_f_z)
+            @test_throws MethodError f(1.0, Ωcb0, h; mν=(0.01, 0.02, 0.03))
         end
         for removed in (:F_interpolant, :dFdy_interpolant, :_get_y)
             @test !isdefined(ext, removed)
         end
         # nothing converts the total mass to a split behind the user's back
-        @test ext.E_z(2.0, Ωcb0, h; mν=(0.06, 0.0, 0.0)) != ext.E_z(2.0, Ωcb0, h; mν=(0.02, 0.02, 0.02))
+        @test ext.E_z(2.0, nu3_cosmo(Ωcb0, h; mν=(0.06, 0.0, 0.0))) != ext.E_z(2.0, nu3_cosmo(Ωcb0, h; mν=(0.02, 0.02, 0.02)))
     end
 
     @testset "Cosmology constructors reject scalar and malformed masses" begin
@@ -94,16 +113,15 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
         for f in (ext.E_z, ext.r_z, ext.dM_z, ext.dA_z, ext.dL_z, ext.D_z, ext.f_z)
             @test f(z, c) == f(z, explicit)
         end
-        om = (Ωcb0, h)
-        massless = (; mν=(0.0, 0.0, 0.0))
-        @test ext.E_z(z, om...) == ext.E_z(z, om...; massless...)
-        @test ext.E_a(0.5, om...) == ext.E_a(0.5, om...; massless...)
-        @test ext.r_z(z, om...) == ext.r_z(z, om...; massless...)
-        @test ext.D_z(z, om...) == ext.D_z(z, om...; massless...)
-        @test ext.f_z(z, om...) == ext.f_z(z, om...; massless...)
-        @test ext.D_f_z(z, om...) == ext.D_f_z(z, om...; massless...)
+        default, massless = nu3_cosmo(Ωcb0, h), nu3_cosmo(Ωcb0, h; mν=(0.0, 0.0, 0.0))
+        @test ext.E_z(z, default) == ext.E_z(z, massless)
+        @test ext.E_a(0.5, default) == ext.E_a(0.5, massless)
+        @test ext.r_z(z, default) == ext.r_z(z, massless)
+        @test ext.D_z(z, default) == ext.D_z(z, massless)
+        @test ext.f_z(z, default) == ext.f_z(z, massless)
+        @test ext.D_f_z(z, default) == ext.D_f_z(z, massless)
         # three massless species: Neff = 3.044 radiation, CLASS-anchored photons
-        @test ext.E_z(0.0, om...) ≈ 1.0 atol = 1e-14
+        @test ext.E_z(0.0, default) ≈ 1.0 atol = 1e-14
     end
 
     @testset "Constructor AD with triple masses" begin
@@ -141,17 +159,17 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
         end
         # closure at a = 1 includes every species
         for m in ([0.0, 0.0, 0.0], [0.06, 0.0, 0.0], [0.25, 0.25, 0.25])
-            @test ext.E_z(0.0, Ωcb0, h; mν=m) ≈ 1.0 atol = 1e-14
-            @test ext.E_z(0.0, Ωcb0, h; mν=m, w0=-0.9, wa=-0.3, Ωk0=0.02) ≈ 1.0 atol = 1e-14
+            @test ext.E_z(0.0, nu3_cosmo(Ωcb0, h; mν=m)) ≈ 1.0 atol = 1e-14
+            @test ext.E_z(0.0, nu3_cosmo(Ωcb0, h; mν=m, w0=-0.9, wa=-0.3, Ωk0=0.02)) ≈ 1.0 atol = 1e-14
         end
         # vectors and tuples are the same path
-        @test ext.E_z(2.0, Ωcb0, h; mν=[0.01, 0.02, 0.03]) == ext.E_z(2.0, Ωcb0, h; mν=(0.01, 0.02, 0.03))
+        @test ext.E_z(2.0, nu3_cosmo(Ωcb0, h; mν=[0.01, 0.02, 0.03])) == ext.E_z(2.0, nu3_cosmo(Ωcb0, h; mν=(0.01, 0.02, 0.03)))
     end
 
     @testset "Input validation" begin
         for bad in ([0.1, 0.1], [0.1, 0.1, 0.1, 0.1], (0.1,), [-1e-3, 0.0, 0.0], [NaN, 0.0, 0.0], [0.0, Inf, 0.0])
-            @test_throws ArgumentError ext.E_z(1.0, Ωcb0, h; mν=bad)
-            @test_throws ArgumentError ext.D_z(1.0, Ωcb0, h; mν=bad)
+            @test_throws ArgumentError ext.E_z(1.0, nu3_cosmo(Ωcb0, h; mν=bad))
+            @test_throws ArgumentError ext.D_z(1.0, nu3_cosmo(Ωcb0, h; mν=bad))
         end
         @test ext._neutrino_masses([0, 1 // 50, 0.05]) === (0.0, 0.02, 0.05)
     end
@@ -159,37 +177,43 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
     @testset "Mass permutation invariance and redshift shapes" begin
         m = [0.0, 0.02, 0.05]
         z = [1.5, 0.2, 3.0, 0.7, 5.0]  # unsorted, length ≠ 3
-        kw = (; w0=-0.95, wa=0.1, Ωk0=0.02)
-        E0, r0 = ext.E_z(z, Ωcb0, h; mν=m, kw...), ext.r_z(z, Ωcb0, h; mν=m, kw...)
-        D0, f0 = ext.D_f_z(z, Ωcb0, h; mν=m, kw...)
+        # ωb+ωc = Ωcb0 h² exactly as above; ωk = 0.02 h² gives Ωk0 = 0.02 up to roundoff.
+        cm(mm) = w0waCDMCosmology(h=h, ωb=0.0224, ωc=0.12, mν=mm, w0=-0.95, wa=0.1, ωk=0.02 * h^2)
+        E0, r0 = ext.E_z(z, cm(m)), ext.r_z(z, cm(m))
+        D0, f0 = ext.D_f_z(z, cm(m))
         for p in ([2, 1, 3], [3, 2, 1], [2, 3, 1])
-            @test isapprox(ext.E_z(z, Ωcb0, h; mν=m[p], kw...), E0; rtol=1e-14)
-            @test isapprox(ext.r_z(z, Ωcb0, h; mν=m[p], kw...), r0; rtol=1e-14)
-            Dp, fp = ext.D_f_z(z, Ωcb0, h; mν=m[p], kw...)
+            @test isapprox(ext.E_z(z, cm(m[p])), E0; rtol=1e-14)
+            @test isapprox(ext.r_z(z, cm(m[p])), r0; rtol=1e-14)
+            Dp, fp = ext.D_f_z(z, cm(m[p]))
             @test isapprox(Dp, D0; rtol=1e-10)
             @test isapprox(fp, f0; rtol=1e-10)
         end
         # unsorted vector z equals per-redshift calls
         @test length(D0) == length(z)
         for (i, zi) in enumerate(z)
-            @test isapprox(D0[i], ext.D_z(zi, Ωcb0, h; mν=m, kw...); rtol=1e-6)
-            @test isapprox(f0[i], ext.f_z(zi, Ωcb0, h; mν=m, kw...); rtol=1e-6)
+            @test isapprox(D0[i], ext.D_z(zi, cm(m)); rtol=1e-6)
+            @test isapprox(f0[i], ext.f_z(zi, cm(m)); rtol=1e-6)
         end
         # array shapes are preserved by E_z / r_z
         Z = reshape([0.1, 0.5, 1.0, 2.0, 3.0, 4.0], 2, 3)
-        @test size(ext.E_z(Z, Ωcb0, h; mν=m)) == (2, 3)
-        @test ext.E_z(Z, Ωcb0, h; mν=m)[2, 3] == ext.E_z(4.0, Ωcb0, h; mν=m)
-        @test size(ext.r_z(Z, Ωcb0, h; mν=m)) == (2, 3)
+        @test size(ext.E_z(Z, cm(m))) == (2, 3)
+        @test ext.E_z(Z, cm(m))[2, 3] == ext.E_z(4.0, cm(m))
+        @test size(ext.r_z(Z, cm(m))) == (2, 3)
         # cosmology struct carries the masses unchanged
-        c = w0waCDMCosmology(h=h, ωb=0.0224, ωc=0.12, mν=m, w0=-0.95, wa=0.1, ωk=0.02 * h^2)
+        c = cm(m)
         @test ext.E_z(z, c) == E0
         @test isapprox(ext.D_z(z, c), D0; rtol=1e-12)
-        @test isapprox(ext.dL_z(z, c), ext.dL_z(z, Ωcb0, h; mν=m, kw...); rtol=1e-14)
+        # dL against the private kernels (Ωcb0, Ωk0 exactly as the struct converts them)
+        Ωk_c = c.ωk / c.h^2
+        r̃ = ext._r̃_z(z, (c.ωb + c.ωc) / c.h^2, h, m, -0.95, 0.1, Ωk_c, 9, 3.044, :temperature)
+        @test isapprox(ext.dL_z(z, c), ext.c_0 * ext.S_of_K(Ωk_c, r̃) / (100 * h) .* (1 .+ z); rtol=1e-14)
     end
 
     @testset "Type stability (vector / tuple masses)" begin
         for M in (Vector{Float64}, NTuple{3,Float64})
-            @test Base.return_types((a, m) -> ext.E_a(a, 0.3, 0.7; mν=m), (Float64, M))[1] === Float64
+            @test Base.return_types((a, m) -> ext._E_a(a, 0.3, 0.7, m, -1.0, 0.0, 0.0, 3.044, :temperature), (Float64, M))[1] === Float64
+            C = typeof(w0waCDMCosmology(; h=0.7, ωb=0.0, ωc=0.3 * 0.7^2, mν=M === Vector{Float64} ? [0.0, 0.0, 0.0] : (0.0, 0.0, 0.0)))
+            @test Base.return_types((a, c) -> ext.E_a(a, c), (Float64, C))[1] === Float64
             @test Base.return_types((a, m) -> ext._dlogEdloga(a, 0.3, 0.7; mν=m), (Float64, M))[1] === Float64
             @test Base.return_types((z, m) -> ext._growth_solver(z, 0.3, 0.7; mν=m), (Vector{Float64}, M))[1] === Matrix{Float64}
         end
@@ -206,20 +230,20 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
             h_r, ωb, ωc, Ωk, w0, wa, z = parse.(Float64, r[5:11])
             H, dM, dA, dL, ρncdm, ρur, ργ = parse.(Float64, r[12:18])
             Ωcb0_r = (ωb + ωc) / h_r^2
-            kw = (; mν=m, w0, wa, Ωk0=Ωk)
+            cb = w0waCDMCosmology(; h=h_r, ωb, ωc, ωk=Ωk * h_r^2, mν=m, w0, wa)
             a = 1 / (1 + z)
             Ωγ0 = ext._Ωγ0(h_r, Tuple(m))
             @test isapprox(Ωγ0 / a^4, ργ; rtol=2e-9)
             @test isapprox(ext._ΩνE2(a, Ωγ0, Tuple(m)), ρncdm + ρur; rtol=5e-7)
-            @test isapprox(ext.E_z(z, Ωcb0_r, h_r; kw...), H; rtol=1e-7)
+            @test isapprox(ext.E_z(z, cb), H; rtol=1e-7)
             z == 0 && continue
             if z <= 5
-                @test isapprox(ext.dM_z(z, Ωcb0_r, h_r; kw...), dM; rtol=5e-7)  # default order = 9
-                @test isapprox(ext.dM_z(z, Ωcb0_r, h_r; kw..., order=30), dM; rtol=1e-8)
-                @test isapprox(ext.dA_z(z, Ωcb0_r, h_r; kw..., order=30), dA; rtol=1e-8)
-                @test isapprox(ext.dL_z(z, Ωcb0_r, h_r; kw..., order=30), dL; rtol=1e-8)
+                @test isapprox(ext.dM_z(z, cb), dM; rtol=5e-7)  # default order = 9
+                @test isapprox(ext.dM_z(z, cb; order=30), dM; rtol=1e-8)
+                @test isapprox(ext.dA_z(z, cb; order=30), dA; rtol=1e-8)
+                @test isapprox(ext.dL_z(z, cb; order=30), dL; rtol=1e-8)
             else
-                @test isapprox(ext.dM_z(z, Ωcb0_r, h_r; kw..., order=400), dM; rtol=1e-6)
+                @test isapprox(ext.dM_z(z, cb; order=400), dM; rtol=1e-6)
             end
         end
     end
@@ -258,7 +282,8 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
             ρ1 = parse(Float64, rows[findfirst(x -> x[1] == r[1] && parse(Float64, x[11]) == 0, rows)][16])
             bound = 0.5 * (1.1 * nr_shift + 2.5e-5) * (ρmassive + ρ1) / H^2 + 2e-6
             Ebound[r[1]] = max(get(Ebound, r[1], 0.0), bound)
-            @test abs(ext.E_z(z, (ωb + ωc) / h_r^2, h_r; mν=m, w0, wa, Ωk0=Ωk) / H - 1) < bound
+            cb = w0waCDMCosmology(; h=h_r, ωb, ωc, ωk=Ωk * h_r^2, mν=m, w0, wa)
+            @test abs(ext.E_z(z, cb) / H - 1) < bound
         end
         for r in rows
             z = parse(Float64, r[11])
@@ -266,7 +291,7 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
             m = parse.(Float64, r[2:4])
             h_r, ωb, ωc, Ωk, w0, wa = parse.(Float64, r[5:10])
             dM = parse(Float64, r[13])
-            val = ext.dM_z(z, (ωb + ωc) / h_r^2, h_r; mν=m, w0, wa, Ωk0=Ωk, order=30)
+            val = ext.dM_z(z, w0waCDMCosmology(; h=h_r, ωb, ωc, ωk=Ωk * h_r^2, mν=m, w0, wa); order=30)
             @test abs(val / dM - 1) < Ebound[r[1]] + 1e-7
             r[1] == "zeros" && @test isapprox(val, dM; rtol=1e-8)
         end
@@ -286,7 +311,7 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
             h_r, ωb, ωc, Ωk, w0, wa, z, k = parse.(Float64, r[5:12])
             Dcb, Dm, fcb, fm = parse.(Float64, r[13:16])
             D, f = get!(cache, (id, z)) do
-                Dv, fv = ext.D_f_z([z, 0.0], (ωb + ωc) / h_r^2, h_r; mν=m, w0, wa, Ωk0=Ωk)
+                Dv, fv = ext.D_f_z([z, 0.0], w0waCDMCosmology(; h=h_r, ωb, ωc, ωk=Ωk * h_r^2, mν=m, w0, wa))
                 Dv[1] / Dv[2], fv[1]
             end
             res = (D / Dcb - 1, D / Dm - 1, f / fcb - 1, f / fm - 1)
@@ -317,15 +342,16 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
     @testset "Prepared gradients: Mooncake vs ForwardDiff (zero + unequal masses)" begin
         z = [1.5, 0.2, 3.0, 0.7, 5.0]
         wts = [0.3, 1.0, 0.7, 0.5, 0.2]
-        kw(x) = (; mν=x[3:5], w0=x[6], wa=x[7], Ωk0=x[8])
+        # The cosmology is constructed inside each differentiated closure.
+        cm(x) = nu3_cosmo(x[1], x[2]; mν=x[3:5], w0=x[6], wa=x[7], Ωk0=x[8])
         fns = (
-            "E_z" => x -> dot(wts, ext.E_z(z, x[1], x[2]; kw(x)...)),
-            "r_z" => x -> dot(wts, ext.r_z(z, x[1], x[2]; kw(x)...)),
+            "E_z" => x -> dot(wts, ext.E_z(z, cm(x))),
+            "r_z" => x -> dot(wts, ext.r_z(z, cm(x))),
             # Test derivatives of the converged growth solve, not adaptive-step
             # noise at the historical 1e-5 primal tolerance. Assertions remain
             # stricter than the default primal accuracy.
-            "D_z" => x -> dot(wts, ext.D_z(z, x[1], x[2]; kw(x)..., reltol=1e-9, abstol=1e-11)),
-            "f_z" => x -> dot(wts, ext.f_z(z, x[1], x[2]; kw(x)..., reltol=1e-9, abstol=1e-11)),
+            "D_z" => x -> dot(wts, ext.D_z(z, cm(x); reltol=1e-9, abstol=1e-11)),
+            "f_z" => x -> dot(wts, ext.f_z(z, cm(x); reltol=1e-9, abstol=1e-11)),
         )
         x0 = [0.31, 0.67, 0.0, 0.02, 0.05, -0.95, 0.1, 0.02]
         fd_backend = AutoForwardDiff()

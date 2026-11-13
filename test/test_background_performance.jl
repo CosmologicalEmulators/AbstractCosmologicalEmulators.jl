@@ -10,10 +10,15 @@ using Test, ForwardDiff, Random
         x=[.25+.1rand(rng),.6+.15rand(rng),.1rand(rng),.1rand(rng),.1rand(rng),
            3.1+.5rand(rng),-1.2+.4rand(rng),-.2+.4rand(rng),-.03+.06rand(rng)]
         draw==1 && (x[3:5].=0)
-        kwargs(v)=(;mν=Tuple(v[3:5]),Neff=v[6],w0=v[7],wa=v[8],Ωk0=v[9],neutrino_prescription=policy)
+        # Public struct path; ωb+ωc = Ωcb0*h², ωk = Ωk0*h² (roundoff-level difference only).
+        function cosmology(v)
+            ωc=v[1]*v[2]^2
+            bg.w0waCDMCosmology(;h=v[2],ωb=zero(ωc),ωc=ωc,ωk=v[9]*v[2]^2,mν=Tuple(v[3:5]),
+                                 w0=v[7],wa=v[8],Neff=v[6],neutrino_prescription=policy)
+        end
         for order in (9,100), z in ([0.,.8,.1,.8],reshape([0.,.8,.1,.8],2,2))
-            batch(v)=bg.r_z(z,v[1],v[2];kwargs(v)...,order)
-            scalar(v)=map(q->bg.r_z(q,v[1],v[2];kwargs(v)...,order),z)
+            batch(v)=bg.r_z(z,cosmology(v);order)
+            scalar(v)=(c=cosmology(v);map(q->bg.r_z(q,c;order),z))
             @test batch(x)==scalar(x)
             @test ForwardDiff.jacobian(batch,x)≈ForwardDiff.jacobian(scalar,x) rtol=1e-11 atol=1e-10
         end

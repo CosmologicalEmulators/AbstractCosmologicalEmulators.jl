@@ -36,8 +36,8 @@ end
 # Prepared frozen-inference rules reuse them instead; see `_FrozenMLPWeights`.
 _reverse_weight(::Nothing, ::Int, weight, ::Type{T}) where {T} = T.(weight)
 
-_linearize_mlp(::Tuple{}, ::Tuple{}, ::Tuple{}, input, frozen, i) = (input, ())
-function _linearize_mlp(layers::Tuple, params::Tuple, states::Tuple, input, frozen, i)
+_forward_mlp_with_tape(::Tuple{}, ::Tuple{}, ::Tuple{}, input, frozen, i) = (input, ())
+function _forward_mlp_with_tape(layers::Tuple, params::Tuple, states::Tuple, input, frozen, i)
     layer, p, st = first(layers), first(params), first(states)
     # Run the real Lux layer once: preserve its forward values, warnings and
     # conversion/error policy. No converted weights are used in the primal.
@@ -57,7 +57,7 @@ function _linearize_mlp(layers::Tuple, params::Tuple, states::Tuple, input, froz
     # Widening to the layer output type affects reverse BLAS only.
     weight = _reverse_weight(frozen, i, p.weight, eltype(output))
     head = _DenseInputTape{eltype(input),typeof(weight),typeof(preactivation)}(weight, preactivation)
-    result, tail = _linearize_mlp(Base.tail(layers), Base.tail(params), Base.tail(states),
+    result, tail = _forward_mlp_with_tape(Base.tail(layers), Base.tail(params), Base.tail(states),
         output, frozen, i + 1)
     return result, (head, tail...)
 end
@@ -119,7 +119,7 @@ end
 function _native_mlp_rrule(input, emu, x, frozen)
     # Activations, preactivations and output/input bars are invocation-owned,
     # so several live pullbacks and replayed seeds never share mutable state.
-    y, tape = _linearize_mlp(values(emu.Model.layers), values(emu.Parameters),
+    y, tape = _forward_mlp_with_tape(values(emu.Model.layers), values(emu.Parameters),
         values(emu.States), x, frozen, 1)
     dy = zero(y)
     return Mooncake.CoDual(y, dy), _LuxMLPInputPullback(tape, Mooncake.tangent(input), dy, size(x))

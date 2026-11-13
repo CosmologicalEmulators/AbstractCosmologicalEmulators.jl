@@ -216,22 +216,21 @@ function _E_a_scalar(a::Number, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa
 end
 
 """
-    E_a(a, cosmo)
-    E_a(a, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0,
-        Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature)
+    E_a(a, cosmo::w0waCDMCosmology)
 
 Dimensionless expansion rate `E(a) = H(a)/H₀` at positive scale factor `a`.
 Scalar input returns a scalar; array input is evaluated elementwise.
-The direct interface takes density fractions `Ωcb0 = Ω_b + Ω_c` (excluding
-neutrinos) and `Ωk0`, unlike the physical-density fields in `cosmo`.
+The cosmology holds physical densities `ωb`, `ωc`, `ωk`; they are converted to
+the density fractions `Ωcb0 = (ωb + ωc)/h²` (excluding neutrinos) and `Ωk0 = ωk/h²`.
 Neutrinos enter the expansion separately; dark energy closes the density sum.
 See [`w0waCDMCosmology`](@ref) for masses, units and Neff prescriptions.
 """
-function E_a(a, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature)
-    return _E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)
+function E_a(a, cosmo::w0waCDMCosmology)
+    Ωcb0, Ωk0 = _density_fractions(cosmo)
+    return _E_a(a, Ωcb0, cosmo.h, cosmo.mν, cosmo.w0, cosmo.wa, Ωk0, cosmo.Neff, cosmo.neutrino_prescription)
 end
 
-# Positional implementations for internal calls: Zygote's keyword-call adjoint
+# Positional implementation for internal calls: Zygote's keyword-call adjoint
 # cost grows with every forwarded keyword, and distances call E once per redshift.
 function _E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)
     masses = _neutrino_background(mν, Neff, neutrino_prescription)
@@ -245,31 +244,17 @@ function _E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)
     end
 end
 
-function E_a(a, cosmo::w0waCDMCosmology)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return E_a(a, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
-end
-
 """
-    E_z(z, cosmo)
-    E_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0,
-        Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature)
+    E_z(z, cosmo::w0waCDMCosmology)
 
 Dimensionless expansion rate `H(z)/H₀`, equivalent to [`E_a`](@ref) at
-`a = 1/(1+z)`. Accepts scalars or arrays. `Ωcb0` excludes neutrinos;
-`mν` contains three individual masses in eV, never a scalar total mass.
+`a = 1/(1+z)`. Accepts scalars or arrays. `mν` in the cosmology contains three
+individual masses in eV, never a scalar total mass.
 For H in km s⁻¹ Mpc⁻¹, multiply the result by `100h`.
 """
-function E_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature)
-    a = _a_z(z)
-    return E_a(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription)
-end
-
 function E_z(z, cosmo::w0waCDMCosmology)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return E_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    a = _a_z(z)
+    return E_a(a, cosmo)
 end
 
 function _dlogEdloga_scalar(a::Number, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h, mν, w0, wa,
@@ -290,22 +275,14 @@ function _dlogEdloga(a, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0
     end
 end
 
+# Private argument kernel (density fractions); the struct method below wraps it.
 function _Ωma(a, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature)
-    return Ωcb0 .* a.^-3 ./ (E_a(a, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription)).^2
+    return Ωcb0 .* a.^-3 ./ (_E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)).^2
 end
 
 function _Ωma(a, cosmo::w0waCDMCosmology)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
+    Ωcb0, Ωk0 = _density_fractions(cosmo)
     return _Ωma(a, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
-end
-
-function r̃_z(z::Number, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return _r̃_z(z, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
-end
-
-function r̃_z(z::AbstractArray, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return _r̃_z(z, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
 end
 
 function _r̃_z(z::Number, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
@@ -331,32 +308,31 @@ function _r̃_z_prepared(z, nodes, weights, Ωcb0, Ωγ0, Ων0, ΩΛ0, Ωk0, h,
     return dot(weights_array, 1.0 ./ E)
 end
 
+# Dimensionless radial distance H₀χ/c (nonexported).
 function r̃_z(z, cosmo::w0waCDMCosmology; order=9)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return r̃_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    Ωcb0, Ωk0 = _density_fractions(cosmo)
+    return _r̃_z(z, Ωcb0, cosmo.h, cosmo.mν, cosmo.w0, cosmo.wa, Ωk0, order, cosmo.Neff, cosmo.neutrino_prescription)
 end
 
-"""
-    r_z(z, cosmo; order=9)
-    r_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0,
-        Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
+raw"""
+    r_z(z, cosmo::w0waCDMCosmology; order=9)
 
-Line-of-sight comoving distance χ(z), in Mpc (not Mpc/h):
-`χ(z) = c/H₀ * ∫₀ᶻ dz′/E(z′)`. Scalar input returns a scalar; use a redshift
-vector for a vector result. `order` selects the Gauss–Legendre quadrature order;
+Line-of-sight comoving distance, in Mpc (not Mpc/h):
+
+```math
+\chi(z) = \frac{c}{H_0} \int_0^z \frac{\mathrm{d}z'}{E(z')}.
+```
+
+Scalar input returns a scalar; use a redshift vector for a vector result.
+`order` selects the Gauss–Legendre quadrature order;
 increase it and check convergence for demanding redshift ranges.
 Curvature affects E(z); the additional transverse-curvature mapping belongs
 to [`dM_z`](@ref). Density and neutrino conventions match [`E_z`](@ref).
 """
-function r_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return c_0 * _r̃_z(z, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription) / (100 * h)
-end
-
 function r_z(z, cosmo::w0waCDMCosmology; order=9)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return r_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    Ωcb0, Ωk0 = _density_fractions(cosmo)
+    h = cosmo.h
+    return c_0 * _r̃_z(z, Ωcb0, h, cosmo.mν, cosmo.w0, cosmo.wa, Ωk0, order, cosmo.Neff, cosmo.neutrino_prescription) / (100 * h)
 end
 
 """
@@ -378,76 +354,45 @@ function S_of_K(Ω::Number, r)
     end
 end
 
-function d̃M_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return S_of_K(Ωk0, r̃_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order, Neff, neutrino_prescription))
-end
-
+# Dimensionless transverse distance (nonexported).
 function d̃M_z(z, cosmo::w0waCDMCosmology; order=9)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return d̃M_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    return S_of_K(_density_fractions(cosmo)[2], r̃_z(z, cosmo; order=order))
 end
 
 """
-    dM_z(z, cosmo; order=9)
-    dM_z(z, Ωcb0, h; kwargs...)
+    dM_z(z, cosmo::w0waCDMCosmology; order=9)
 
 Transverse comoving distance in Mpc. Applies [`S_of_K`](@ref) to the radial
 distance; equals [`r_z`](@ref) for zero curvature. Accepts the same redshift
-inputs and physical keywords as `r_z`.
+inputs and `order` keyword as `r_z`.
 """
-function dM_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return c_0 * d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order, Neff, neutrino_prescription) / (100 * h)
-end
-
 function dM_z(z, cosmo::w0waCDMCosmology; order=9)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return dM_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    return c_0 * d̃M_z(z, cosmo; order=order) / (100 * cosmo.h)
 end
 
-function d̃A_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return d̃M_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order, Neff, neutrino_prescription) ./ (1 .+ z)
-end
-
+# Dimensionless angular-diameter distance (nonexported).
 function d̃A_z(z, cosmo::w0waCDMCosmology; order=9)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return d̃A_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    return d̃M_z(z, cosmo; order=order) ./ (1 .+ z)
 end
 
 """
-    dA_z(z, cosmo; order=9)
-    dA_z(z, Ωcb0, h; kwargs...)
+    dA_z(z, cosmo::w0waCDMCosmology; order=9)
 
 Angular-diameter distance `dM_z(z)/(1+z)` in Mpc. Input shapes, neutrino
 conventions and keyword options are those of [`r_z`](@ref).
 """
-function dA_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order, Neff, neutrino_prescription) ./ (1 .+ z)
-end
-
 function dA_z(z, cosmo::w0waCDMCosmology; order=9)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return dA_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    return dM_z(z, cosmo; order=order) ./ (1 .+ z)
 end
 
 """
-    dL_z(z, cosmo; order=9)
-    dL_z(z, Ωcb0, h; kwargs...)
+    dL_z(z, cosmo::w0waCDMCosmology; order=9)
 
 Luminosity distance `dM_z(z)*(1+z)` in Mpc. Input shapes, neutrino conventions
 and keyword options are those of [`r_z`](@ref).
 """
-function dL_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature)
-    return dM_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, order=order, Neff, neutrino_prescription) .* (1 .+ z)
-end
-
 function dL_z(z, cosmo::w0waCDMCosmology; order=9)
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return dL_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, order=order, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription)
+    return dM_z(z, cosmo; order=order) .* (1 .+ z)
 end
 
 # Linear growth of δ_cb with *smooth* neutrinos: the source is 1.5 Ω_cb(a) D only,
@@ -483,7 +428,7 @@ end
 _growth_source(::CBGrowth, a, Ωcb0, h, mν, w0, wa, Ωk0) =
     _Ωma(a, Ωcb0, h; mν, w0, wa, Ωk0)
 function _growth_source(::MatterGrowthApprox, a, Ωcb0, h, mν, w0, wa, Ωk0)
-    E = E_a(a, Ωcb0, h; mν, w0, wa, Ωk0)
+    E = _E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, 3.044, :temperature)
     return (Ωcb0 / a^3 + _mass_induced_density(a, _Ωγ0(h, mν), mν)) / E^2
 end
 
@@ -551,65 +496,58 @@ function _growth_solver(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=
     return restore_growth_order(Array(sol)[1:2, :])::Matrix{T}
 end
 
+# Private helper: the struct's physical densities converted to density fractions.
+# Ωcb0 excludes neutrinos; the arithmetic order is shared by every struct method.
+_density_fractions(cosmo::w0waCDMCosmology) =
+    ((cosmo.ωb + cosmo.ωc) / cosmo.h^2, cosmo.ωk / cosmo.h^2)
+
+function _growth_solution(z, cosmo::w0waCDMCosmology, reltol, abstol, species)
+    Ωcb0, Ωk0 = _density_fractions(cosmo)
+    return _growth_solver(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription, reltol, abstol, species)
+end
+
 """
-    D_z(z, cosmo; species=CBGrowth(), reltol=1e-5, abstol=1e-6)
-    D_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), kwargs...)
+    D_z(z, cosmo::w0waCDMCosmology; species=CBGrowth(), reltol=1e-5, abstol=1e-6)
 
 Dimensionless linear growth factor, with `D(aᵢ)=aᵢ` at `aᵢ=1/139`, NOT
 `D(z=0)=1`. Scalar redshift returns a scalar; a vector returns a vector in
 the supplied order. See [`D_f_z`](@ref) for supported inputs, physical
 keywords, growth prescriptions and accuracy controls.
 """
-function D_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature, reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription, reltol, abstol, species)
-    return sol[1, 1]
-end
-
-function D_z(z::AbstractVector, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature, reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription, reltol, abstol, species)
+function D_z(z::AbstractVector, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
+    sol = _growth_solution(z, cosmo, reltol, abstol, species)
     return sol[1, 1:end]
 end
 
 function D_z(z, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return D_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription, reltol, abstol, species)
+    sol = _growth_solution(z, cosmo, reltol, abstol, species)
+    return sol[1, 1]
 end
 
 """
-    f_z(z, cosmo; species=CBGrowth(), reltol=1e-5, abstol=1e-6)
-    f_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), kwargs...)
+    f_z(z, cosmo::w0waCDMCosmology; species=CBGrowth(), reltol=1e-5, abstol=1e-6)
 
 Dimensionless logarithmic growth rate `f = d ln D / d ln a`. Returns a scalar
 or vector matching the redshift input. See [`D_f_z`](@ref) for keyword options,
 the integration domain and the smooth-neutrino approximation.
 """
-function f_z(z::AbstractVector, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature, reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription, reltol, abstol, species)
+function f_z(z::AbstractVector, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
+    sol = _growth_solution(z, cosmo, reltol, abstol, species)
     D = sol[1, 1:end]
     D_prime = sol[2, 1:end]#if wanna have normalized_version, 1:end
     result = @. 1 / D * D_prime
     return result
 end
 
-function f_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature, reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription, reltol, abstol, species)
+function f_z(z, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
+    sol = _growth_solution(z, cosmo, reltol, abstol, species)
     D = sol[1, 1]
     D_prime = sol[2, 1]
     return D_prime / D
 end
 
-function f_z(z, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription, reltol, abstol, species)
-end
-
 """
-    D_f_z(z, cosmo; species=CBGrowth(), reltol=1e-5, abstol=1e-6)
-    D_f_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0,
-          Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature,
-          species=CBGrowth(), reltol=1e-5, abstol=1e-6)
+    D_f_z(z, cosmo::w0waCDMCosmology; species=CBGrowth(), reltol=1e-5, abstol=1e-6)
 
 Return `(D, f)` from ONE ODE solve. Each is scalar for scalar redshift, or a
 vector in the original input order for a redshift vector. Prefer this over
@@ -622,28 +560,23 @@ scale-dependent massive-neutrino perturbation growth.
 
 Normalization is `D(aᵢ)=aᵢ`, not `D(0)=1`. Queries must satisfy
 `1/139 ≤ a=1/(1+z) ≤ 1.01`; invalid queries raise `ArgumentError`.
-`Ωcb0` excludes neutrinos. Masses and Neff follow [`w0waCDMCosmology`](@ref).
-For small parameter derivatives, tighten tolerances (e.g. `reltol=1e-9`,
-`abstol=1e-11`) and verify convergence; defaults are not an accuracy guarantee.
+The cosmology struct holds physical densities, masses and Neff; see
+[`w0waCDMCosmology`](@ref). For small parameter derivatives, tighten
+tolerances (e.g. `reltol=1e-9`, `abstol=1e-11`) and verify convergence;
+defaults are not an accuracy guarantee.
 """
-function D_f_z(z::Number, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature, reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription, reltol, abstol, species)
+function D_f_z(z::Number, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
+    sol = _growth_solution(z, cosmo, reltol, abstol, species)
     D = sol[1, 1]
     D_prime = sol[2, 1]
     f = D_prime / D
     return D, f
 end
 
-function D_f_z(z::AbstractVector, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature, reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    sol = _growth_solver(z, Ωcb0, h; mν=mν, w0=w0, wa=wa, Ωk0=Ωk0, Neff, neutrino_prescription, reltol, abstol, species)
+function D_f_z(z::AbstractVector, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
+    sol = _growth_solution(z, cosmo, reltol, abstol, species)
     D = sol[1, 1:end]
     D_prime = sol[2, 1:end]
     f = @. 1 / D * D_prime
     return D, f
-end
-
-function D_f_z(z, cosmo::w0waCDMCosmology; reltol=1e-5, abstol=1e-6, species=CBGrowth())
-    Ωcb0 = (cosmo.ωb + cosmo.ωc) / cosmo.h^2
-    Ωk0 = cosmo.ωk / cosmo.h^2
-    return D_f_z(z, Ωcb0, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0, Neff=cosmo.Neff, neutrino_prescription=cosmo.neutrino_prescription, reltol, abstol, species)
 end

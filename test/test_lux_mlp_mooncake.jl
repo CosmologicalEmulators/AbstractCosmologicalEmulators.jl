@@ -10,7 +10,7 @@ import ChainRulesCore
 
 const ACE = AbstractCosmologicalEmulators
 const Ext = Base.get_extension(ACE, :MooncakeExt)
-include("reference/lux_mlp/cases.jl")
+include("support/lux_mlp_cases.jl")
 const NativeOnlyLux = ACE.LuxEmulator{M,P,S,Dict{Symbol,Val{:native_only}}} where {M,P,S}
 
 # An isolated fixture type makes falling into the legacy ForwardDiff bridge a

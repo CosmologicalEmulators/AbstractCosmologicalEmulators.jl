@@ -44,7 +44,7 @@ jobs:
       # Artifacts alone do not avoid the 20–36 minute dependency precompile
       # seen on macOS. Preserve compiled packages separately; include the
       # matrix and architecture, and leave cache deletion permissions off.
-      - uses: julia-actions/cache@d10a6fd8f31b12404a54613ebad242900567f2b9 # v2
+      - uses: julia-actions/cache@v3
         with:
           cache-name: compiled-tests-${{ runner.arch }}
           cache-artifacts: false

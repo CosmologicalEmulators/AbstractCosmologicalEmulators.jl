@@ -25,3 +25,26 @@
         end
     end
 end
+
+@testset "Complete fixture archive restoration" begin
+    manifest = joinpath(@__DIR__, "fixtures.sha256")
+    entries = [split(line, "  "; limit=2) for line in eachline(manifest)]
+    names = last.(entries)
+    @test length(unique(names)) == length(names)
+    @test all(endswith(name, ".txt") for name in names)
+    @test count(name -> startswith(name, "test/reference/lux_mlp/"), names) == 9
+    mktempdir() do root
+        # Start without any fixture files, not just without one representative.
+        @test ReferenceFixtures.ensure_fixtures(root; manifest) === nothing
+        for (expected, name) in entries
+            dest = joinpath(root, split(name, '/')...)
+            @test bytes2hex(open(ReferenceFixtures.sha256, dest)) == expected
+        end
+        restored = sort!([relpath(joinpath(dir, file), root) for
+            (dir, _, files) in walkdir(root) for file in files])
+        @test restored == sort!([joinpath(split(name, '/')...) for name in names])
+        @test !isdir(joinpath(root, "src"))
+        # All listed bytes already exist: this path must not need the archive.
+        @test ReferenceFixtures.ensure_fixtures(root; manifest) === nothing
+    end
+end

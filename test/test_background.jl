@@ -16,11 +16,41 @@ using Mooncake
 # and ext for accessing internal functions
 
 if !isnothing(ext)
+    # Test-only coordinate conversion for the public struct API: density fractions to a
+    # w0waCDMCosmology with ωb + ωc = Ωcb0 h² and ωk = Ωk0 h² (roundoff-level difference
+    # only). Masses and Neff pass through untouched, keeping their derivatives.
+    function bg_cosmo(Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0,
+                      Neff=3.044, neutrino_prescription=:temperature)
+        ωc = Ωcb0 * h^2
+        return w0waCDMCosmology(; h=h, ωb=zero(ωc), ωc=ωc, ωk=Ωk0 * h^2, mν=mν,
+                                w0=w0, wa=wa, Neff=Neff, neutrino_prescription=neutrino_prescription)
+    end
+
+    # Private-kernel references (explicit density fractions). The public methods take only a
+    # struct, so struct-vs-"direct" comparisons below are against these unchanged kernels.
+    kernel_E_a(a, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, Neff=3.044, neutrino_prescription=:temperature) =
+        ext._E_a(a, Ωcb0, h, mν, w0, wa, Ωk0, Neff, neutrino_prescription)
+    kernel_E_z(z, args...; kw...) = kernel_E_a(ext._a_z(z), args...; kw...)
+    kernel_r̃_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0, order=9, Neff=3.044, neutrino_prescription=:temperature) =
+        ext._r̃_z(z, Ωcb0, h, mν, w0, wa, Ωk0, order, Neff, neutrino_prescription)
+    kernel_r_z(z, Ωcb0, h; kw...) = ext.c_0 * kernel_r̃_z(z, Ωcb0, h; kw...) / (100 * h)
+    kernel_d̃M_z(z, Ωcb0, h; Ωk0=0.0, kw...) = ext.S_of_K(Ωk0, kernel_r̃_z(z, Ωcb0, h; Ωk0=Ωk0, kw...))
+    kernel_d̃A_z(z, Ωcb0, h; kw...) = kernel_d̃M_z(z, Ωcb0, h; kw...) ./ (1 .+ z)
+    kernel_dM_z(z, Ωcb0, h; kw...) = ext.c_0 * kernel_d̃M_z(z, Ωcb0, h; kw...) / (100 * h)
+    kernel_dA_z(z, Ωcb0, h; kw...) = kernel_dM_z(z, Ωcb0, h; kw...) ./ (1 .+ z)
+    kernel_dL_z(z, Ωcb0, h; kw...) = kernel_dM_z(z, Ωcb0, h; kw...) .* (1 .+ z)
+    kernel_D_z(z, Ωcb0, h; kw...) = (sol = ext._growth_solver(z, Ωcb0, h; kw...); z isa AbstractVector ? sol[1, 1:end] : sol[1, 1])
+    function kernel_f_z(z, Ωcb0, h; kw...)
+        sol = ext._growth_solver(z, Ωcb0, h; kw...)
+        z isa AbstractVector ? (@. 1 / sol[1, 1:end] * sol[2, 1:end]) : sol[2, 1] / sol[1, 1]
+    end
+    kernel_D_f_z(z, Ωcb0, h; kw...) = (kernel_D_z(z, Ωcb0, h; kw...), kernel_f_z(z, Ωcb0, h; kw...))
+
     # Helper check functions for testing accuracy
     # These use high-precision integration for verification
     function r̃_z_check(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0)
         p = [Ωcb0, h, w0, wa, Ωk0]
-        f(x, p) = 1 / E_a(ext._a_z(x), p[1], p[2]; mν=mν, w0=p[3], wa=p[4], Ωk0=p[5])
+        f(x, p) = 1 / E_a(ext._a_z(x), bg_cosmo(p[1], p[2]; mν=mν, w0=p[3], wa=p[4], Ωk0=p[5]))
         domain = (zero(eltype(z)), z) # (lb, ub)
         prob = IntegralProblem(f, domain, p; reltol=1e-12)
         sol = solve(prob, QuadGKJL())[1]
@@ -31,19 +61,19 @@ if !isnothing(ext)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
         # Discrete ForwardDiff and continuous reverse ODE sensitivities converge
         # separately. Resolve the solver error before comparing them at 1e-10.
-        sum(D_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0,
+        sum(D_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0);
                     reltol=1e-14, abstol=1e-16))
     end
 
     function f_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(f_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0,
+        sum(f_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0);
                     reltol=1e-14, abstol=1e-16))
     end
 
     function r_z_x(z, x)
         Ωcb0, h, mν, w0, wa, Ωk0 = x
-        sum(r_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0))
+        sum(r_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa, Ωk0=Ωk0)))
     end
 
     function r_z_check(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=0.0)
@@ -77,10 +107,10 @@ if !isnothing(ext)
         @test isapprox(ext._ΩνE2(1.0, 1e-4, ones(3)), nu3_ρ(1.0, 1e-4, (1.0, 1.0, 1.0)); rtol=1e-14)
         @test isapprox(ext._dΩνE2da(1.0, 1e-4, ones(3)), nu3_dρda(1.0, 1e-4, (1.0, 1.0, 1.0)); rtol=1e-14)
         @test isapprox(ext._ρDE_z(0.0, -1.0, 1.0), 1.0)
-        @test isapprox(E_a(1.0, Ωcb0, h), 1.0)
+        @test isapprox(E_a(1.0, bg_cosmo(Ωcb0, h)), 1.0)
         @test isapprox(E_a(1.0, mycosmo), 1.0)
-        @test isapprox(E_z(0.0, Ωcb0, h), 1.0)
-        @test isapprox(E_z(0.0, Ωcb0, h), E_a(1.0, Ωcb0, h))
+        @test isapprox(E_z(0.0, bg_cosmo(Ωcb0, h)), 1.0)
+        @test isapprox(E_z(0.0, bg_cosmo(Ωcb0, h)), E_a(1.0, bg_cosmo(Ωcb0, h)))
         @test isapprox(ext._Ωma(1.0, Ωcb0, h), Ωcb0)
         @test isapprox(ext._Ωma(1.0, mycosmo), (0.02237 + 0.1) / 0.636^2)
         @test isapprox(ext.r̃_z(0.0, mycosmo), 0.0)
@@ -97,7 +127,7 @@ if !isnothing(ext)
 
                 # Compare E_z using cosmology structure vs direct parameters
                 E_z_struct = E_z(z, mycosmo)
-                E_z_direct = E_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                E_z_direct = kernel_E_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
 
                 @test E_z_struct == E_z_direct
             end
@@ -114,7 +144,7 @@ if !isnothing(ext)
 
                 # Compare dL_z using cosmology structure vs direct parameters
                 dL_z_struct = dL_z(z, mycosmo)
-                dL_z_direct = dL_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                dL_z_direct = kernel_dL_z(z, Ωcb0_cosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
 
                 @test dL_z_struct == dL_z_direct
             end
@@ -131,7 +161,7 @@ if !isnothing(ext)
             # Test E_a wrapper
             for a in test_a_values
                 E_a_struct = ext.E_a(a, mycosmo)
-                E_a_direct = ext.E_a(a, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                E_a_direct = kernel_E_a(a, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test E_a_struct == E_a_direct
             end
 
@@ -145,49 +175,49 @@ if !isnothing(ext)
             # Test r̃_z wrapper
             for z in test_z_values
                 r̃_z_struct = ext.r̃_z(z, mycosmo)
-                r̃_z_direct = ext.r̃_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                r̃_z_direct = kernel_r̃_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test r̃_z_struct == r̃_z_direct
             end
 
             # Test r_z wrapper
             for z in test_z_values
                 r_z_struct = r_z(z, mycosmo)
-                r_z_direct = r_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                r_z_direct = kernel_r_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test r_z_struct == r_z_direct
             end
 
             # Test d̃A_z wrapper
             for z in test_z_values
                 d̃A_z_struct = ext.d̃A_z(z, mycosmo)
-                d̃A_z_direct = ext.d̃A_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                d̃A_z_direct = kernel_d̃A_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test d̃A_z_struct == d̃A_z_direct
             end
 
             # Test dA_z wrapper
             for z in test_z_values
                 dA_z_struct = dA_z(z, mycosmo)
-                dA_z_direct = dA_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                dA_z_direct = kernel_dA_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test dA_z_struct == dA_z_direct
             end
 
             # Test D_z wrapper
             for z in test_z_values
                 D_z_struct = D_z(z, mycosmo)
-                D_z_direct = D_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                D_z_direct = kernel_D_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test D_z_struct == D_z_direct
             end
 
             # Test f_z wrapper
             for z in test_z_values
                 f_z_struct = f_z(z, mycosmo)
-                f_z_direct = f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                f_z_direct = kernel_f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test f_z_struct == f_z_direct
             end
 
             # Test D_f_z wrapper (returns tuple)
             for z in test_z_values
                 D_f_struct = D_f_z(z, mycosmo)
-                D_f_direct = D_f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
+                D_f_direct = kernel_D_f_z(z, Ωcb0_mycosmo, mycosmo.h; mν=mycosmo.mν, w0=mycosmo.w0, wa=mycosmo.wa)
                 @test D_f_struct[1] == D_f_direct[1]  # D_z part
                 @test D_f_struct[2] == D_f_direct[2]  # f_z part
             end
@@ -212,21 +242,21 @@ if !isnothing(ext)
                 for z in test_redshifts
                     # Test E_z
                     E_z_struct = E_z(z, cosmo)
-                    E_z_direct = E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
+                    E_z_direct = kernel_E_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
                     @test E_z_struct == E_z_direct
 
                     # Test dL_z
                     dL_z_struct = dL_z(z, cosmo)
-                    dL_z_direct = dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
+                    dL_z_direct = kernel_dL_z(z, Ωcb0_test, cosmo.h; mν=cosmo.mν, w0=cosmo.w0, wa=cosmo.wa, Ωk0=Ωk0_test)
                     @test dL_z_struct == dL_z_direct
                 end
             end
         end
-        @test isapprox(r_z(3.0, Ωcb0, h; mν=mν_triple, w0=w0, wa=wa), r_z_check(3.0, Ωcb0, h; mν=mν_triple, w0=w0, wa=wa), rtol=1e-6)
-        @test isapprox(dA_z(0.0, Ωcb0, h; mν=mν_triple, w0=w0, wa=wa), 0.0, rtol=1e-6)
+        @test isapprox(r_z(3.0, bg_cosmo(Ωcb0, h; mν=mν_triple, w0=w0, wa=wa)), r_z_check(3.0, Ωcb0, h; mν=mν_triple, w0=w0, wa=wa), rtol=1e-6)
+        @test isapprox(dA_z(0.0, bg_cosmo(Ωcb0, h; mν=mν_triple, w0=w0, wa=wa)), 0.0, rtol=1e-6)
         @test isapprox(dA_z(0.0, mycosmo), 0.0)
-        @test D_z(1.0, mycosmo) == D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0)
-        @test f_z(1.0, mycosmo) == f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0)
+        @test D_z(1.0, mycosmo) == kernel_D_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0)
+        @test f_z(1.0, mycosmo) == kernel_f_z(1.0, (0.02237 + 0.1) / 0.636^2, 0.636; mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0)
     end
 
     @testset "Gradient tests (DifferentiationInterface)" begin
@@ -324,7 +354,7 @@ if !isnothing(ext)
         @test isapprox(ext._a_z(1.0), 0.5)
         @test isapprox(ext._ρDE_a(1.0, -1.0, 0.0), 1.0)
         @test isapprox(ext._dρDEda(1.0, -1.0, 0.0), 0.0)
-        @test isapprox(ext.d̃A_z(0.0, Ωcb0, h), 0.0)
+        @test isapprox(ext.d̃A_z(0.0, bg_cosmo(Ωcb0, h)), 0.0)
         @test isapprox(ext.d̃A_z(0.0, mycosmo), 0.0)
 
         D_f = D_f_z(1.0, mycosmo)
@@ -373,7 +403,7 @@ if !isnothing(ext)
             @test d̃M_positive > 0
 
             # Test dM_z (physical units) with direct parameters
-            dM_direct = dM_z(z_test, 0.3, 0.67; mν=(0.02, 0.02, 0.02), w0=-1.0, wa=0.0, Ωk0=0.01)
+            dM_direct = dM_z(z_test, bg_cosmo(0.3, 0.67; mν=(0.02, 0.02, 0.02), w0=-1.0, wa=0.0, Ωk0=0.01))
             @test isfinite(dM_direct)
             @test dM_direct > 0
 
@@ -481,16 +511,16 @@ if !isnothing(ext)
 
     @testset "Edge cases and numerical stability" begin
         # Test with extreme parameter values
-        @test isfinite(E_z(0.0, 0.3, 0.7))
-        @test isfinite(E_z(10.0, 0.3, 0.7))
+        @test isfinite(E_z(0.0, bg_cosmo(0.3, 0.7)))
+        @test isfinite(E_z(10.0, bg_cosmo(0.3, 0.7)))
 
         # Test with vector of redshifts
         z_array = [0.0, 0.5, 1.0, 2.0, 3.0]
-        D_array = D_z(z_array, Ωcb0, h)
+        D_array = D_z(z_array, bg_cosmo(Ωcb0, h))
         @test length(D_array) == length(z_array)
         @test all(isfinite.(D_array))
 
-        f_array = f_z(z_array, Ωcb0, h)
+        f_array = f_z(z_array, bg_cosmo(Ωcb0, h))
         @test length(f_array) == length(z_array)
         @test all(isfinite.(f_array))
     end
@@ -695,7 +725,7 @@ if !isnothing(ext)
             # E_z function
             function E_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                E_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
+                E_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa))
             end
 
             E_grad = ForwardDiff.gradient(E_z_x, x)
@@ -712,7 +742,7 @@ if !isnothing(ext)
             # r_z function (comoving distance)
             function r_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                r_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
+                r_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa))
             end
 
             r_grad = ForwardDiff.gradient(r_z_x, x)
@@ -722,7 +752,7 @@ if !isnothing(ext)
             # dA_z function (angular diameter distance)
             function dA_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                dA_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
+                dA_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa))
             end
 
             dA_grad = ForwardDiff.gradient(dA_z_x, x)
@@ -732,7 +762,7 @@ if !isnothing(ext)
             # D_z function (growth factor)
             function D_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                D_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
+                D_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa))
             end
 
             D_grad = ForwardDiff.gradient(D_z_x, x)
@@ -742,7 +772,7 @@ if !isnothing(ext)
             # f_z function (growth rate)
             function f_z_x(x)
                 Ωcb0, h, mν, w0, wa = x
-                f_z(z, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
+                f_z(z, bg_cosmo(Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa))
             end
 
             f_grad = ForwardDiff.gradient(f_z_x, x)
@@ -756,7 +786,7 @@ if !isnothing(ext)
 
             # E_z function works with Zygote
             function E_z_simple(Ωcb0, h)
-                E_z(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0)
+                E_z(z, bg_cosmo(Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0))
             end
 
             Ωcb0 = 0.3
@@ -785,7 +815,7 @@ if !isnothing(ext)
             # Test ForwardDiff with vector output
             function multi_D_z(x)
                 Ω, h_val = x
-                sum(D_z(z_array, Ω, h_val; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0))
+                sum(D_z(z_array, bg_cosmo(Ω, h_val; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0)))
             end
 
             grad_multi = ForwardDiff.gradient(multi_D_z, [Ωcb0, h])
@@ -821,7 +851,7 @@ if !isnothing(ext)
             function D_z_direct_params(params)
                 ln10As, ns, h, ωb, ωc, mν, w0, wa = params
                 Ωcb0 = (ωb + ωc) / h^2
-                return D_z(z_fixed, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
+                return kernel_D_z(z_fixed, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             @testset "ForwardDiff with cosmology struct" begin
@@ -895,7 +925,7 @@ if !isnothing(ext)
             function f_z_direct_params(params)
                 ln10As, ns, h, ωb, ωc, mν, w0, wa = params
                 Ωcb0 = (ωb + ωc) / h^2
-                return f_z(z_fixed, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
+                return kernel_f_z(z_fixed, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
             @testset "f_z: struct vs direct parameters" begin
@@ -926,10 +956,10 @@ if !isnothing(ext)
 
         @testset "E_z vectorization" begin
             # Manual list comprehension
-            E_z_manual = [E_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            E_z_manual = [kernel_E_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            E_z_vectorized = E_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            E_z_vectorized = kernel_E_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(E_z_manual, E_z_vectorized, rtol=1e-12))
 
@@ -942,10 +972,10 @@ if !isnothing(ext)
 
         @testset "E_a vectorization" begin
             # Manual list comprehension
-            E_a_manual = [ext.E_a(a, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for a in a_array]
+            E_a_manual = [kernel_E_a(a, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for a in a_array]
 
             # Vectorized call
-            E_a_vectorized = ext.E_a(a_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            E_a_vectorized = kernel_E_a(a_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(E_a_manual, E_a_vectorized, rtol=1e-12))
 
@@ -958,10 +988,10 @@ if !isnothing(ext)
 
         @testset "r_z vectorization" begin
             # Manual list comprehension
-            r_z_manual = [r_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            r_z_manual = [kernel_r_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            r_z_vectorized = r_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            r_z_vectorized = kernel_r_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(r_z_manual, r_z_vectorized, rtol=1e-12))
 
@@ -974,10 +1004,10 @@ if !isnothing(ext)
 
         @testset "dM_z vectorization" begin
             # Manual list comprehension
-            dM_z_manual = [dM_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            dM_z_manual = [kernel_dM_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            dM_z_vectorized = dM_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            dM_z_vectorized = kernel_dM_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(dM_z_manual, dM_z_vectorized, rtol=1e-12))
 
@@ -990,10 +1020,10 @@ if !isnothing(ext)
 
         @testset "dA_z vectorization" begin
             # Manual list comprehension
-            dA_z_manual = [dA_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            dA_z_manual = [kernel_dA_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            dA_z_vectorized = dA_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            dA_z_vectorized = kernel_dA_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(dA_z_manual, dA_z_vectorized, rtol=1e-12))
 
@@ -1006,10 +1036,10 @@ if !isnothing(ext)
 
         @testset "dL_z vectorization" begin
             # Manual list comprehension
-            dL_z_manual = [dL_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            dL_z_manual = [kernel_dL_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            dL_z_vectorized = dL_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            dL_z_vectorized = kernel_dL_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(dL_z_manual, dL_z_vectorized, rtol=1e-12))
 
@@ -1022,10 +1052,10 @@ if !isnothing(ext)
 
         @testset "D_z vectorization" begin
             # Manual list comprehension
-            D_z_manual = [D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            D_z_manual = [kernel_D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            D_z_vectorized = D_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            D_z_vectorized = kernel_D_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(D_z_manual, D_z_vectorized, rtol=1e-12))
 
@@ -1038,8 +1068,8 @@ if !isnothing(ext)
             # Regression test: vectorized growth must preserve the caller's input order,
             # not the ODE solver's internal chronological/saveat order.
             z_unsorted = [2.0, 0.0, 5.0, 0.5, 1.0]
-            D_z_manual_unsorted = [D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_unsorted]
-            D_z_vectorized_unsorted = D_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            D_z_manual_unsorted = [kernel_D_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_unsorted]
+            D_z_vectorized_unsorted = kernel_D_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(D_z_manual_unsorted, D_z_vectorized_unsorted, rtol=1e-12))
 
@@ -1051,10 +1081,10 @@ if !isnothing(ext)
 
         @testset "f_z vectorization" begin
             # Manual list comprehension
-            f_z_manual = [f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
+            f_z_manual = [kernel_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_array]
 
             # Vectorized call
-            f_z_vectorized = f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            f_z_vectorized = kernel_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(f_z_manual, f_z_vectorized, rtol=1e-12))
 
@@ -1067,8 +1097,8 @@ if !isnothing(ext)
             # Regression test: vectorized growth must preserve the caller's input order,
             # not the ODE solver's internal chronological/saveat order.
             z_unsorted = [2.0, 0.0, 5.0, 0.5, 1.0]
-            f_z_manual_unsorted = [f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_unsorted]
-            f_z_vectorized_unsorted = f_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            f_z_manual_unsorted = [kernel_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec) for z in z_unsorted]
+            f_z_vectorized_unsorted = kernel_f_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(f_z_manual_unsorted, f_z_vectorized_unsorted, rtol=1e-12))
 
@@ -1087,13 +1117,13 @@ if !isnothing(ext)
             D_manual = []
             f_manual = []
             for z in z_array
-                D_val, f_val = D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+                D_val, f_val = kernel_D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
                 push!(D_manual, D_val)
                 push!(f_manual, f_val)
             end
 
             # Vectorized call - returns one tuple with two vectors
-            D_vectorized, f_vectorized = D_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            D_vectorized, f_vectorized = kernel_D_f_z(z_array, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test length(D_manual) == length(D_vectorized)
             @test length(f_manual) == length(f_vectorized)
@@ -1122,12 +1152,12 @@ if !isnothing(ext)
             D_manual_unsorted = []
             f_manual_unsorted = []
             for z in z_unsorted
-                D_val, f_val = D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+                D_val, f_val = kernel_D_f_z(z, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
                 push!(D_manual_unsorted, D_val)
                 push!(f_manual_unsorted, f_val)
             end
 
-            D_vectorized_unsorted, f_vectorized_unsorted = D_f_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
+            D_vectorized_unsorted, f_vectorized_unsorted = kernel_D_f_z(z_unsorted, Ωcb0_vec, vec_cosmo.h; mν=vec_cosmo.mν, w0=vec_cosmo.w0, wa=vec_cosmo.wa, Ωk0=Ωk0_vec)
 
             @test all(isapprox.(D_manual_unsorted, D_vectorized_unsorted, rtol=1e-12))
             @test all(isapprox.(f_manual_unsorted, f_vectorized_unsorted, rtol=1e-12))
