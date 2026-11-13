@@ -9,21 +9,21 @@ using AbstractCosmologicalEmulators
 const official_bg_ext = Base.get_extension(AbstractCosmologicalEmulators, :BackgroundCosmologyExt)
 const official_reactant_ext = Base.get_extension(AbstractCosmologicalEmulators, :ExtReactant)
 
-if !isnothing(official_bg_ext)
-    using .official_bg_ext: E_z, r_z, D_z, f_z
-end
-
 function _official_background_reference(input_params)
     z, _, _, H0, ωb, ωc, mν, w0, wa = input_params
-    h = H0 / 100
-    Ωcb0 = (ωb + ωc) / h^2
-
-    return (
-        H_z = 100h * E_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa),
-        r_z = r_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa),
-        D_z = D_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa),
-        f_z = f_z(z, Ωcb0, h; mν=mν, w0=w0, wa=wa),
-    )
+    # These unchanged artifacts retain their historical labels, including the
+    # old scalar growth convention. Do not compare them to a new mass split or
+    # resurrect that model in production code. Three-species physics has separate
+    # CLASS/CAMB fixture tests.
+    key = [z, H0, ωb, ωc, mν, w0, wa]
+    for line in eachline(joinpath(@__DIR__, "fixtures", "official_background_legacy.txt"))
+        startswith(line, "#") && continue
+        values = parse.(Float64, split(line))
+        if values[1:7] == key
+            return (H_z=values[8], r_z=values[9], D_z=values[10], f_z=values[11])
+        end
+    end
+    error("No frozen historical artifact reference for background parameters $key")
 end
 
 function _test_official_background_piece_agreement(emulator_name, input_params)

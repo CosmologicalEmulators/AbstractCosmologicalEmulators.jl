@@ -11,15 +11,25 @@ jobs:
   bench:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         julia-version: ["1.10", "1.11", "1.12"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Identify the tested baseline
+        id: revisions
+        # The merge parent is the actual PR baseline, even for develop targets.
+        run: echo "base=$(git rev-parse HEAD^1)" >> "$GITHUB_OUTPUT"
 
       - name: Run AirspeedVelocity benchmark
         uses: MilesCranmer/AirspeedVelocity.jl@action-v1
         with:
           julia-version: ${{ matrix.julia-version }}
-          bench-on: "head" # keep if you already had it
+          rev: "${{ steps.revisions.outputs.base }},${{ github.event.pull_request.head.sha }}"
+          bench-on: "head"
           script: "benchmark/benchmarks.jl"
-          extra-pkgs: "JSON,SimpleChains,OrdinaryDiffEqTsit5,Integrals,ADTypes,DataInterpolations,DifferentiationInterface,FastGaussQuadrature,ForwardDiff,Mooncake,Zygote,SciMLSensitivity"
+          # AirspeedVelocity creates its own environment, not benchmark/Project.toml.
+          extra-pkgs: "JSON,SimpleChains,OrdinaryDiffEqTsit5,Integrals,ADTypes,DataInterpolations,DifferentiationInterface,FastGaussQuadrature,ForwardDiff,Mooncake,Zygote,SciMLSensitivity,Reactant"

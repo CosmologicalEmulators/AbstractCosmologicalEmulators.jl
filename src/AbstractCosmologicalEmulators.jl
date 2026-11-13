@@ -17,16 +17,21 @@ export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator, GenericEmula
 export maximin, inv_maximin, run_emulator, get_emulator_description, init_emulator
 export to_reactant
 export validate_nn_dict_structure, validate_parameter_ranges, validate_layer_structure, safe_dict_access
-export akima_interpolation, cubic_spline_interpolation
+export akima_interpolation, cubic_spline_interpolation, cubic_b_spline_interpolation
 export AkimaSpline, CubicSpline, AkimaSplinePlan, CubicSplinePlan
+export CubicBSplineBasis, CubicBSpline, CubicBSplinePlan
+export knot_vector, internal_knots, nbasis, bspline_domain, basis_support
+export basis_row, basis_stencil, basis_matrix, bspline_basis, bspline_coefficients
 export ChebyshevPlan, chebpoints
 export prepare_chebyshev_plan, chebyshev_polynomials, chebyshev_decomposition
-export set_fft_threads
+export set_threads, set_fft_threads
 
 include("core.jl")
 include("initialization.jl")
 include("utils.jl")
+include("threads.jl")
 include("chebyshev.jl")
+include("cubic_b_spline.jl")
 include("chainrules.jl")
 
 const trained_emulators = Dict{String,GenericEmulator}()
@@ -62,15 +67,5 @@ Methods are provided by the `ExtReactant` extension. Load `Reactant` to
 activate them.
 """
 function to_reactant end
-
-"""
-    set_fft_threads(n::Integer)
-
-Set the number of threads used by FFTW.jl for operations in `AbstractCosmologicalEmulators`.
-Call this before calling `prepare_chebyshev_plan` to improve performance on large grids or batched evaluations.
-"""
-function set_fft_threads(n::Integer)
-    FFTW.set_num_threads(n)
-end
 
 end # module AbstractCosmologicalEmulators

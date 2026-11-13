@@ -1,0 +1,7 @@
+[reference_fixtures]
+git-tree-sha1 = "feea2cc1202f2504db3e982d1dd7fbe71757e317"
+lazy = true
+
+    [[reference_fixtures.download]]
+    url = "https://zenodo.org/records/24203113/files/ace-jaxace-fixtures-v2.tar.gz?download=1"
+    sha256 = "906ee8e286a6f4d1f3eb89a3ae2b8413c73ebb2caa1b2462e22ac792c74deee7"
