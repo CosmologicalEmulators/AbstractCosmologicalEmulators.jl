@@ -91,6 +91,11 @@ modified local fixtures are rejected, not overwritten. Only the listed data
 files are copied, never archived package source. Updating references requires a
 new archive version and corresponding artifact pin and per-file manifest.
 
+The test and benchmark network-definition JSON fixtures are archived too;
+each entry point restores only its own manifest. Frozen figure arrays and
+provenance have a separate manifest and explicit restoration command, documented
+in `docs/figures/neutrinos/README.md`; ordinary package tests do not restore them.
+
 ## Threads
 
 `set_threads(n)` is the single thread setting. It sets FFTW's thread count for

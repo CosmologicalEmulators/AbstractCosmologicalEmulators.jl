@@ -21,3 +21,13 @@ regenerate expected values from the candidate implementation to fix a test.
 `support/lux_mlp_cases.jl` is executable test setup, not an output-generation
 script: it constructs the deterministic networks tested against frozen outputs.
 An identical copy is preserved with the archived Lux generator.
+
+The distinct test and benchmark `testNN.json` definitions are also archived.
+The test manifest restores only `test/testNN.json`; `benchmark/benchmarks.jl`
+restores its own JSON from `benchmark/fixtures.sha256`. They are not duplicates:
+the test network includes a ReLU layer, while the benchmark network uses tanh.
+
+Figure arrays/provenance use a separate `docs/figures/neutrinos/data.sha256`
+manifest and explicit `download_data.jl` command in that directory. Package
+tests do not restore figure files. All three manifests use the same immutable
+archive, with distinct allowed path prefixes and per-file checksum checks.

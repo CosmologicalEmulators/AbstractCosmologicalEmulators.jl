@@ -3,6 +3,10 @@ using SimpleChains
 using AbstractCosmologicalEmulators
 using JSON
 
+# Restore only this benchmark's frozen network definition, not test/figure data.
+include(joinpath(@__DIR__, "..", "test", "download_fixtures.jl"))
+ReferenceFixtures.ensure_fixtures(; manifest=joinpath(@__DIR__, "fixtures.sha256"), prefix="benchmark")
+
 # Load extension dependencies for Background cosmology benchmarks
 using OrdinaryDiffEqTsit5
 using SciMLSensitivity

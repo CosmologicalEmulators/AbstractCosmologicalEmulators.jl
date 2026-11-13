@@ -19,10 +19,23 @@
         write(selected, repeat("0", 64) * "  " * name * "\n")
         @test_throws ErrorException ReferenceFixtures.ensure_fixtures(root; manifest=selected)
         @test !isfile(dest)
-        for bad in ("../outside.txt", "/absolute.txt", "test/../outside.txt", "src/source.jl")
+        for bad in ("../outside.txt", "/absolute.txt", "test/../outside.txt", "src/source.jl",
+                    "test/./outside.txt", "test//outside.txt", "test\\..\\outside.txt")
             write(selected, repeat("0", 64) * "  " * bad * "\n")
             @test_throws ErrorException ReferenceFixtures.ensure_fixtures(root; manifest=selected)
         end
+        write(selected, firstline * "\n")
+        for prefix in ("", "/test", "test/..", "test/.", "test/", "test\\fixtures")
+            @test_throws ErrorException ReferenceFixtures.ensure_fixtures(root; manifest=selected, prefix)
+        end
+        # Scope matching is component-wise, not a loose textual prefix.
+        @test_throws ErrorException ReferenceFixtures.ensure_fixtures(root;
+            manifest=selected, prefix="test/fixture")
+        @test_throws ErrorException ReferenceFixtures.ensure_fixtures(root;
+            manifest=selected, prefix="docs/figures/neutrinos/data")
+        @test ReferenceFixtures.ensure_fixtures(root;
+            manifest=selected, prefix="test/fixtures/growth_prescriptions") === nothing
+        @test bytes2hex(open(ReferenceFixtures.sha256, dest)) == expected
     end
 end
 
@@ -31,7 +44,8 @@ end
     entries = [split(line, "  "; limit=2) for line in eachline(manifest)]
     names = last.(entries)
     @test length(unique(names)) == length(names)
-    @test all(endswith(name, ".txt") for name in names)
+    @test all(endswith(name, ".txt") || name == "test/testNN.json" for name in names)
+    @test count(==("test/testNN.json"), names) == 1
     @test count(name -> startswith(name, "test/reference/lux_mlp/"), names) == 9
     mktempdir() do root
         # Start without any fixture files, not just without one representative.
@@ -44,6 +58,8 @@ end
             (dir, _, files) in walkdir(root) for file in files])
         @test restored == sort!([joinpath(split(name, '/')...) for name in names])
         @test !isdir(joinpath(root, "src"))
+        @test !isdir(joinpath(root, "docs"))
+        @test !isdir(joinpath(root, "benchmark"))
         # All listed bytes already exist: this path must not need the archive.
         @test ReferenceFixtures.ensure_fixtures(root; manifest) === nothing
     end

@@ -314,7 +314,7 @@ function r̃_z(z, cosmo::w0waCDMCosmology; order=9)
     return _r̃_z(z, Ωcb0, cosmo.h, cosmo.mν, cosmo.w0, cosmo.wa, Ωk0, order, cosmo.Neff, cosmo.neutrino_prescription)
 end
 
-raw"""
+@doc raw"""
     r_z(z, cosmo::w0waCDMCosmology; order=9)
 
 Line-of-sight comoving distance, in Mpc (not Mpc/h):

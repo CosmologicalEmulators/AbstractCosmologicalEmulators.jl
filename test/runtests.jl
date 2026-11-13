@@ -6,6 +6,9 @@ include("test_fixture_download.jl")
 
 if "fixture_bootstrap" in ARGS
     nothing # The restoration checks above are also part of every full run.
+elseif "fixture_consumers" in ARGS
+    include("test_core_functionality.jl")
+    include("test_input_validation.jl")
 elseif "reactant_scalar" in ARGS
     include("test_cubic_b_spline_scalar_reactant.jl")
 elseif "bspline_review_host" in ARGS

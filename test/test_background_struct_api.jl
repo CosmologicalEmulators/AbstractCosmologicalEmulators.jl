@@ -7,6 +7,11 @@ import ADTypes: AutoForwardDiff, AutoMooncake, AutoZygote
 # set up by runtests.jl / test_extensions.jl; also runs in every full test suite.
 
 @testset "Struct-only background API" begin
+    @testset "Public docstrings are attached" begin
+        for name in (:E_a, :E_z, :r_z, :dM_z, :dA_z, :dL_z, :D_z, :f_z, :D_f_z)
+            @test haskey(Base.Docs.meta(ext), Base.Docs.Binding(ext, name))
+        end
+    end
     massless = ext.w0waCDMCosmology(h=0.67, ωb=0.0224, ωc=0.12)
     massive = ext.w0waCDMCosmology(h=0.67, ωb=0.0224, ωc=0.12, mν=(0.0, 0.0086, 0.0502),
                                    w0=-0.95, wa=0.1, ωk=0.01)

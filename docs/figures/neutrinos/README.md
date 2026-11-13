@@ -1,13 +1,28 @@
 # Reproducing the neutrino comparison figures
 
 This directory is the shared source for the AbstractCosmologicalEmulators.jl
-and jaxace documentation figures. Only scripts, JSON provenance and plain-text
-arrays belong in Git. Rendered PNG/PDF/SVG go into ignored `output/` and are
-uploaded to each repository's `images` issue.
+and jaxace documentation figures. Frozen arrays and their JSON provenance are
+stored in the [Zenodo reference archive](https://doi.org/10.5281/zenodo.24203113),
+not Git. This directory retains scripts, instructions and `data.sha256`.
+Rendered PNG/PDF/SVG go into ignored `output/` and are uploaded to each
+repository's `images` issue.
 
 ## Replot the published numerical results
 
-Install NumPy and Matplotlib in a Python environment, plus a working LaTeX
+Restore the seven frozen data/provenance files from the repository root:
+
+```sh
+julia --startup-file=no docs/figures/neutrinos/download_data.jl
+```
+
+Only Julia standard libraries are needed for restoration. The command reuses
+the archive pinned in `test/Artifacts.toml`, verifies its hashes and each file's
+`data.sha256` checksum, and refuses to overwrite modified local data. It restores
+only this figure's `data/` files, never archived source or generators. The first
+archive download needs internet access; later restoration can use the cache.
+Ordinary package tests do not restore figure data.
+
+Then install NumPy and Matplotlib in a Python environment, plus a working LaTeX
 installation with `dvipng`. From the repository root:
 
 ```sh
@@ -15,7 +30,8 @@ python docs/figures/neutrinos/plot.py ace
 python docs/figures/neutrinos/plot.py jaxace
 ```
 
-These commands consume `data/` only: neither CLASS, Julia nor JAX is required.
+After restoration these plotting commands consume `data/` only: neither CLASS,
+Julia nor JAX is required for plotting.
 The six text files preserve the 321 plotted samples, including the common
 CLASS baseline. Column definitions are in each file's first line. The source
 revisions, CLASS version and numerical settings are in `data/provenance.json`.
@@ -62,7 +78,7 @@ In the reproduced CLASS 3.3.4 run, both requests return the same 40,000 nodes.
 The frozen provenance's historical `refinement` fields must be interpreted as
 value consistency, not evidence that the numerical resolution increased.
 Density residuals use native CLASS rows. Only the upper-panel baseline is
-interpolated. The test-fixture generators elsewhere in the repository cover
+interpolated. The test-fixture generators in the Zenodo archive cover
 other cosmologies and are not substitutes for this figure generator.
 
 Never replace the frozen arrays merely to hide a regression. Compare regenerated

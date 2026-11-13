@@ -2,12 +2,17 @@ module ReferenceFixtures
 using Pkg.Artifacts
 using SHA
 
-function ensure_fixtures(root=dirname(@__DIR__); manifest=joinpath(@__DIR__, "fixtures.sha256"))
+function ensure_fixtures(root=dirname(@__DIR__); manifest=joinpath(@__DIR__, "fixtures.sha256"), prefix="test")
+    prefix_parts = split(prefix, '/')
+    (!isabspath(prefix) && !occursin('\\', prefix) &&
+        all(p -> !(p in ("", ".", "..")), prefix_parts)) || error("Unsafe fixture prefix: $prefix")
     missing = Tuple{String,String}[]
     for line in eachline(manifest)
         expected, name = split(line, "  "; limit=2)
         parts = split(name, '/')
-        (!isabspath(name) && !(".." in parts) && first(parts) == "test") ||
+        (!isabspath(name) && !occursin('\\', name) &&
+            all(p -> !(p in ("", ".", "..")), parts) &&
+            length(parts) > length(prefix_parts) && parts[1:length(prefix_parts)] == prefix_parts) ||
             error("Unsafe fixture path: $name")
         destination = joinpath(root, parts...)
         islink(destination) && error("Fixture must not be a symlink: $name")
