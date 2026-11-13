@@ -23,6 +23,8 @@ elseif "extension_boundaries" in ARGS
     include("test_extension_boundary_contracts.jl")
 elseif "aqua" in ARGS
     include("test_aqua.jl")
+elseif "distance_ad_callers" in ARGS
+    include("test_distance_ad_callers.jl")
 else
 # Include all test dependencies at the top level
 using JSON
@@ -154,6 +156,7 @@ else
     include("test_chebyshev.jl")
     include("test_performance_regressions.jl")
     include("test_background_performance.jl")
+    include("test_distance_ad_callers.jl")
 end
 end
 end

@@ -100,6 +100,8 @@ jobs:
       # Resolve a jointly compatible minimum, including optional extensions.
       # v2.7.0 also locks [extras]/[targets].test by promoting resolved test
       # dependencies in this disposable checkout; do not exclude any backend.
+      - name: Preserve original dependency declarations
+        run: cp Project.toml lower-bounds-original-Project.toml
       - name: Resolve lowest compatible dependencies
         uses: julia-actions/julia-downgrade-compat@30b83cf94e89744fcbd7ea5496be4967d6fbe540 # v2.7.0
         with:
@@ -113,6 +115,8 @@ jobs:
         run: julia --startup-file=no test/download_fixtures.jl
       - name: Test the locked lower-bound environment
         uses: julia-actions/julia-runtest@v1
+        env:
+          ACE_TEST_ORIGINAL_PROJECT: ${{ github.workspace }}/lower-bounds-original-Project.toml
         with:
           coverage: false
           allow_reresolve: false
@@ -126,4 +130,5 @@ jobs:
           path: |
             Project.toml
             Manifest.toml
+            lower-bounds-original-Project.toml
           if-no-files-found: warn

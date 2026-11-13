@@ -14,6 +14,19 @@ Use ForwardDiff as an independent numerical check for reverse-mode gradients.
 Do not use Zygote to differentiate arbitrary mutating application code merely
 because AbstractCosmologicalEmulators.jl has ChainRules for its own internal operations.
 
+Zygote is optional, with a temporary compatibility range of **0.7.10–0.7.16**.
+Versions 0.7.17 and 0.7.18 fail scalar and single-redshift distance-gradient
+callers taking a parameter vector, with a
+`ChainRules.OneElement(::Thunk, ...)` error. A controlled comparison held all
+other dependencies fixed: 0.7.15/0.7.16 passed the tested callers, while
+0.7.17/0.7.18 failed both direct Zygote and prepared DifferentiationInterface
+calls. Declaring Zygote as a weak dependency applies this bound when it is
+installed alongside the package; it does not install Zygote for inference.
+This constrains co-installed Zygote even when distances are not used. If another
+dependency requires a newer Zygote, Pkg may select an older release of this
+package instead, or report a resolution conflict; check the resolved versions.
+The bound can be revisited when an upstream release passes the regression suite.
+
 ## Native Mooncake rules for Lux MLP inference
 
 `MooncakeExt` implements an input-only reverse pass for nonempty, stateless

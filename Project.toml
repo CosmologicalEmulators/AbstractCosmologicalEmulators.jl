@@ -22,6 +22,7 @@ Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
 SciMLSensitivity = "1ed8b502-d754-442c-8d5d-10ac956f44a1"
+Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [extensions]
 BackgroundCosmologyExt = ["FastGaussQuadrature", "Integrals", "OrdinaryDiffEqTsit5", "SciMLSensitivity"]
@@ -62,7 +63,9 @@ SHA = "0.7"
 SimpleChains = "0.4"
 Test = "1.10"
 TOML = "1"
-Zygote = "0.7.10"
+# 0.7.17–0.7.18 produce nested thunks in public distance-gradient callers.
+# Temporarily cap the existing range at the last release passing those callers.
+Zygote = "0.7.10 - 0.7.16"
 julia = "1.10"
 
 [extras]
