@@ -32,6 +32,8 @@ elseif "background_repairs" in ARGS
     include("test_neutrino_lookup.jl")
     include("test_curvature_gradients.jl")
     include("test_distance_ad_callers.jl")
+elseif "growth_query_ad" in ARGS
+    include("test_growth_query_ad.jl")
 elseif "neutrino_lookup" in ARGS
     include("test_neutrino_lookup.jl")
 else
@@ -103,6 +105,7 @@ else
     include("test_extension_boundary_contracts.jl")
     include("test_neutrino_lookup.jl")
     include("test_curvature_gradients.jl")
+    include("test_growth_query_ad.jl")
 
     # Official artifact tests
     include("test_official_artifacts.jl")

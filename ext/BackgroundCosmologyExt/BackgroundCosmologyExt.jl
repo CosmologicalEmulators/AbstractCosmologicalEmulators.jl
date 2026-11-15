@@ -18,8 +18,9 @@ module BackgroundCosmologyExt
 #    traced queries; concrete storage here improves host dispatch only.
 #
 # Consequence: `E_z`, `D_z`, `f_z`, `r_z`, `dM_z`, `dA_z`, `dL_z` should be
-# called on plain Julia hosts, not on Reactant traced arrays. They remain
-# fully ForwardDiff/Zygote/Mooncake-differentiable on the host.
+# called on plain Julia hosts, not on Reactant traced arrays. Host AD support,
+# including the growth endpoint and differentiation-mode limits, is documented
+# in docs/src/background.md.
 # Network/spline kernels in the main package retain Reactant compatibility
 # via `ExtReactant`.
 # =============================================================================
@@ -31,6 +32,8 @@ using LinearAlgebra
 using FastGaussQuadrature
 using ChainRulesCore
 using SciMLSensitivity
+import DiffEqBase
+import SciMLBase
 
 # Define abstract type for cosmology
 abstract type AbstractCosmology end
@@ -57,6 +60,7 @@ AbstractCosmologicalEmulators._neutrino_table(::AbstractCosmologicalEmulators._N
 # Include utility functions and background cosmology functionality
 include("utils.jl")
 include("background.jl")
+include("growth_queries.jl")
 include("rrules.jl")
 
 # Initialize interpolants when extension loads

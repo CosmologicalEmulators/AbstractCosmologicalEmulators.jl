@@ -162,6 +162,20 @@ end
             @test all(isfinite.(result))
         end
 
+        @testset "Missing Emulator Description Falls Back To Empty Metadata" begin
+            nn_dict_without_description = copy(nn_dict)
+            delete!(nn_dict_without_description, "emulator_description")
+
+            open(joinpath(test_dir, "nn_setup.json"), "w") do f
+                JSON.print(f, nn_dict_without_description)
+            end
+
+            loaded_emu = load_trained_emulator(test_dir)
+
+            @test haskey(loaded_emu.TrainedEmulator.Description, "emulator_description")
+            @test isempty(loaded_emu.TrainedEmulator.Description["emulator_description"])
+        end
+
         @testset "Registered Postprocessing" begin
             input_params = [0.5, 0.5, 0.5]
 

@@ -539,10 +539,11 @@ function _growth_solver(z, Ωcb0, h; mν=(0.0, 0.0, 0.0), w0=-1.0, wa=0.0, Ωk0=
 
     p = _growth_params(T, Ωcb0, h, masses, w0, wa, Ωk0)
 
-    prob = ODEProblem{true}(_growth_rhs(masses, species), u₀, logaspan, p)
-
-    sol = solve(prob, Tsit5(); reltol, abstol, saveat=sorted_loga)
-    return restore_growth_order(Array(sol)[1:2, :])::Matrix{T}
+    settings = AbstractCosmologicalEmulators._GrowthSolveSettings(
+        _growth_rhs(masses, species), logaspan, reltol, abstol,
+    )
+    states = AbstractCosmologicalEmulators._growth_states_at(sorted_loga, u₀, p, settings)
+    return restore_growth_order(states)::Matrix{T}
 end
 
 # Private helper: the struct's physical densities converted to density fractions.

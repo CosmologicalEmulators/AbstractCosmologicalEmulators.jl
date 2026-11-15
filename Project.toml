@@ -16,16 +16,18 @@ NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 SimpleChains = "de6bee2f-e2f4-4ec7-b6ed-219cc6f6e9e5"
 
 [weakdeps]
+DiffEqBase = "2b5f629d-d688-5b77-993f-72d75c75574e"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
 Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 SciMLSensitivity = "1ed8b502-d754-442c-8d5d-10ac956f44a1"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [extensions]
-BackgroundCosmologyExt = ["FastGaussQuadrature", "Integrals", "OrdinaryDiffEqTsit5", "SciMLSensitivity"]
+BackgroundCosmologyExt = ["DiffEqBase", "FastGaussQuadrature", "Integrals", "OrdinaryDiffEqTsit5", "SciMLBase", "SciMLSensitivity"]
 ExtReactant = ["Reactant"]
 MooncakeExt = ["Mooncake"]
 
@@ -38,6 +40,7 @@ Artifacts = "1.10"
 ChainRulesCore = "1.26"
 DataInterpolations = "6, 8, 9, 10"
 DelimitedFiles = "1.9"
+DiffEqBase = "6.180, 7"
 DifferentiationInterface = "0.7.16"
 Enzyme = "0.13"
 FFTW = "1"
@@ -58,6 +61,7 @@ Random = "1.10"
 # 0.2.232 emits invalid reverse IR for scalar zero-extrapolation queries;
 # 0.2.290 is the tested working floor (both vector and matrix ordinates).
 Reactant = "0.2.290"
+SciMLBase = "2.101, 3"
 SciMLSensitivity = "7.90"
 SHA = "0.7"
 SimpleChains = "0.4"

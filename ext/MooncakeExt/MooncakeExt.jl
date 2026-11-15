@@ -412,5 +412,6 @@ Mooncake.@from_chainrules Mooncake.MinimalCtx Tuple{typeof(AbstractCosmologicalE
 
 include("lux_mlp.jl")
 include("neutrino_lookup.jl")
+include("growth_queries.jl")
 
 end # module MooncakeExt

@@ -246,6 +246,61 @@ scale-dependent massive-neutrino growth.
 Both use ``D(a_i)=D'(a_i)=a_i`` at ``a_i=1/139``; they do **not** normalize ``D(1)=1``.
 The JAX equivalents are `species="cb"` and `species="m"`, respectively.
 
+### Differentiating growth redshifts
+
+`D_z`, `f_z` and `D_f_z` can be differentiated with respect to the cosmological
+parameters **and** the queried redshifts, separately or jointly (for example
+`[h; z]` or all ten struct parameters plus `z`), with prepared Mooncake and
+Zygote gradients as well as ForwardDiff. Internally the growth ODE is solved
+by one private routine at the sorted query times. Its reverse rule keeps the
+existing SciML parameter and initial-state pullbacks and adds the query
+channel. With ``y=(D,D')`` and ``y'=F(y,x;p)``, the cotangent ``\bar y_i`` of
+the state at ``x_i=\ln a_i`` contributes
+
+```math
+\bar x_i=\bar y_i\cdot F(y_i,x_i;p),
+\qquad
+\frac{\partial D}{\partial z}=-\frac{D'}{1+z},
+\qquad
+\frac{\partial f}{\partial z}=-\frac{1}{1+z}\left(\frac{D''}{D}-f^2\right),
+```
+
+where ``D''`` is the second component of the growth ODE right-hand side. The ``z\to x`` chain,
+sorting and restoration of the input order are ordinary differentiated Julia.
+
+What is and is not claimed:
+
+- The query derivative is the **continuous ODE flow** evaluated at the numerical
+  state. At interior queries, ForwardDiff instead differentiates the
+  finite-tolerance interpolant. The two converge as `reltol`/`abstol` are
+  tightened, but they need not agree
+  to roundoff at loose tolerances. Use tight tolerances (as above) for
+  comparisons and verify convergence.
+- The parameter pullback remains SciML's existing sensitivity machinery, which
+  combines forward and reverse modes. It is **not** a pure-reverse algorithm and
+  the repair does not replace it with a new sensitivity algorithm. The added
+  query channel evaluates the RHS at each saved state; workload cost must be
+  measured separately.
+- Each query has an independent cotangent: repeated redshifts are not merged,
+  and the derivative at the initial endpoint `z=138` is the physical one-sided
+  derivative inside the domain. Repeated initial-endpoint queries now return one
+  value per query (previously too few columns could be returned).
+- At an exact domain endpoint, ForwardDiff may select a fixed saved endpoint
+  state and omit the query-time derivative. That discrepancy is not a tolerance
+  error. Use the validated reverse rule for physical one-sided endpoint query
+  derivatives; the interior convergence statement does not cover endpoints.
+- Only first-order derivatives are provided by the new rule. No guarantee is made
+  for higher-order reverse-mode derivatives, and native Mooncake **forward** mode
+  is not claimed to be repaired. The rule is registered for reverse mode only.
+- Numerical controls (`reltol`, `abstol`, the integration span and growth
+  species) and the neutrino table coefficients are fixed configuration. The
+  physical inputs to the neutrino lookup remain differentiable. The physics of
+  the growth pipeline is unchanged.
+- Accuracy is tested against analytic ODEs, tolerance-refined ForwardDiff, a
+  test-only dense solve, and frozen pre-repair parameter gradients
+  (`test/growth_query_reference.md`); no bitwise gradient or runtime guarantee
+  is made.
+
 ### Internal thermal parameters
 
 `ThermalNeutrinos` is an internal, immutable bundle of the three masses,

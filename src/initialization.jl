@@ -132,7 +132,7 @@ end
 
 function _get_emulator_description_dict(input_dict::AbstractDict{String,Any})
     # Convert JSON.Object types to regular Dict{String, Any} for Mooncake compatibility
-    return _convert_json_to_dict(input_dict["emulator_description"])
+    return _convert_json_to_dict(get(input_dict, "emulator_description", Dict{String, Any}()))
 end
 
 function _init_luxemulator(NN_dict::AbstractDict{String,Any}, weight)

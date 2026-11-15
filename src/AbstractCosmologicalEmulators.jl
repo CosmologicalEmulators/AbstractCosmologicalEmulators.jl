@@ -14,7 +14,7 @@ using ForwardDiff: Dual, value, partials, tagtype, Partials
 using Artifacts
 
 export AbstractTrainedEmulators, LuxEmulator, SimpleChainsEmulator, GenericEmulator
-export maximin, inv_maximin, run_emulator, get_emulator_description, init_emulator
+export maximin, inv_maximin, run_emulator, get_emulator_description, init_emulator, load_trained_emulator
 export to_reactant
 export validate_nn_dict_structure, validate_parameter_ranges, validate_layer_structure, safe_dict_access
 export akima_interpolation, cubic_spline_interpolation, cubic_b_spline_interpolation
@@ -30,6 +30,7 @@ include("core.jl")
 include("initialization.jl")
 include("utils.jl")
 include("neutrino_lookup.jl")
+include("growth_queries.jl")
 include("threads.jl")
 include("chebyshev.jl")
 include("cubic_b_spline.jl")
