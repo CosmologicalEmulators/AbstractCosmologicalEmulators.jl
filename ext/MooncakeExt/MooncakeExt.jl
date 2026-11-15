@@ -411,5 +411,6 @@ end
 Mooncake.@from_chainrules Mooncake.MinimalCtx Tuple{typeof(AbstractCosmologicalEmulators.run_emulator), Any, AbstractCosmologicalEmulators.LuxEmulator}
 
 include("lux_mlp.jl")
+include("neutrino_lookup.jl")
 
 end # module MooncakeExt

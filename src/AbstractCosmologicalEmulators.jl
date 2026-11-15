@@ -29,6 +29,7 @@ export set_threads, set_fft_threads
 include("core.jl")
 include("initialization.jl")
 include("utils.jl")
+include("neutrino_lookup.jl")
 include("threads.jl")
 include("chebyshev.jl")
 include("cubic_b_spline.jl")

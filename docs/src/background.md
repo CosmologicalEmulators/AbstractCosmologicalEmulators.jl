@@ -63,6 +63,20 @@ Use scalar redshifts for scalar results and vectors for vector results.
 Neutrino momentum integrals are tabulated when the extension initializes;
 runtime expansion, distances, growth and their derivatives use those lookup
 tables, not repeated momentum integration.
+For Float64 reverse-mode Mooncake queries, a private lookup rule differentiates
+the actual interpolation polynomial while treating these physical tables as
+fixed. Other scalar types and forward mode retain the generic path; generic
+trainable Akima splines are unchanged. The tables are initialized by the
+background extension's `__init__`, not supplied as inference parameters.
+
+The transverse-curvature mapping uses a degree-10 series in
+`t = Ωk*r^2` for `abs(t) ≤ 1`, including exactly flat curvature. This retains
+the nonzero curvature derivative `r^3/6` at zero. Native AD and the ChainRules
+pullback differentiate the same approximation. Outside this interval the
+sine/sinh expressions are used. The hard switch has a nonzero real-arithmetic
+truncation mismatch, below Float32/Float64 roundoff; it is not an exact
+arbitrary-precision or globally smooth representation.
+
 The default mass input is `(0, 0, 0)`; scalar masses are rejected, and no
 hierarchy or oscillation constraints are imposed. Growth is a scale-independent
 approximation, supported only for `1/139 ≤ a ≤ 1.01`. See

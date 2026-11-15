@@ -51,6 +51,9 @@ const BackgroundAkima = AkimaSpline{Vector{Float64},Vector{Float64},Vector{Float
 const F_three_mass_interpolant = Ref{BackgroundAkima}()
 const dFdy_three_mass_interpolant = Ref{BackgroundAkima}()
 
+AbstractCosmologicalEmulators._neutrino_table(::AbstractCosmologicalEmulators._NeutrinoF) = F_three_mass_interpolant[]
+AbstractCosmologicalEmulators._neutrino_table(::AbstractCosmologicalEmulators._NeutrinoDFdy) = dFdy_three_mass_interpolant[]
+
 # Include utility functions and background cosmology functionality
 include("utils.jl")
 include("background.jl")

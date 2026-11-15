@@ -72,8 +72,6 @@ function w0waCDMCosmology(ln10Aₛ, nₛ, h, ωb, ωc, ωk, mν, w0, wa)
     return w0waCDMCosmology(; ln10Aₛ, nₛ, h, ωb, ωc, ωk, mν, w0, wa)
 end
 
-_call_interpolant(interp::Ref, y::T) where {T} = interp[](y)::T
-
 function _F(y)
     f(x, y) = x^2 * √(x^2 + y^2) / (1 + exp(x))
     domain = (zero(eltype(Inf)), Inf) # (lb, ub)
@@ -180,7 +178,7 @@ function _ΩνE2(a, Ωγ0, ν::ThermalNeutrinos)
     inverse_temperature = 1 / (_K_B_EV * ν.temperature_ratio * _T_CMB)
     prefactor = 15 / π^4 * ν.temperature_ratio^4
     radiation = ν.massless_count * 7 / 8 * (4 / 11)^(4 / 3)
-    sum_F = sum(m -> _call_interpolant(F_three_mass_interpolant, m * a * inverse_temperature), ν.masses)
+    sum_F = sum(m -> AbstractCosmologicalEmulators._neutrino_lookup(AbstractCosmologicalEmulators._NeutrinoF(), m * a * inverse_temperature), ν.masses)
     return Ωγ0 / a^4 * (prefactor * sum_F + radiation)
 end
 
@@ -189,8 +187,8 @@ function _dΩνE2da(a, Ωγ0, ν::ThermalNeutrinos)
     inverse_temperature = 1 / (_K_B_EV * ν.temperature_ratio * _T_CMB)
     prefactor = 15 / π^4 * ν.temperature_ratio^4
     radiation = ν.massless_count * 7 / 8 * (4 / 11)^(4 / 3)
-    sum_F = sum(m -> _call_interpolant(F_three_mass_interpolant, m * a * inverse_temperature), ν.masses)
-    sum_dF = sum(m -> _call_interpolant(dFdy_three_mass_interpolant, m * a * inverse_temperature) *
+    sum_F = sum(m -> AbstractCosmologicalEmulators._neutrino_lookup(AbstractCosmologicalEmulators._NeutrinoF(), m * a * inverse_temperature), ν.masses)
+    sum_dF = sum(m -> AbstractCosmologicalEmulators._neutrino_lookup(AbstractCosmologicalEmulators._NeutrinoDFdy(), m * a * inverse_temperature) *
                       m * inverse_temperature, ν.masses)
     return Ωγ0 * (-4 / a^5 * (prefactor * sum_F + radiation) + prefactor / a^4 * sum_dF)
 end
@@ -335,24 +333,75 @@ function r_z(z, cosmo::w0waCDMCosmology; order=9)
     return c_0 * _r̃_z(z, Ωcb0, h, cosmo.mν, cosmo.w0, cosmo.wa, Ωk0, order, cosmo.Neff, cosmo.neutrino_prescription) / (100 * h)
 end
 
+# Degree-10 expansion of sum(t^n/(2n+1)!). Integer divisors preserve Float32
+# and active Dual types. Do not replace the flat limit with `return r`:
+# its explicit curvature derivative is r^3/6, not zero.
+function _curvature_polynomial(t)
+    p = one(t)
+    for k in 10:-1:1
+        p = one(t) + t * p / ((2k) * (2k + 1))
+    end
+    return p
+end
+
+function _curvature_polynomial_partials(t)
+    p, dp = one(t), zero(t)
+    for k in 10:-1:1
+        divisor = (2k) * (2k + 1)
+        dp = (p + t * dp) / divisor
+        p = one(t) + t * p / divisor
+    end
+    return p, dp
+end
+
+# Strip nested Duals only for branch selection. Ordering the product this way
+# also avoids overflowing r^2 unnecessarily when Ω is zero or very small.
+function _curvature_series_region(Ω, r)
+    Ωp = AbstractCosmologicalEmulators._bspline_primal(Ω)
+    rp = AbstractCosmologicalEmulators._bspline_primal(r)
+    return abs((Ωp * rp) * rp) <= 1
+end
+
+function _S_of_K_scalar(Ω, r)
+    if _curvature_series_region(Ω, r)
+        return r * _curvature_polynomial((Ω * r) * r)
+    elseif AbstractCosmologicalEmulators._bspline_primal(Ω) > 0
+        a = sqrt(Ω)
+        return sinh(a * r) / a
+    else
+        a = sqrt(-Ω)
+        return sin(a * r) / a
+    end
+end
+
+function _S_of_K_partials(Ω, r)
+    if _curvature_series_region(Ω, r)
+        t = (Ω * r) * r
+        p, dp = _curvature_polynomial_partials(t)
+        return r^3 * dp, p + 2t * dp
+    elseif AbstractCosmologicalEmulators._bspline_primal(Ω) > 0
+        a = sqrt(Ω)
+        y, c = sinh(a * r) / a, cosh(a * r)
+    else
+        a = sqrt(-Ω)
+        y, c = sin(a * r) / a, cos(a * r)
+    end
+    return (r * c - y) / (2Ω), c
+end
+
 """
     S_of_K(Ωk0, r)
 
 Map dimensionless radial distance `r = H₀χ/c` to dimensionless transverse
 distance: sinh for positive Ω_k, identity for zero, sin for negative Ω_k.
+A degree-10 series in `t = Ωk0*r^2` for `abs(t) ≤ 1` preserves the curvature
+derivative at zero and avoids cancellation near flat curvature. The hard
+switch is not exactly continuous in real arithmetic; the series truncation
+error at the boundary is below Float32/Float64 roundoff.
 Use [`dM_z`](@ref) for distances in Mpc.
 """
-function S_of_K(Ω::Number, r)
-    if Ω == 0
-        return r
-    elseif Ω > 0
-        a = sqrt(Ω)
-        return @. sinh(a * r) / a
-    else
-        b = sqrt(-Ω)
-        return @. sin(b * r) / b
-    end
-end
+S_of_K(Ω::Number, r::Number) = _S_of_K_scalar(Ω, r)
+S_of_K(Ω::Number, r) = _S_of_K_scalar.(Ω, r)
 
 # Dimensionless transverse distance (nonexported).
 function d̃M_z(z, cosmo::w0waCDMCosmology; order=9)

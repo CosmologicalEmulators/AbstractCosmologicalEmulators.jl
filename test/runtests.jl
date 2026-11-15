@@ -28,6 +28,12 @@ elseif "aqua" in ARGS
     include("test_aqua.jl")
 elseif "distance_ad_callers" in ARGS
     include("test_distance_ad_callers.jl")
+elseif "background_repairs" in ARGS
+    include("test_neutrino_lookup.jl")
+    include("test_curvature_gradients.jl")
+    include("test_distance_ad_callers.jl")
+elseif "neutrino_lookup" in ARGS
+    include("test_neutrino_lookup.jl")
 else
 # Include all test dependencies at the top level
 using JSON
@@ -95,6 +101,8 @@ else
     # Extension tests
     include("test_extensions.jl")
     include("test_extension_boundary_contracts.jl")
+    include("test_neutrino_lookup.jl")
+    include("test_curvature_gradients.jl")
 
     # Official artifact tests
     include("test_official_artifacts.jl")
