@@ -320,14 +320,16 @@ end
                 wD, wf = wD_pool[1:n], wf_pool[1:n]
                 loss = mk(:z, z, wD, wf)
                 ref_id = identity_query_gradient(z, P_BASE, prescription, species, mode, wD, wf)
+                saved_z = copy(z)
+                fd_backend = AutoForwardDiff()
+                fd_prep = prepare_gradient(loss, fd_backend, z)
+                fd = gradient(loss, fd_prep, fd_backend, z)
                 for backend in (AutoMooncake(), AutoZygote())
                     prep = prepare_gradient(loss, backend, z)
                     g = gradient(loss, prep, backend, z)
                     @test scaled_error(g, ref_id) <= 1e-9
-                    fd_backend = AutoForwardDiff()
-                    fd_prep = prepare_gradient(loss, fd_backend, z)
-                    fd = gradient(loss, fd_prep, fd_backend, z)
                     @test scaled_error(g, fd) <= 2e-6
+                    @test z == saved_z
                 end
             end
             # Scalar redshift returns a scalar and is differentiated per query.
@@ -367,6 +369,11 @@ end
         (z, duplicate) in ((z_sets.initial_endpoint, (1, 2)), (z_sets.final_endpoint, (2, 3)))
         loss = PublicLoss(species, prescription, mode, :z, P_BASE, Float64[], wD, wf, false)
         ref = identity_query_gradient(z, P_BASE, prescription, species, mode, wD, wf)
+        lp = PublicLoss(species, prescription, mode, :params, P_BASE, z, wD, wf, false)
+        saved_params, saved_z = copy(P_BASE), copy(z)
+        fb = AutoForwardDiff()
+        fp = prepare_gradient(lp, fb, P_BASE)
+        parameter_ref = gradient(lp, fp, fb, P_BASE)
         for backend in (AutoMooncake(), AutoZygote())
             prep = prepare_gradient(loss, backend, z)
             g = gradient(loss, prep, backend, z)
@@ -374,13 +381,11 @@ end
             # Duplicate endpoint queries have separate channels with separate weights.
             @test g[duplicate[1]] != g[duplicate[2]]
             # And the same cosmology parameters stay finite, with seeds accumulated.
-            lp = PublicLoss(species, prescription, mode, :params, P_BASE, z, wD, wf, false)
             pp = prepare_gradient(lp, backend, P_BASE)
             gp = gradient(lp, pp, backend, P_BASE)
             @test all(isfinite, gp)
-            fb = AutoForwardDiff()
-            fp = prepare_gradient(lp, fb, P_BASE)
-            @test scaled_error(gp, gradient(lp, fp, fb, P_BASE)) <= 5e-6
+            @test scaled_error(gp, parameter_ref) <= 5e-6
+            @test P_BASE == saved_params && z == saved_z
         end
     end
 end

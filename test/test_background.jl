@@ -230,9 +230,9 @@ if !isnothing(ext)
             cosmo2 = w0waCDMCosmology(ln10Aₛ=2.9, nₛ=0.97, h=0.65, ωb=0.024, ωc=0.11, mν=(0.02, 0.03, 0.05), w0=-0.8, wa=-0.3)
             cosmo3 = w0waCDMCosmology(ln10Aₛ=3.1, nₛ=0.955, h=0.75, ωb=0.021, ωc=0.13, mν=(0.05, 0.05, 0.1), w0=-1.2, wa=0.5)
             cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=(0.02, 0.02, 0.02), w0=-2.0, wa=1.0, ωk=0.1)
-            cosmo4 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=(0.02, 0.02, 0.02), w0=-2.0, wa=-1.0, ωk=-0.1)
+            cosmo5 = w0waCDMCosmology(ln10Aₛ=3.0, nₛ=0.96, h=1.0, ωb=0.02, ωc=0.18, mν=(0.02, 0.02, 0.02), w0=-2.0, wa=-1.0, ωk=-0.1)
 
-            test_cosmologies = [cosmo1, cosmo2, cosmo3, cosmo4]
+            test_cosmologies = [cosmo1, cosmo2, cosmo3, cosmo4, cosmo5]
             test_redshifts = [0.5, 1.5, 3.0]
 
             for cosmo in test_cosmologies
@@ -793,14 +793,15 @@ if !isnothing(ext)
             h = 0.67
 
             # Test that Zygote and ForwardDiff give same results for E_z
+            gradient_zy = Zygote.gradient(E_z_simple, Ωcb0, h)
             @test isapprox(
-                Zygote.gradient(E_z_simple, Ωcb0, h)[1],
+                gradient_zy[1],
                 ForwardDiff.derivative(Ω -> E_z_simple(Ω, h), Ωcb0),
                 rtol=1e-5
             )
 
             @test isapprox(
-                Zygote.gradient(E_z_simple, Ωcb0, h)[2],
+                gradient_zy[2],
                 ForwardDiff.derivative(h_val -> E_z_simple(Ωcb0, h_val), h),
                 rtol=1e-5
             )
@@ -854,35 +855,33 @@ if !isnothing(ext)
                 return kernel_D_z(z_fixed, Ωcb0, h; mν=(mν, mν, mν), w0=w0, wa=wa)
             end
 
+            # Six independent caller/backend combinations, reused by the checks
+            # below rather than recomputed for each assertion group.
+            saved_params = copy(cosmo_params_struct)
+            grad_fd_struct = ForwardDiff.gradient(D_z_with_struct, cosmo_params_struct)
+            grad_zy_struct = Zygote.gradient(D_z_with_struct, cosmo_params_struct)[1]
+            grad_finite_struct = grad(central_fdm(5, 1), D_z_with_struct, cosmo_params_struct)[1]
+            grad_fd_direct = ForwardDiff.gradient(D_z_direct_params, cosmo_params_struct)
+            grad_zy_direct = Zygote.gradient(D_z_direct_params, cosmo_params_struct)[1]
+            grad_finite_direct = grad(central_fdm(5, 1), D_z_direct_params, cosmo_params_struct)[1]
+            @test cosmo_params_struct == saved_params
+
             @testset "ForwardDiff with cosmology struct" begin
-                grad_fd_struct = ForwardDiff.gradient(D_z_with_struct, cosmo_params_struct)
                 @test all(isfinite.(grad_fd_struct))
                 @test length(grad_fd_struct) == 8
             end
 
             @testset "Zygote with cosmology struct" begin
-                grad_zy_struct = Zygote.gradient(D_z_with_struct, cosmo_params_struct)[1]
                 @test all(isfinite.(grad_zy_struct))
                 @test length(grad_zy_struct) == 8
             end
 
             @testset "FiniteDifferences with cosmology struct" begin
-                grad_finite_struct = grad(central_fdm(5, 1), D_z_with_struct, cosmo_params_struct)[1]
                 @test all(isfinite.(grad_finite_struct))
                 @test length(grad_finite_struct) == 8
             end
 
             @testset "Compare struct vs direct parameters" begin
-                # Compute gradients with both approaches
-                grad_fd_struct = ForwardDiff.gradient(D_z_with_struct, cosmo_params_struct)
-                grad_fd_direct = ForwardDiff.gradient(D_z_direct_params, cosmo_params_struct)
-
-                grad_zy_struct = Zygote.gradient(D_z_with_struct, cosmo_params_struct)[1]
-                grad_zy_direct = Zygote.gradient(D_z_direct_params, cosmo_params_struct)[1]
-
-                grad_finite_struct = grad(central_fdm(5, 1), D_z_with_struct, cosmo_params_struct)[1]
-                grad_finite_direct = grad(central_fdm(5, 1), D_z_direct_params, cosmo_params_struct)[1]
-
                 # The struct and direct approaches should give identical results
                 @test isapprox(grad_fd_struct, grad_fd_direct, rtol=1e-10)
                 @test isapprox(grad_zy_struct, grad_zy_direct, rtol=1e-10)
@@ -890,25 +889,17 @@ if !isnothing(ext)
             end
 
             @testset "Consistency between AD methods (struct version)" begin
-                grad_fd = ForwardDiff.gradient(D_z_with_struct, cosmo_params_struct)
-                grad_zy = Zygote.gradient(D_z_with_struct, cosmo_params_struct)[1]
-                grad_finite = grad(central_fdm(5, 1), D_z_with_struct, cosmo_params_struct)[1]
-
                 # All three AD methods should agree
-                @test isapprox(grad_fd, grad_finite, rtol=1e-3)
-                @test isapprox(grad_zy, grad_finite, rtol=1e-3)
-                @test isapprox(grad_fd, grad_zy, rtol=1e-4)
+                @test isapprox(grad_fd_struct, grad_finite_struct, rtol=1e-3)
+                @test isapprox(grad_zy_struct, grad_finite_struct, rtol=1e-3)
+                @test isapprox(grad_fd_struct, grad_zy_struct, rtol=1e-4)
             end
 
             @testset "Consistency between AD methods (direct version)" begin
-                grad_fd = ForwardDiff.gradient(D_z_direct_params, cosmo_params_struct)
-                grad_zy = Zygote.gradient(D_z_direct_params, cosmo_params_struct)[1]
-                grad_finite = grad(central_fdm(5, 1), D_z_direct_params, cosmo_params_struct)[1]
-
                 # All three AD methods should agree
-                @test isapprox(grad_fd, grad_finite, rtol=1e-3)
-                @test isapprox(grad_zy, grad_finite, rtol=1e-3)
-                @test isapprox(grad_fd, grad_zy, rtol=1e-4)
+                @test isapprox(grad_fd_direct, grad_finite_direct, rtol=1e-3)
+                @test isapprox(grad_zy_direct, grad_finite_direct, rtol=1e-3)
+                @test isapprox(grad_fd_direct, grad_zy_direct, rtol=1e-4)
             end
 
             # Similar tests for f_z

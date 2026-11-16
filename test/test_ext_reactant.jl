@@ -637,6 +637,12 @@ end
 
             loss_akima_u(u_, t_, tq_) = sum(AbstractCosmologicalEmulators.akima_interpolation(u_, t_, tq_))
             enzyme_grad_first(f, x, y, z) = Enzyme.gradient(Reverse, f, x, Const(y), Const(z))[1]
+            grad_fun(u_, t_, tq_) = enzyme_grad_first(loss_akima_u, u_, t_, tq_)
+            uR = Reactant.to_rarray(cases[1][2])
+            tR = Reactant.to_rarray(t_edge)
+            tqR = Reactant.to_rarray(tq_edge)
+            f = Reactant.@compile sync=true AbstractCosmologicalEmulators.akima_interpolation(uR, tR, tqR)
+            g_compiled = Reactant.@compile sync=true grad_fun(uR, tR, tqR)
 
             for (name, u_edge, compare_gradients) in cases
                 uR = Reactant.to_rarray(u_edge)
@@ -644,15 +650,12 @@ end
                 tqR = Reactant.to_rarray(tq_edge)
 
                 y_ref = AbstractCosmologicalEmulators.akima_interpolation(u_edge, t_edge, tq_edge)
-                f = Reactant.@compile sync=true AbstractCosmologicalEmulators.akima_interpolation(uR, tR, tqR)
                 yR = f(uR, tR, tqR)
                 Reactant.synchronize(yR)
 
                 @test all(isfinite, Array(yR))
                 @test Array(yR) ≈ y_ref atol=1e-12 rtol=1e-12
 
-                grad_fun(u_, t_, tq_) = enzyme_grad_first(loss_akima_u, u_, t_, tq_)
-                g_compiled = Reactant.@compile sync=true grad_fun(uR, tR, tqR)
                 gR = g_compiled(uR, tR, tqR)
                 Reactant.synchronize(gR)
 

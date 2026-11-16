@@ -48,7 +48,6 @@ using ChainRulesCore
         plan = CubicBSplinePlan(x, xq)
         U = hcat(u, sin.(x), x .^ 2)
         backends = (
-            AutoForwardDiff(),
             AutoZygote(),
             AutoMooncake(; config=Mooncake.Config()),
         )

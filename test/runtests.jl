@@ -1,5 +1,18 @@
 using Test
 
+include("ci_environment.jl")
+# Diagnostics only: the complete test selection below is unchanged in CI.
+if haskey(ENV, "ACE_TEST_ENVIRONMENT_DIR")
+    fingerprint = CITestEnvironment.snapshot(ENV["ACE_TEST_ENVIRONMENT_DIR"])
+    @info "Resolved test environment" VERSION Threads.nthreads(:default) fingerprint
+    if haskey(ENV, "GITHUB_ENV") && haskey(ENV, "ACE_TEST_CACHE_PREFIX")
+        open(ENV["GITHUB_ENV"], "a") do io
+            println(io, "ACE_TEST_CACHE_KEY=$(ENV["ACE_TEST_CACHE_PREFIX"])-$fingerprint")
+        end
+    end
+end
+include("test_ci_environment.jl")
+
 include("download_fixtures.jl")
 ReferenceFixtures.ensure_fixtures()
 include("test_fixture_download.jl")
@@ -97,6 +110,12 @@ elseif "neutrino_three_mass" in ARGS
     include("test_neutrino_three_mass.jl")
 elseif "extensions" in ARGS
     include("test_extensions.jl")
+elseif "ci_efficiency" in ARGS
+    # Focused validation of test reuse; normal Pkg.test still runs every file.
+    include("test_extensions.jl")
+    include("test_growth_query_ad.jl")
+    include("test_cubic_b_spline_ad.jl")
+    include("test_ext_reactant.jl")
 else
 @testset "AbstractEmulators test" begin
     # Aqua.jl quality assurance tests

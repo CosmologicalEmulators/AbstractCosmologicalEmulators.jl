@@ -26,7 +26,9 @@ using Test, TOML
             end
             script = joinpath(@__DIR__, "lux_mlp_preference_probe.jl")
             command = `$(Base.julia_cmd()) --startup-file=no --threads=1 --gcthreads=1 --project=$directory $script $mode`
-            @test success(command)
+            @info "Starting isolated Lux preference test" mode
+            @test success(pipeline(command; stdout=stdout, stderr=stderr))
+            @info "Finished isolated Lux preference test" mode
         end
     end
 end

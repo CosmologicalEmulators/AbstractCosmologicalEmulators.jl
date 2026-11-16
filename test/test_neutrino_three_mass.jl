@@ -29,24 +29,14 @@ _nu3_rows(file) = [split(l) for l in eachline(joinpath(NU3_FIXTURES, file)) if !
     # The scalar-mν mode (one Fermi-Dirac species carrying the total mass) was retired.
     # scalar_legacy_baseline.txt is kept only as historical provenance, not as API evidence.
     @testset "Scalar mν is rejected with a migration error" begin
-        z = [0.0, 0.5, 1.0]
         scalars = (0, 0.0, 0.06, 1, 0.4f0, big(0.06))
-        # Public calls now construct the struct, which rejects a scalar mass; the
-        # private kernels (_dlogEdloga, _Ωma, _r̃_z, _E_a) keep their own checks.
+        # Scalar public inputs fail at construction, before any wrapper runs.
+        # Test that contract once per scalar type, plus each private entry point.
         calls = (
-            m -> ext.E_a(0.5, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.E_a([0.5, 1.0], nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.E_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext._dlogEdloga(0.5, Ωcb0, h; mν=m),
+            m -> nu3_cosmo(Ωcb0, h; mν=m),
+            m -> ext._dlogEdloga(0.5, Ωcb0, h; mν=m),
             m -> ext._Ωma(0.5, Ωcb0, h; mν=m),
             m -> ext._r̃_z(1.0, Ωcb0, h, m, -1.0, 0.0, 0.0, 9, 3.044, :temperature),
-            m -> ext.r̃_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.r_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.d̃M_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.dM_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.d̃A_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.dA_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.dL_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.D_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.D_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.f_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.f_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.D_f_z(1.0, nu3_cosmo(Ωcb0, h; mν=m)), m -> ext.D_f_z(z, nu3_cosmo(Ωcb0, h; mν=m)),
-            m -> ext.D_z(1.0, nu3_cosmo(Ωcb0, h; mν=m); species=ext.MatterGrowthApprox()),
-            m -> ext.E_z(1.0, nu3_cosmo(Ωcb0, h; mν=m, Neff=5.0, neutrino_prescription=:radiation)),
         )
         for m in scalars, call in calls
             err = try; call(m); nothing; catch e; e; end
