@@ -22,8 +22,11 @@ This does not change trained emulator inputs, which still use total mass Σmν.
 `Neff` must be finite and positive. `:temperature` scales the three species'
 temperatures by `(Neff/3.044)^(1/4)` from `Tν/Tγ=0.71611`, and scales the
 reference massless remainder by `Neff/3.044`. `:radiation` fixes those temperatures
-and changes only the massless remainder, requiring `Neff ≳ 3.0396`. Neither
-prescription rescales the physical masses or the photon temperature, 2.7255 K.
+and changes only the massless remainder, requiring `Neff ≳ 3.0396`. `:hybrid`
+uses temperature rescaling below 3.044 and radiation at or above 3.044. It is
+continuous but generally has a kink in its `Neff` derivative; at the switch AD
+selects the radiation-side derivative. No prescription rescales the physical
+masses or the photon temperature, 2.7255 K.
 
 ```julia
 cosmo = bg.w0waCDMCosmology(mν=(0.0, 0.0086, 0.0502), Neff=3.044)
@@ -153,15 +156,22 @@ _neutrino_background(ν::ThermalNeutrinos, Neff, prescription) = ν
 
 function _neutrino_background(mν, Neff, prescription)
     isfinite(Neff) && Neff > 0 || throw(ArgumentError("Neff must be finite and positive"))
-    prescription in (:temperature, :radiation) || throw(ArgumentError(
-        "neutrino_prescription must be :temperature or :radiation"))
+    prescription in (:temperature, :radiation, :hybrid) || throw(ArgumentError(
+        "neutrino_prescription must be :temperature, :radiation or :hybrid"))
     masses = _neutrino_masses(mν)
-    if prescription === :temperature
+    # Only the decision uses primal values: the thermal arithmetic remains
+    # differentiated. Dual partials must not change the branch at equality.
+    cool = prescription === :temperature || (prescription === :hybrid &&
+        AbstractCosmologicalEmulators._bspline_primal(Neff) < _NEFF_THREE_MASS)
+    if cool
         scale = Neff / _NEFF_THREE_MASS
         temperature = _T_NCDM_OVER_T_CMB * scale^(1 / 4)
         massless = _N_UR_THREE_MASS * scale
     else
-        temperature = _T_NCDM_OVER_T_CMB
+        # Keep the hybrid's thermal container type stable across the switch,
+        # including ForwardDiff queries. The temperature derivative here is zero.
+        temperature = prescription === :hybrid ?
+            _T_NCDM_OVER_T_CMB + zero(Neff) : _T_NCDM_OVER_T_CMB
         massless = Neff - 3 * _NEFF_PER_FD_SPECIES
         massless >= 0 || throw(ArgumentError(
             "The :radiation prescription requires Neff ≥ $(3 * _NEFF_PER_FD_SPECIES)"))

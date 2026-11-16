@@ -151,8 +151,12 @@ E = background.E_z(1.0, cosmology)
 - `:radiation`: keep the three temperatures fixed and change only the massless
   remainder. This requires `Neff ≥ 3*(0.71611/(4/11)^(1/3))^4 ≈ 3.0396`;
   smaller values raise an error rather than silently changing prescription.
+- `:hybrid`: use `:temperature` for `Neff < 3.044` and `:radiation` otherwise.
+  The value is continuous at 3.044; its `Neff` derivative generally has a kink.
+  At equality, AD returns the radiation-side derivative. The default remains
+  `:temperature`.
 
-Both choices retain fixed photon temperature and physical neutrino masses in eV,
+All choices retain fixed photon temperature and physical neutrino masses in eV,
 and agree at Neff = 3.044. Neff derivatives use the explicit three-mass path;
 all analytic neutrino inputs are three-mass. These prescriptions
 are explicit physical models, not a claim that the two solvers' defaults coincide.

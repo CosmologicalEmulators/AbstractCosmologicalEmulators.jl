@@ -3,7 +3,8 @@
 The analytic background treats **three explicit physical neutrino masses** with
 zero-chemical-potential Fermi–Dirac distributions, plus a massless radiation
 remainder. Changing `Neff` is not enough to specify how that massive-neutrino
-sector changes: AbstractCosmologicalEmulators.jl provides two distinct thermal prescriptions.
+sector changes: AbstractCosmologicalEmulators.jl provides two thermal prescriptions
+and an explicit piecewise combination of them.
 
 This page describes the analytic model, **not** the frozen neural-emulator
 training labels. Neural emulators still take total neutrino mass with the
@@ -154,6 +155,33 @@ values they have the same relativistic-limit energy density but generally
 different massive-neutrino backgrounds. If all three masses are exactly zero,
 their total neutrino-sector density remains identical at every scale factor
 for the same `Neff`.
+
+## Hybrid: cooling below the reference, radiation above
+
+The opt-in `neutrino_prescription=:hybrid` selects `:temperature` for
+`Neff < 3.044` and `:radiation` for `Neff ≥ 3.044`. It keeps all three masses
+fixed and accepts finite positive `Neff`. Equal masses represent the
+three-degenerate-species approximation; unequal and exactly zero masses remain
+supported. Species are never counted by testing whether a mass is positive.
+
+This follows the **piecewise strategy** of the Planck 2018 joint neutrino-mass
+and effective-radiation analysis ([section 7.5.3](https://arxiv.org/abs/1807.06209)),
+but retains the CLASS-based reference temperature and small radiation remainder
+defined above. It is not an exact numerical reproduction of Planck's historical
+3.046 normalization. In particular, below the switch our reference remainder
+scales with `Neff`; it is not set to zero.
+
+Both branches coincide at 3.044. For nonzero masses the derivative with respect
+to `Neff` generally jumps there: heating massive particles and adding massless
+radiation change the late-time density differently. AD selects the radiation
+branch at equality, a **one-sided convention**, not a two-sided derivative.
+Do not use a centred finite difference spanning the switch as an AD reference.
+There is no smoothing and no custom zero-gradient rule. With all masses zero,
+the two physical densities coincide for every `Neff`.
+
+The thermal prescription does not specify a complete BBN history. Joint BBN
+inference must use a compatible physical model, not merely the same numerical
+value of final `Neff`. The default prescription remains `:temperature`.
 
 ## Expansion rate and closure
 
