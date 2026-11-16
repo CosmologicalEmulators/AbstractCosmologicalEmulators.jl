@@ -1,3 +1,4 @@
 Manifest.toml
 *.cov
 docs/build/
+/test/hybrid_class_reference.tsv

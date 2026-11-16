@@ -1,10 +1,20 @@
 # Frozen reference data and generators
 
 All numerical fixtures and their generation scripts are archived together at
-[Zenodo DOI 10.5281/zenodo.24203113](https://doi.org/10.5281/zenodo.24203113).
+[Zenodo DOI 10.5281/zenodo.24269888](https://doi.org/10.5281/zenodo.24269888).
 The archive includes original provenance, dependency declarations, complete
 source snapshots and the previous archive for historical reference generation.
 Its `SHA256SUMS` covers every payload file.
+
+Version 3 adds the hybrid-neutrino CLASS reference and its generator. See
+`HYBRID_PROVENANCE.json` and `hybrid_source/` for the exact hybrid source
+snapshots; the previous payloads and their provenance are preserved unchanged.
+The hybrid TSV is downloaded by the same checksum-verified bootstrap as all
+other numerical fixtures. Its generator is archived, not run by the tests.
+
+Store generated numerical fixtures in a versioned Zenodo archive, except for
+small, simple files deliberately kept in git. Pin immutable archive and per-file
+checksums, and test restoration from an empty checkout before updating them.
 
 `Pkg.test()` automatically restores only the data listed in `fixtures.sha256`
 from the archive pinned by `Artifacts.toml`. For standalone tests or offline use,

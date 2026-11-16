@@ -44,7 +44,9 @@ end
     entries = [split(line, "  "; limit=2) for line in eachline(manifest)]
     names = last.(entries)
     @test length(unique(names)) == length(names)
-    @test all(endswith(name, ".txt") || name == "test/testNN.json" for name in names)
+    @test all(endswith(name, ".txt") || name in
+        ("test/testNN.json", "test/hybrid_class_reference.tsv") for name in names)
+    @test count(==("test/hybrid_class_reference.tsv"), names) == 1
     @test count(==("test/testNN.json"), names) == 1
     @test count(name -> startswith(name, "test/reference/lux_mlp/"), names) == 9
     mktempdir() do root
