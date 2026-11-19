@@ -1,12 +1,17 @@
 # Frozen reference data and generators
 
 All numerical fixtures and their generation scripts are archived together at
-[Zenodo DOI 10.5281/zenodo.24269888](https://doi.org/10.5281/zenodo.24269888).
+[Zenodo DOI 10.5281/zenodo.24377226](https://doi.org/10.5281/zenodo.24377226).
 The archive includes original provenance, dependency declarations, complete
 source snapshots and the previous archive for historical reference generation.
 Its `SHA256SUMS` covers every payload file.
 
-Version 3 adds the hybrid-neutrino CLASS reference and its generator. See
+Version 4 moves the curvature reference and both growth-query reference TSVs
+out of git. The artifact bootstrap restores them at their original test paths
+without changing their contents. See `fixture_generators_v4/` for their
+generators and provenance.
+
+Version 3 added the hybrid-neutrino CLASS reference and its generator. See
 `HYBRID_PROVENANCE.json` and `hybrid_source/` for the exact hybrid source
 snapshots; the previous payloads and their provenance are preserved unchanged.
 The hybrid TSV is downloaded by the same checksum-verified bootstrap as all

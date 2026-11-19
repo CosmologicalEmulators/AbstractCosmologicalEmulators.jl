@@ -69,7 +69,7 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 The test suite includes checks for emulator evaluation, interpolation, AD compatibility, extension loading, and Reactant compatibility.
 
 Numerical text fixtures are downloaded from the pinned
-[Zenodo archive (10.5281/zenodo.24269888)](https://doi.org/10.5281/zenodo.24269888).
+[Zenodo archive (10.5281/zenodo.24377226)](https://doi.org/10.5281/zenodo.24377226).
 `test/Artifacts.toml` records the exact URL, archive SHA256 and artifact tree
 hash; `test/fixtures.sha256` lists the files restored into ignored test paths.
 Frozen outputs, generation scripts and original provenance live together in the

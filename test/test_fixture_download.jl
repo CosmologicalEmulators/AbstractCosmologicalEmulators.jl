@@ -44,10 +44,10 @@ end
     entries = [split(line, "  "; limit=2) for line in eachline(manifest)]
     names = last.(entries)
     @test length(unique(names)) == length(names)
-    @test all(endswith(name, ".txt") || name in
-        ("test/testNN.json", "test/hybrid_class_reference.tsv") for name in names)
-    @test count(==("test/hybrid_class_reference.tsv"), names) == 1
-    @test count(==("test/testNN.json"), names) == 1
+    required_nontxt = Set(("test/testNN.json", "test/hybrid_class_reference.tsv",
+        "test/curvature_reference.tsv", "test/growth_query_reference.tsv",
+        "test/growth_query_reference_converged.tsv"))
+    @test Set(name for name in names if !endswith(name, ".txt")) == required_nontxt
     @test count(name -> startswith(name, "test/reference/lux_mlp/"), names) == 9
     mktempdir() do root
         # Start without any fixture files, not just without one representative.
