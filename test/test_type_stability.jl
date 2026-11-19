@@ -6,6 +6,12 @@ using JET
 using Lux
 using Random
 
+_construct_cubic_bspline(values, sites) = CubicBSpline(values, sites)
+_construct_cubic_bspline_plan(sites, query) = CubicBSplinePlan(sites, query)
+_apply_cubic_bspline(spline, query) = spline(query)
+_apply_cubic_bspline_plan(plan, values) = plan(values)
+_cubic_bspline_plan_coefficients(plan, values) = bspline_coefficients(plan, values)
+
 @testset "Type Stability" begin
     # Create fresh dictionary for type stability tests (since NN_dict gets modified above)
     fresh_NN_dict = JSON.parsefile(joinpath(@__DIR__, "testNN.json"))
@@ -68,6 +74,56 @@ using Random
             JET.test_opt(cubic_spline_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
             JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_scalar)))
             JET.test_opt(akima_interpolation, (typeof(y_vals), typeof(x_nodes), typeof(x_new_vec)))
+
+            @testset "Cubic B-Spline type stability" begin
+                for T in (Float32, Float64)
+                    x_bs = collect(range(T(0), T(1); length=8))
+                    xq_bs = T[0.15, 0.35, 0.65, 0.85]
+                    u_bs = sin.(x_bs)
+                    U_bs = hcat(u_bs, cos.(x_bs), x_bs .^ 2)
+                    spline_vec = CubicBSpline(u_bs, x_bs)
+                    spline_mat = CubicBSpline(U_bs, x_bs)
+                    plan_bs = CubicBSplinePlan(x_bs, xq_bs)
+
+                    @test @inferred(_apply_cubic_bspline(spline_vec, xq_bs)) isa Vector{T}
+                    @test @inferred(_apply_cubic_bspline(spline_mat, xq_bs)) isa Matrix{T}
+                    @test @inferred(_apply_cubic_bspline_plan(plan_bs, u_bs)) isa Vector{T}
+                    @test @inferred(_apply_cubic_bspline_plan(plan_bs, U_bs)) isa Matrix{T}
+                    @test @inferred(_cubic_bspline_plan_coefficients(plan_bs, u_bs)) isa Vector{T}
+                    @test @inferred(_cubic_bspline_plan_coefficients(plan_bs, U_bs)) isa Matrix{T}
+
+                    JET.test_opt(
+                        _construct_cubic_bspline,
+                        (typeof(u_bs), typeof(x_bs));
+                        target_modules=(AbstractCosmologicalEmulators,),
+                    )
+                    JET.test_opt(
+                        _construct_cubic_bspline_plan,
+                        (typeof(x_bs), typeof(xq_bs));
+                        target_modules=(AbstractCosmologicalEmulators,),
+                    )
+                    JET.test_opt(
+                        _apply_cubic_bspline,
+                        (typeof(spline_vec), typeof(xq_bs));
+                        target_modules=(AbstractCosmologicalEmulators,),
+                    )
+                    JET.test_opt(
+                        _apply_cubic_bspline,
+                        (typeof(spline_mat), typeof(xq_bs));
+                        target_modules=(AbstractCosmologicalEmulators,),
+                    )
+                    JET.test_opt(
+                        _apply_cubic_bspline_plan,
+                        (typeof(plan_bs), typeof(u_bs));
+                        target_modules=(AbstractCosmologicalEmulators,),
+                    )
+                    JET.test_opt(
+                        _apply_cubic_bspline_plan,
+                        (typeof(plan_bs), typeof(U_bs));
+                        target_modules=(AbstractCosmologicalEmulators,),
+                    )
+                end
+            end
 
             # Chebyshev polynomial staging should remain concretely typed.
             # In particular, this catches regressions such as Vector{Any}

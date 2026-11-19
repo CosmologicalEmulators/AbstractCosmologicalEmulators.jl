@@ -1,2 +1,7 @@
 Manifest.toml
 *.cov
+docs/build/
+/test/hybrid_class_reference.tsv
+/test/curvature_reference.tsv
+/test/growth_query_reference.tsv
+/test/growth_query_reference_converged.tsv

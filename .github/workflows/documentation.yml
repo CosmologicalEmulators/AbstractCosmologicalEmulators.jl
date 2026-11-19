@@ -1,0 +1,51 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1.12"
+      - uses: julia-actions/cache@v2
+        with:
+          delete-old-caches: "false"
+      - name: Instantiate documentation environment
+        run: >-
+          julia --startup-file=no --project="${GITHUB_WORKSPACE}/docs"
+          -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+      - name: Build documentation and run doctests
+        run: julia --startup-file=no --project="${GITHUB_WORKSPACE}/docs" docs/make.jl
+      - name: Upload rendered documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: docs/build
+          if-no-files-found: error
+          include-hidden-files: true
+      - name: Deploy development or tagged documentation
+        if: >-
+          github.event_name != 'pull_request' &&
+          (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
+        run: julia --startup-file=no --project="${GITHUB_WORKSPACE}/docs" docs/deploy.jl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

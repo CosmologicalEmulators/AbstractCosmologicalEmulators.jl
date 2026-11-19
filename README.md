@@ -8,108 +8,65 @@
 [![Aqua QA](https://juliatesting.github.io/Aqua.jl/dev/assets/badge.svg)](https://github.com/JuliaTesting/Aqua.jl)
 [![](https://img.shields.io/badge/%F0%9F%9B%A9%EF%B8%8F_tested_with-JET.jl-233f9a)](https://github.com/aviatesk/JET.jl)
 
-`AbstractCosmologicalEmulators.jl` is the central `Julia` package within the [CosmologicalEmulators](https://github.com/CosmologicalEmulators) GitHub organization. It defines the common emulator interfaces, data structures, interpolation utilities, and extension hooks used by the other packages hosted by the organization.
+[![Documentation](https://github.com/CosmologicalEmulators/AbstractCosmologicalEmulators.jl/actions/workflows/documentation.yml/badge.svg)](https://github.com/CosmologicalEmulators/AbstractCosmologicalEmulators.jl/actions/workflows/documentation.yml)
+[![docs-dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://cosmologicalemulators.github.io/AbstractCosmologicalEmulators.jl/dev/)
 
+**ACE.jl** is shorthand for `AbstractCosmologicalEmulators.jl`, the shared Julia
+runtime layer for [CosmologicalEmulators](https://github.com/CosmologicalEmulators).
+It provides trained Lux/SimpleChains emulator interfaces, normalization and
+postprocessing, differentiable interpolation, and optional analytic cosmology.
+It is not a training framework or a Boltzmann solver.
 
-At the moment, the neural-network emulator backends supported here are based on [`SimpleChains.jl`](https://github.com/PumasAI/SimpleChains.jl) and [`Lux.jl`](https://github.com/LuxDL/Lux.jl). `load_trained_emulator` uses the `LuxEmulator` backend by default, as it is the supported backend for Reactant/XLA workflows. If you want to include a new NN/GP framework, feel free to open a PR and/or get in touch with us.
+## Documentation
 
+The [documentation site](https://cosmologicalemulators.github.io/AbstractCosmologicalEmulators.jl/dev/)
+contains executable examples, physical conventions and a source-backed API reference:
 
-## Features
+- [Getting started](docs/src/getting_started.md)
+- [Emulators and artifacts](docs/src/emulators.md)
+- [Interpolation: Akima, cubic splines, B-splines and Chebyshev](docs/src/interpolation.md)
+- [Automatic differentiation](docs/src/autodiff.md)
+- [Reactant support and limitations](docs/src/reactant.md)
+- [Analytic cosmology: distances, neutrinos and growth](docs/src/background.md)
+- [API reference](docs/src/api.md)
+- [Testing, documentation builds and deployment](docs/src/development.md)
 
-- Common emulator interface for cosmological surrogate models.
-- `SimpleChains.jl` and `Lux.jl` emulator backends.
-- Generic emulator wrappers with metadata and postprocessing support.
-- Akima and cubic-spline interpolation utilities.
-- Chebyshev interpolation/decomposition utilities.
-- `ChainRulesCore.jl` rules for differentiable interpolation workflows.
-- Extension support for optional packages, including `Reactant.jl` and `Mooncake.jl`.
-
-
-## Automatic differentiation compatibility
-
-The package is designed to be usable in differentiable cosmology pipelines. The interpolation and emulator utilities are tested with multiple AD systems, including:
-
-- [`ForwardDiff.jl`](https://github.com/JuliaDiff/ForwardDiff.jl)
-- [`Zygote.jl`](https://github.com/FluxML/Zygote.jl)
-- [`Mooncake.jl`](https://github.com/chalk-lab/Mooncake.jl)
-- [`Enzyme.jl`](https://github.com/EnzymeAd/Enzyme.jl) (through `Reactant.jl`, see next section)
-
-The Akima interpolation implementation includes custom `ChainRulesCore` rules, and the package test suite checks gradients/Jacobians for both standalone interpolation utilities and emulator calls.
-
-
-## Reactant support
-
-`AbstractCosmologicalEmulators.jl` includes an optional `Reactant.jl` extension. When `Reactant` is loaded, the package provides Reactant-compatible methods for:
-
-- converting supported emulator objects to Reactant device arrays via `to_reactant`,
-- evaluating `Lux`-based emulators inside `Reactant.@compile`,
-- Akima and cubic-spline interpolation on Reactant arrays,
-- Chebyshev decomposition in compiled Reactant workflows.
-
-Example:
+## Quick start
 
 ```julia
-using Reactant
+using Pkg
+Pkg.add("AbstractCosmologicalEmulators")
+
 using AbstractCosmologicalEmulators
-
-emu_host = load_trained_emulator(path_to_emulator)
-emu_dev = to_reactant(emu_host)
-
-x = Reactant.to_rarray(randn(input_dimension))
-compiled = Reactant.@compile emu_dev(x)
-y = compiled(x)
+sites = [0.0, 0.4, 1.0, 1.8, 3.0]
+query = [0.2, 0.9, 2.4]
+plan = CubicBSplinePlan(sites, query)
+result = plan(2 .* sites .+ 1)
 ```
 
-The `Reactant` spline methods accept both traced arrays produced during compilation and concrete PJRT device arrays created by `Reactant.to_rarray` / `to_reactant`. This is important when emulator parameters live on device while the compiled inputs are traced. Code that is compiled by `Reactant` can run on hardware accelerators (GPU and TPU) and can also be differentiated by `Enzyme`.
+The package also loads the official frozen `300303` emulator pair into
+`AbstractCosmologicalEmulators.trained_emulators`. Loading the package may
+therefore download artifacts on first use. Call `run_emulator(input, emulator)`
+with an explicit model; consult its metadata for parameter ordering and domain.
 
-Reactant caveats:
+**Keep the models distinct:** trained neural artifacts take total neutrino mass
+and retain their historical training conventions. Analytic cosmology takes
+exactly three individual masses and explicit Neff/growth prescriptions.
 
-- `LuxEmulator` is the supported neural-network backend for Reactant/XLA workflows. `to_reactant` raises an error for `SimpleChainsEmulator`, which is a host-side backend and is not XLA traceable.
-- `BackgroundCosmologyExt` is a host-side extension and is not currently Reactant-compatible.
-- `GenericEmulator.Postprocessing` functions used inside `Reactant.@compile` must themselves be Reactant-traceable. Avoid arbitrary Julia control flow, mutation patterns, I/O, or package calls that Reactant cannot lower.
-- Call `to_reactant` on large `LuxEmulator` / `GenericEmulator` objects before compiling. This moves parameters, states, and normalization arrays to Reactant device arrays so they are passed as device inputs instead of being embedded as large MLIR constants.
+**Reactant support is not package-wide:** supported Lux/Generic emulator and
+spline paths compile; SimpleChains and the analytic background are host-only.
 
+## Tests
 
-## Official emulator artifacts
-
-The package ships an `Artifacts.toml` with the official `300303` mnuw0waCDM emulator pair. They are loaded automatically into the package-level emulator registry when the package is loaded:
-
-```julia
-using AbstractCosmologicalEmulators
-
-emu_sigma8 = AbstractCosmologicalEmulators.trained_emulators["ACE_mnuw0wacdm_sigma8_basis"]
-emu_ln10As = AbstractCosmologicalEmulators.trained_emulators["ACE_mnuw0wacdm_ln10As_basis"]
-```
-
-Both artifacts are loaded with the `LuxEmulator` backend by default.
-
-
-## Running tests
-
-Run the full package test suite through Julia's package manager so that test-only dependencies listed in `[extras]` and `[targets]` are available:
+From this checkout, use Julia's package test runner:
 
 ```bash
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-The test suite includes checks for emulator evaluation, interpolation, AD compatibility, extension loading, and Reactant compatibility.
-
-
-## Roadmap to v1.0.0
-
-Step | Status| Comment
-:------------ | :-------------| :-------------
-Interface with `SimpleChains.jl` | :heavy_check_mark: | Implemented
-Interface with `Lux.jl` | :heavy_check_mark: | Implemented
-Support for vectorization | :heavy_check_mark: | Implemented
-AD Rules `ChainRules` | :heavy_check_mark: | Implemented
-Robust emulators initialization | :heavy_check_mark: | Implemented, needs some polishing
-Akima and cubic spline interpolation | :heavy_check_mark: | Implemented, needs some polishing
-Chebyshev interpolation | :heavy_check_mark: | Work in progress
-GPU support | :heavy_check_mark: | Implemented, needs some polishing
-Reactant support | :heavy_check_mark: | Implemented, needs some polishing
-AD compatibility with ForwardDiff/Zygote/Mooncake | :heavy_check_mark: | Implemented and tested
-Stable API | :construction: | Work in progress
+Missing numerical fixtures are restored automatically from the pinned
+[Zenodo archive](https://doi.org/10.5281/zenodo.23718377) and verified against
+checksums. See the development guide for offline preparation and fixture provenance.
 
 ## Authors
 

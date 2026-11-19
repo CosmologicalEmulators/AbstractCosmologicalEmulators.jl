@@ -1,13 +1,33 @@
+"""
+    maximin(input, minmax)
+
+Apply feature-wise min–max scaling to a vector or feature-by-sample matrix.
+`minmax` has two columns (minimum, maximum), one row per feature. Ranges must
+have nonzero width. Values outside the training range are not clipped.
+"""
 function maximin(input, minmax)
     result = @views @.  (input - minmax[:,1]) ./ (minmax[:,2] - minmax[:,1])
     return result
 end
 
+"""
+    inv_maximin(input, minmax)
+
+Undo [`maximin`](@ref) using the same feature/output-by-two range matrix.
+Supports vectors and feature-by-sample matrices.
+"""
 function inv_maximin(input, minmax)
     result = @views @. input * (minmax[:,2] - minmax[:,1]) + minmax[:,1]
     return result
 end
 
+"""
+    get_emulator_description(emulator)
+    get_emulator_description(metadata)
+
+Print the available parameter order, authorship and training-description metadata.
+Returns `nothing`; this is a human-readable report, not a metadata-returning getter.
+"""
 function get_emulator_description(input_dict::AbstractDict{String})
     if haskey(input_dict, "parameters")
         println("The parameters the model has been trained are, in the following order: "*input_dict["parameters"]*".")
@@ -37,6 +57,13 @@ end
 
 const SUPPORTED_ACTIVATIONS = ["tanh", "relu"]
 
+"""
+    validate_nn_dict_structure(nn_dict)
+
+Validate required architecture keys, parameter ranges, layer structure and
+available numerical-safety metadata. Returns `nothing` on success and throws
+`ArgumentError` for invalid configuration. Does not load or train a network.
+"""
 function validate_nn_dict_structure(nn_dict::AbstractDict{String,Any})
     # Check required top-level keys
     required_keys = ["n_input_features", "n_output_features", "n_hidden_layers", "layers"]
@@ -62,6 +89,12 @@ function validate_nn_dict_structure(nn_dict::AbstractDict{String,Any})
     return nothing
 end
 
+"""
+    validate_parameter_ranges(nn_dict)
+
+Validate neural-network input/output feature counts and hidden-layer count.
+This concerns architecture dimensions, not cosmological prior bounds.
+"""
 function validate_parameter_ranges(nn_dict::AbstractDict{String,Any})
     # Validate n_input_features
     n_input = nn_dict["n_input_features"]
@@ -102,6 +135,12 @@ function validate_parameter_ranges(nn_dict::AbstractDict{String,Any})
     return nothing
 end
 
+"""
+    validate_layer_structure(nn_dict)
+
+Validate the hidden-layer dictionaries, their neuron counts and activation
+identifiers against the declared architecture. Invalid entries raise `ArgumentError`.
+"""
 function validate_layer_structure(nn_dict::AbstractDict{String,Any})
     n_hidden_layers = nn_dict["n_hidden_layers"]
     layers_dict = nn_dict["layers"]
@@ -186,6 +225,12 @@ function validate_activation_function(activation::String, layer_name::String)
     return nothing
 end
 
+"""
+    safe_dict_access(dict, keys...; context="")
+
+Read a nested dictionary key path. A missing key is reported as `ArgumentError`
+with the path and optional context; unrelated exceptions are rethrown.
+"""
 function safe_dict_access(dict, keys...; context="")
     try
         return reduce(getindex, keys, init=dict)
@@ -296,10 +341,9 @@ function validate_cosmological_ranges(ranges::Matrix{Float64})
 end
 
 function validate_trained_weights(weights, nn_dict::AbstractDict{String,Any})
-    finite_mask = isfinite.(weights)
-    if !all(finite_mask)
-        nan_count = count(isnan.(weights))
-        inf_count = count(isinf.(weights))
+    if !all(isfinite, weights)
+        nan_count = count(isnan, weights)
+        inf_count = count(isinf, weights)
 
         throw(ArgumentError(
         "Invalid trained weights detected: " *
@@ -309,13 +353,13 @@ function validate_trained_weights(weights, nn_dict::AbstractDict{String,Any})
         ))
     end
 
-    max_weight = maximum(abs.(weights))
+    max_weight = maximum(abs, weights)
     if max_weight > 1e6
         @warn "Large weight magnitudes detected (max absolute value: $max_weight). " *
               "This may indicate training instability, poor normalization, or gradient explosion."
     end
 
-    if all(abs.(weights) .< 1e-10)
+    if all(x -> abs(x) < 1e-10, weights)
         @warn "All weights are very small (< 1e-10). " *
               "This may indicate the emulator was not properly trained."
     end
@@ -426,39 +470,43 @@ function _akima_eval(u, t, b, c, d, tq::AbstractArray)
 end
 
 """
-    akima_interpolation(u, t, t_new)
+    AkimaSpline(u, t)
 
-Evaluates the one-dimensional Akima spline that interpolates the data points ``(t_i, u_i)``
-at new abscissae `t_new`.
+Construct a reusable one-dimensional Akima spline through ``(t_i, u_i)``.
+Evaluate the returned object as `spline(t_new)`. For one-shot evaluation use
+[`akima_interpolation`](@ref); for changing values on fixed grids use
+[`AkimaSplinePlan`](@ref).
 
 # Arguments
 - `u`: Ordinates (function values) ``u_i`` at the data nodes.
-- `t`: Strictly increasing abscissae (knots) ``t_i`` associated with `u`. `length(t)` must equal `length(u)`.
-- `t_new`: The query point(s) where the spline is to be evaluated.
+- `t`: Strictly increasing abscissae (knots) ``t_i`` associated with `u`.
+  `length(t)` must equal `size(u, 1)`. Matrix columns are independent series.
 
 # Returns
-The interpolated value(s) at `t_new`. A scalar input returns a scalar; a vector input returns a vector of the same length.
+A callable spline with cached coefficients. With vector ordinates, a scalar
+query returns a scalar and a query vector returns a vector. For matrix ordinates,
+use a query vector to obtain a query-by-series matrix.
 
 # Details
 This routine implements the original Akima piecewise-cubic method (T. Akima, 1970). On each interval ``[t_j, t_{j+1}]``, a cubic polynomial is constructed. The method uses a weighted average of slopes to determine the derivative at each node, which effectively dampens oscillations without explicit shape constraints. The resulting spline is ``C^1`` continuous (its first derivative is continuous) but generally not ``C^2``.
 
 # Formulae
 The spline on the interval ``[t_j, t_{j+1}]`` is a cubic polynomial:
-\\[
+```math
 S_j(w) = u_j + b_j w + c_j w^{2} + d_j w^{3}, \\qquad w = t - t_j
-\\]
+```
 The derivative ``b_j`` at each node is determined by Akima's weighting of local slopes ``m_j=(u_{j}-u_{j-1})/(t_j-t_{j-1})``:
-\\[
+```math
 b_j = \\frac{|m_{j+1}-m_{j}|\\,m_{j-1} + |m_{j-1}-m_{j-2}|\\,m_{j}}
             {|m_{j+1}-m_{j}| + |m_{j-1}-m_{j-2}|}
-\\]
+```
 The remaining coefficients, ``c_j`` and ``d_j``, are found by enforcing continuity of the first derivative:
-\\[
+```math
 c_j = \\frac{3m_j - 2b_j - b_{j+1}}{t_{j+1}-t_j}
-\\]
-\\[
+```
+```math
 d_j = \\frac{b_j + b_{j+1} - 2m_j}{(t_{j+1}-t_j)^2}
-\\]
+```
 
 # Automatic Differentiation
 The implementation is free of mutation on the inputs and uses only element-wise arithmetic, making the returned value differentiable with both `ForwardDiff.jl` (dual numbers) and `Zygote.jl` (reverse-mode AD). You can therefore embed `akima_interpolation` in optimization or machine-learning pipelines and back-propagate through the interpolation seamlessly.
@@ -544,10 +592,14 @@ function (plan::AkimaSplinePlan)(u)
     )
 end
 
-function akima_interpolation(u, t, t_new)
-    n = length(t)
-    dt = diff(t)
+"""
+    akima_interpolation(u, t, t_new)
 
+One-shot Akima interpolation of ordinates `u` at sites `t`, evaluated at `t_new`.
+For repeated queries with fixed values use [`AkimaSpline`](@ref); for fixed
+source/query grids and changing values use [`AkimaSplinePlan`](@ref).
+"""
+function akima_interpolation(u, t, t_new)
     m = _akima_slopes(u, t)
     b, c, d = _akima_coefficients(t, m)
 
@@ -944,7 +996,9 @@ function CubicSplinePlan(t, t_new::AbstractVector)
     )
 end
 
-function (plan::CubicSplinePlan)(u::AbstractVector)
+# AD must propagate through both ordinates and the plan's weights/operator:
+# source and query geometry enter through those differentiable fields.
+function _cubic_spline_plan_eval(plan::CubicSplinePlan, u::AbstractVector)
     z = plan.second_derivative_operator * u
     idx = plan.interval_indices
     return plan.left_value_weights .* u[idx] .+
@@ -953,7 +1007,7 @@ function (plan::CubicSplinePlan)(u::AbstractVector)
            plan.right_curve_weights .* z[idx .+ 1]
 end
 
-function (plan::CubicSplinePlan)(u::AbstractMatrix)
+function _cubic_spline_plan_eval(plan::CubicSplinePlan, u::AbstractMatrix)
     z = plan.second_derivative_operator * u
     idx = plan.interval_indices
     left_value_weights = reshape(plan.left_value_weights, :, 1)
@@ -965,6 +1019,9 @@ function (plan::CubicSplinePlan)(u::AbstractMatrix)
            left_curve_weights .* z[idx, :] .+
            right_curve_weights .* z[idx .+ 1, :]
 end
+
+(plan::CubicSplinePlan)(u::AbstractVector) = _cubic_spline_plan_eval(plan, u)
+(plan::CubicSplinePlan)(u::AbstractMatrix) = _cubic_spline_plan_eval(plan, u)
 
 """
     cubic_spline_interpolation(u, t, t_new)
